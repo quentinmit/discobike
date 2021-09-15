@@ -303,7 +303,7 @@ void printAngle(Print& print, float angle)
 uint32_t timestamp;
 
 void loop() {
-  while ( !Serial ) delay(10); // XXX
+  //while ( !Serial ) delay(10); // XXX
   // print the heading, pitch and roll
   float roll, pitch, heading;
   roll = filter.getRoll();
