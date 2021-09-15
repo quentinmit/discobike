@@ -90,7 +90,7 @@ BLEDfu  bledfu;
 BLEDis  bledis;
 //BLEUart bleuart;
 BLEBas  blebas;  // battery
-BLEAdafruitQuaternion bleQuater;
+//BLEAdafruitQuaternion bleQuater;
 
 // Sensor calibration
 #define FILE_SENSOR_CALIB       "sensor_calib.json"
@@ -101,11 +101,20 @@ Adafruit_SPIFlash flash(&flashTransport);
 FatFileSystem fatfs;
 
 // Sensor fusion
+SoftwareTimer filter_timer;
 Adafruit_Madgwick filter;
 //Adafruit_NXPSensorFusion filter;
+#define FILTER_UPDATE_RATE_HZ 100
+
+SemaphoreHandle_t xWireSemaphore = NULL;
+StaticSemaphore_t xWireMutexBuffer;
 
 void setup() {
+  xWireSemaphore = xSemaphoreCreateMutexStatic( &xWireMutexBuffer );
+
   Serial.begin(115200);
+  //while ( !Serial ) delay(10); // XXX
+  //Serial.println("Connected");
 
   oled.cp437();
   oled.begin(SSD1306_SWITCHCAPVCC, I2C_SSD1315);
@@ -163,11 +172,18 @@ void setup() {
   blebas.begin();
   blebas.write(100);
 
+  Serial.println("bluetooth services started");
+
   // Quaternion with sensor calibration
-  bleQuater.begin(&filter, lsm6ds33.getAccelerometerSensor(), lsm6ds33.getGyroSensor(), &lis3mdl);
-  bleQuater.setCalibration(&cal);
+  //bleQuater.begin(&filter, lsm6ds33.getAccelerometerSensor(), lsm6ds33.getGyroSensor(), &lis3mdl);
+  //bleQuater.setCalibration(&cal);
+  filter.begin(FILTER_UPDATE_RATE_HZ);
+  filter_timer.begin(1000.0f/FILTER_UPDATE_RATE_HZ, filter_timer_cb, &filter, true);
+  filter_timer.start();
 
   startAdv();
+
+  Serial.println("begin finished");
 }
 
 void startAdv(void)
@@ -214,7 +230,36 @@ float getHeading(){
   return heading;
 }
 
-size_t printFixed(Print& print, unsigned long n, uint8_t width, uint8_t base, uint8_t fill = '0')
+void filter_timer_cb(TimerHandle_t xTimer) {
+  digitalWrite(LED_RED, HIGH);
+  xSemaphoreTake(xWireSemaphore, portMAX_DELAY);
+
+  // get sensor events
+  sensors_event_t accel_evt, gyro_evt, mag_evt;
+  lsm6ds33.getAccelerometerSensor()->getEvent(&accel_evt);
+  lsm6ds33.getGyroSensor()->getEvent(&gyro_evt);
+  lis3mdl.getEvent(&mag_evt);
+
+  // calibrate sensor if available
+  cal.calibrate(accel_evt);
+  cal.calibrate(gyro_evt);
+  cal.calibrate(mag_evt);
+
+  // Convert gyro from Rad/s to Degree/s
+  gyro_evt.gyro.x *= SENSORS_RADS_TO_DPS;
+  gyro_evt.gyro.y *= SENSORS_RADS_TO_DPS;
+  gyro_evt.gyro.z *= SENSORS_RADS_TO_DPS;
+
+  // apply filter
+  filter.update(gyro_evt.gyro.x , gyro_evt.gyro.y, gyro_evt.gyro.z,
+                  accel_evt.acceleration.x, accel_evt.acceleration.y, accel_evt.acceleration.z,
+                  mag_evt.magnetic.x, mag_evt.magnetic.y, mag_evt.magnetic.z);
+
+  xSemaphoreGive(xWireSemaphore);
+  digitalWrite(LED_RED, LOW);
+}
+
+size_t printFixed(Print& print, signed long n, uint8_t width, uint8_t base, uint8_t fill = '0')
 {
   char buf[8 * sizeof(long) + 1]; // Assumes 8-bit chars plus zero byte.
   char *str = &buf[sizeof(buf) - 1];
@@ -223,6 +268,10 @@ size_t printFixed(Print& print, unsigned long n, uint8_t width, uint8_t base, ui
 
   // prevent crash if called with base == 1
   if (base < 2) base = 10;
+  bool negative = (n < 0);
+  if (negative) {
+    n = -n;
+  }
 
   do {
     char c = n % base;
@@ -230,6 +279,9 @@ size_t printFixed(Print& print, unsigned long n, uint8_t width, uint8_t base, ui
 
     *--str = c < 10 ? c + '0' : c + 'A' - 10;
   } while(n);
+  if (negative) {
+    *--str = '-';
+  }
   char *start = &buf[sizeof(buf) - 1 - width];
   while (str > start) {
     *--str = fill;
@@ -240,22 +292,40 @@ size_t printFixed(Print& print, unsigned long n, uint8_t width, uint8_t base, ui
 
 const uint8_t DEG = 248;
 
+void printAngle(Print& print, float angle)
+{
+  printFixed(print, angle, 3, DEC, ' ');
+  print.write('.');
+  printFixed(print, (int)(abs(angle*100)) % 100, 2, DEC, ' ');
+  print.write(DEG);
+}
+
+uint32_t timestamp;
+
 void loop() {
+  while ( !Serial ) delay(10); // XXX
   // print the heading, pitch and roll
   float roll, pitch, heading;
   roll = filter.getRoll();
   pitch = filter.getPitch();
-  heading = filter.getYaw();
-  Serial.print("Orientation: ");
-  Serial.print(heading);
-  Serial.print(", ");
-  Serial.print(pitch);
-  Serial.print(", ");
-  Serial.println(roll);
+  heading = 360.0f-filter.getYaw();
+
+  if (Serial) {
+    Serial.print("Orientation: ");
+    Serial.print(heading);
+    Serial.print(", ");
+    Serial.print(pitch);
+    Serial.print(", ");
+    Serial.println(roll);
+  }
   
   //lis3mdl.read();
   //float heading = filter.getRoll();
+  if (xSemaphoreTake(xWireSemaphore, 10) != pdTRUE) {
+    return;
+  }
   float temperature = bmp280.readTemperature() * 1.8 + 32.0;
+  xSemaphoreGive(xWireSemaphore);
 
   oled.clearDisplay();
 
@@ -271,6 +341,9 @@ void loop() {
   oled.println();*/
   printFixed(oled, heading, 3, DEC, ' ');
   oled.write(DEG);
+  printFixed(oled, roll, 3, DEC, ' ');
+  oled.write(DEG);
+  
   oled.setCursor(10*8, oled.getCursorY());
   printFixed(oled, (int)temperature, 3, DEC, ' ');
   oled.print(F("."));
@@ -299,5 +372,9 @@ void loop() {
   oled.print(now.second() / 10);
   oled.print(now.second() % 10);
   */
+  if (xSemaphoreTake(xWireSemaphore, 10) != pdTRUE) {
+    return;
+  }
   oled.display();
+  xSemaphoreGive(xWireSemaphore);
 }
