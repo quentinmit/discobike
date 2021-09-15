@@ -92,7 +92,9 @@ BLEDis  bledis;
 void setup() {
   Serial.begin(115200);
 
+  oled.cp437();
   oled.begin(SSD1306_SWITCHCAPVCC, I2C_SSD1315);
+  // H- and V-flip the display
   oled.ssd1306_command(SSD1306_SEGREMAP);
   oled.ssd1306_command(SSD1306_COMSCANINC);
   oled.display();
@@ -103,6 +105,19 @@ void setup() {
   digitalWrite(PIN_POWER_ENABLE, HIGH); // FIXME
 
   underlight.begin();
+
+  // Magnetometer
+  lis3mdl.begin_I2C();
+  lis3mdl.setRange(LIS3MDL_RANGE_4_GAUSS);
+  lis3mdl.setDataRate(LIS3MDL_DATARATE_5_HZ);
+  lis3mdl.setPerformanceMode(LIS3MDL_MEDIUMMODE);
+  lis3mdl.setOperationMode(LIS3MDL_CONTINUOUSMODE);
+
+  // Temperature, Barometer
+  bmp280.begin();
+
+  // Increase I2C speed to 400 Khz
+  Wire.setClock(400000);
 
   Bluefruit.begin();
   Bluefruit.setTxPower(4);
@@ -148,7 +163,94 @@ void startAdv(void)
   Bluefruit.Advertising.start(0);                // 0 = Don't stop advertising after n seconds
 }
 
-void loop() {
-  // put your main code here, to run repeatedly:
+float getHeading(){
+  // Hold the module so that Z is pointing 'up' and you can measure the heading with x&y
+  // Calculate heading when the magnetometer is level, then correct for signs of axis.
+  float heading = atan2(lis3mdl.y, lis3mdl.x);
+  heading += PI;
+  // Correct for when signs are reversed.
+  if(heading < 0)
+    heading += 2*PI;
+  // Check for wrap due to addition of declination.
+  if(heading > 2*PI)
+    heading -= 2*PI;
+  // Convert radians to degrees for readability.
+  heading = heading * 180/M_PI; 
+  return heading;
+}
 
+size_t printFixed(Print& print, unsigned long n, uint8_t width, uint8_t base, uint8_t fill = '0')
+{
+  char buf[8 * sizeof(long) + 1]; // Assumes 8-bit chars plus zero byte.
+  char *str = &buf[sizeof(buf) - 1];
+
+  *str = '\0';
+
+  // prevent crash if called with base == 1
+  if (base < 2) base = 10;
+
+  do {
+    char c = n % base;
+    n /= base;
+
+    *--str = c < 10 ? c + '0' : c + 'A' - 10;
+  } while(n);
+  char *start = &buf[sizeof(buf) - 1 - width];
+  while (str > start) {
+    *--str = fill;
+  }
+
+  return print.write(str);
+}
+
+const uint8_t DEG = 248;
+
+void loop() {
+  lis3mdl.read();
+  float heading = getHeading();
+  float temperature = bmp280.readTemperature() * 1.8 + 32.0;
+
+  oled.clearDisplay();
+
+  oled.setCursor(0, 0);
+  oled.print(F("xx.xV"));
+  
+  oled.write('\n');
+  /*oled.print(magX);
+  oled.print(" ");
+  oled.print(magY);
+  oled.print(" ");
+  oled.print(magZ);
+  oled.println();*/
+  printFixed(oled, heading, 3, DEC, ' ');
+  oled.write(DEG);
+  oled.setCursor(10*8, oled.getCursorY());
+  printFixed(oled, (int)temperature, 3, DEC, ' ');
+  oled.print(F("."));
+  printFixed(oled, (int)(temperature * 10) % 10, 1, DEC);
+  oled.write(DEG);
+  //oled.print((double)heading, 0);
+  //oled.print(F("o"));
+
+  oled.write('\n');
+  //oled.print(accel);
+  oled.print(F("G"));
+  //oled.print(F("test state"));
+  
+  oled.write('\n');
+  /*
+  oled.print(now.month());
+  oled.print(F("/"));
+  oled.print(now.day());
+  oled.setCursor(8*8, 6);
+  oled.print(now.hour() > 10 ? '1' : '0');
+  oled.print(now.hour() % 10);
+  oled.print(F(":"));
+  oled.print((now.minute() / 10)%10);
+  oled.print(now.minute() % 10);
+  oled.print(F(":"));
+  oled.print(now.second() / 10);
+  oled.print(now.second() % 10);
+  */
+  oled.display();
 }
