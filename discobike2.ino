@@ -61,6 +61,7 @@
 #include <Arduino.h>
 #include <Adafruit_NeoPixel.h>
 #include <bluefruit.h>
+#include <BLEAdafruitService.h>
 
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
@@ -88,6 +89,20 @@ Adafruit_SHT31    sht30;    // Humid
 BLEDfu  bledfu;
 BLEDis  bledis;
 //BLEUart bleuart;
+BLEBas  blebas;  // battery
+BLEAdafruitQuaternion bleQuater;
+
+// Sensor calibration
+#define FILE_SENSOR_CALIB       "sensor_calib.json"
+Adafruit_Sensor_Calibration_SDFat cal;
+
+Adafruit_FlashTransport_QSPI flashTransport;
+Adafruit_SPIFlash flash(&flashTransport);
+FatFileSystem fatfs;
+
+// Sensor fusion
+Adafruit_Madgwick filter;
+//Adafruit_NXPSensorFusion filter;
 
 void setup() {
   Serial.begin(115200);
@@ -106,10 +121,23 @@ void setup() {
 
   underlight.begin();
 
+  // Init flash, filesystem and calibration & load calib json
+  flash.begin();
+  fatfs.begin(&flash);
+  cal.begin(FILE_SENSOR_CALIB, &fatfs);
+  cal.loadCalibration();
+
+  // IMU
+  lsm6ds33.begin_I2C();
+  lsm6ds33.setAccelRange(LSM6DS_ACCEL_RANGE_2_G);
+  lsm6ds33.setGyroRange(LSM6DS_GYRO_RANGE_250_DPS);
+  lsm6ds33.setAccelDataRate(LSM6DS_RATE_104_HZ);
+  lsm6ds33.setGyroDataRate(LSM6DS_RATE_104_HZ);
+
   // Magnetometer
   lis3mdl.begin_I2C();
   lis3mdl.setRange(LIS3MDL_RANGE_4_GAUSS);
-  lis3mdl.setDataRate(LIS3MDL_DATARATE_5_HZ);
+  lis3mdl.setDataRate(LIS3MDL_DATARATE_1000_HZ);
   lis3mdl.setPerformanceMode(LIS3MDL_MEDIUMMODE);
   lis3mdl.setOperationMode(LIS3MDL_CONTINUOUSMODE);
 
@@ -131,6 +159,13 @@ void setup() {
   bledis.begin();
 
   //bleuart.begin();
+
+  blebas.begin();
+  blebas.write(100);
+
+  // Quaternion with sensor calibration
+  bleQuater.begin(&filter, lsm6ds33.getAccelerometerSensor(), lsm6ds33.getGyroSensor(), &lis3mdl);
+  bleQuater.setCalibration(&cal);
 
   startAdv();
 }
@@ -206,8 +241,20 @@ size_t printFixed(Print& print, unsigned long n, uint8_t width, uint8_t base, ui
 const uint8_t DEG = 248;
 
 void loop() {
-  lis3mdl.read();
-  float heading = getHeading();
+  // print the heading, pitch and roll
+  float roll, pitch, heading;
+  roll = filter.getRoll();
+  pitch = filter.getPitch();
+  heading = filter.getYaw();
+  Serial.print("Orientation: ");
+  Serial.print(heading);
+  Serial.print(", ");
+  Serial.print(pitch);
+  Serial.print(", ");
+  Serial.println(roll);
+  
+  //lis3mdl.read();
+  //float heading = filter.getRoll();
   float temperature = bmp280.readTemperature() * 1.8 + 32.0;
 
   oled.clearDisplay();
