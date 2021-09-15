@@ -62,8 +62,27 @@
 #include <Adafruit_NeoPixel.h>
 #include <bluefruit.h>
 
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+#include <Adafruit_APDS9960.h>
+#include <Adafruit_BMP280.h>
+#include <Adafruit_LIS3MDL.h>
+#include <Adafruit_LSM6DS33.h>
+#include <Adafruit_SHT31.h>
+
+#include <Adafruit_SPIFlash.h>
+#include <Adafruit_AHRS.h>
+#include <Adafruit_Sensor_Calibration.h>
+
 // Peripherals
+Adafruit_SSD1306 oled(128, 64);
 Adafruit_NeoPixel underlight(35, PIN_UNDERLIGHT, NEO_GRBW | NEO_KHZ800);
+Adafruit_LSM6DS33 lsm6ds33; // Gyro and Accel
+Adafruit_LIS3MDL  lis3mdl;  // Magnetometer
+Adafruit_APDS9960 apds9960; // Proximity, Light, Gesture, Color
+Adafruit_BMP280   bmp280;   // Temperature, Barometric
+Adafruit_SHT31    sht30;    // Humid
 
 // BLE Services
 BLEDfu  bledfu;
@@ -72,6 +91,13 @@ BLEDis  bledis;
 
 void setup() {
   Serial.begin(115200);
+
+  oled.begin(SSD1306_SWITCHCAPVCC, I2C_SSD1315);
+  oled.ssd1306_command(SSD1306_SEGREMAP);
+  oled.ssd1306_command(SSD1306_COMSCANINC);
+  oled.display();
+  oled.setTextSize(1);
+  oled.setTextColor(WHITE);
 
   pinMode(PIN_POWER_ENABLE, OUTPUT);
   digitalWrite(PIN_POWER_ENABLE, HIGH); // FIXME
