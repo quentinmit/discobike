@@ -66,6 +66,8 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
+#include <Adafruit_INA219.h>
+
 #include <Adafruit_APDS9960.h>
 #include <Adafruit_BMP280.h>
 #include <Adafruit_LIS3MDL.h>
@@ -78,6 +80,7 @@
 
 // Peripherals
 Adafruit_SSD1306 oled(128, 64);
+Adafruit_INA219 ina219;
 Adafruit_NeoPixel underlight(35, PIN_UNDERLIGHT, NEO_GRBW | NEO_KHZ800);
 Adafruit_LSM6DS33 lsm6ds33; // Gyro and Accel
 Adafruit_LIS3MDL  lis3mdl;  // Magnetometer
@@ -128,7 +131,11 @@ void setup() {
   pinMode(PIN_POWER_ENABLE, OUTPUT);
   digitalWrite(PIN_POWER_ENABLE, HIGH); // FIXME
 
+  analogReadResolution(14);
+
   underlight.begin();
+
+  ina219.begin();
 
   // Init flash, filesystem and calibration & load calib json
   flash.begin();
@@ -325,12 +332,31 @@ void loop() {
     return;
   }
   float temperature = bmp280.readTemperature() * 1.8 + 32.0;
+  float vext = ina219.getBusVoltage_V();
+  float current_mA = ina219.getCurrent_mA();
   xSemaphoreGive(xWireSemaphore);
+
+  float vbat = analogRead(PIN_VBAT) * 3.6f * 2.0f / 16384.0f;
 
   oled.clearDisplay();
 
   oled.setCursor(0, 0);
-  oled.print(F("xx.xV"));
+  printFixed(oled, (int)vext, 2, DEC, '0');
+  oled.print(F("."));
+  printFixed(oled, (int)(vext * 10) % 10, 1, DEC);
+  oled.print(F("Vext "));
+  if (current_mA < 0) {
+    current_mA = 0;
+  }
+  printFixed(oled, (int)current_mA / 1000, 1, DEC, '0');
+  oled.print(F("."));
+  printFixed(oled, (int)current_mA % 1000, 3, DEC, '0');
+  oled.print(F("A "));
+
+  printFixed(oled, (int)vbat, 1, DEC, '0');
+  oled.print(F("."));
+  printFixed(oled, (int)(vbat * 100) % 100, 2, DEC);
+  oled.print(F("Vbat"));
   
   oled.write('\n');
   /*oled.print(magX);
