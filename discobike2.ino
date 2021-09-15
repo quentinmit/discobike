@@ -88,6 +88,8 @@ Adafruit_APDS9960 apds9960; // Proximity, Light, Gesture, Color
 Adafruit_BMP280   bmp280;   // Temperature, Barometric
 Adafruit_SHT31    sht30;    // Humid
 
+const uint16_t maxPWM = 625;
+
 // BLE Services
 BLEDfu  bledfu;
 BLEDis  bledis;
@@ -130,6 +132,16 @@ void setup() {
 
   pinMode(PIN_POWER_ENABLE, OUTPUT);
   digitalWrite(PIN_POWER_ENABLE, HIGH); // FIXME
+
+  pinMode(PIN_HEADLIGHT_DIM, OUTPUT);
+  digitalWrite(PIN_HEADLIGHT_DIM, HIGH);
+
+  HwPWM3.takeOwnership(1);
+  HwPWM3.setClockDiv(NRF_PWM_CLK_125kHz);
+  HwPWM3.setMaxValue(maxPWM);
+  HwPWM3.addPin(PIN_HEADLIGHT_DIM);
+  HwPWM3.writeChannel(0, maxPWM/2);
+  HwPWM3.begin();
 
   analogReadResolution(14);
 
