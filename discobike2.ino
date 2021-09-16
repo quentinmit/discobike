@@ -155,6 +155,10 @@ void setup() {
   cal.begin(FILE_SENSOR_CALIB, &fatfs);
   cal.loadCalibration();
 
+  // Light
+  apds9960.begin();
+  apds9960.enableColor(true);
+
   // IMU
   lsm6ds33.begin_I2C();
   lsm6ds33.setAccelRange(LSM6DS_ACCEL_RANGE_2_G);
@@ -346,7 +350,10 @@ void loop() {
   float temperature = bmp280.readTemperature() * 1.8 + 32.0;
   float vext = ina219.getBusVoltage_V();
   float current_mA = ina219.getCurrent_mA();
+  uint16_t r,g,b,c;
+  apds9960.getColorData(&r, &g, &b, &c);
   xSemaphoreGive(xWireSemaphore);
+  uint16_t lux = apds9960.calculateLux(r, g, b);
 
   float vbat = analogRead(PIN_VBAT) * 3.6f * 2.0f / 16384.0f;
 
@@ -396,6 +403,11 @@ void loop() {
   //oled.print(F("test state"));
   
   oled.write('\n');
+
+  printFixed(oled, lux, 5, DEC, ' ');
+  oled.print(F(" lux"));
+  oled.write('\n');
+  
   /*
   oled.print(now.month());
   oled.print(F("/"));
