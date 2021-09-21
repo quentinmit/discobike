@@ -352,6 +352,7 @@ void loop() {
   float current_mA = ina219.getCurrent_mA();
   uint16_t r,g,b,c;
   apds9960.getColorData(&r, &g, &b, &c);
+  // 3.5 counts/lux in the c channel according to datasheet
   xSemaphoreGive(xWireSemaphore);
   uint16_t lux = apds9960.calculateLux(r, g, b);
 
@@ -405,7 +406,8 @@ void loop() {
   oled.write('\n');
 
   printFixed(oled, lux, 5, DEC, ' ');
-  oled.print(F(" lux"));
+  oled.print(F(" lux "));
+  printFixed(oled, c/3.5, 5, DEC, ' ');
   oled.write('\n');
   
   /*
