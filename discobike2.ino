@@ -109,10 +109,15 @@ FatFileSystem fatfs;
 SoftwareTimer filter_timer;
 Adafruit_Madgwick filter;
 //Adafruit_NXPSensorFusion filter;
-#define FILTER_UPDATE_RATE_HZ 100
+#define FILTER_UPDATE_RATE_HZ 10
 
 SemaphoreHandle_t xWireSemaphore = NULL;
 StaticSemaphore_t xWireMutexBuffer;
+
+#define STACK_SIZE 200
+StaticTask_t xImuTaskBuffer;
+StackType_t xImuTaskStack[ STACK_SIZE ];
+
 
 void setup() {
   xWireSemaphore = xSemaphoreCreateMutexStatic( &xWireMutexBuffer );
@@ -200,9 +205,17 @@ void setup() {
   // Quaternion with sensor calibration
   //bleQuater.begin(&filter, lsm6ds33.getAccelerometerSensor(), lsm6ds33.getGyroSensor(), &lis3mdl);
   //bleQuater.setCalibration(&cal);
+
   filter.begin(FILTER_UPDATE_RATE_HZ);
-  filter_timer.begin(1000.0f/FILTER_UPDATE_RATE_HZ, filter_timer_cb, &filter, true);
-  filter_timer.start();
+  // Ignore the returned task handle
+  xTaskCreateStatic(
+                    imu_update_task,       /* Function that implements the task. */
+                    "imu",           /* Text name for the task. */
+                    STACK_SIZE,      /* Number of indexes in the xStack array. */
+                    ( void * ) 1,    /* Parameter passed into the task. */
+                    3,               /* Priority at which the task is created. */
+                    xImuTaskStack,          /* Array to use as the task's stack. */
+                    &xImuTaskBuffer );  /* Variable to hold the task's data structure. */
 
   startAdv();
 
@@ -237,28 +250,33 @@ void startAdv(void)
   Bluefruit.Advertising.start(0);                // 0 = Don't stop advertising after n seconds
 }
 
-float getHeading(){
-  // Hold the module so that Z is pointing 'up' and you can measure the heading with x&y
-  // Calculate heading when the magnetometer is level, then correct for signs of axis.
-  float heading = atan2(lis3mdl.y, lis3mdl.x);
-  heading += PI;
-  // Correct for when signs are reversed.
-  if(heading < 0)
-    heading += 2*PI;
-  // Check for wrap due to addition of declination.
-  if(heading > 2*PI)
-    heading -= 2*PI;
-  // Convert radians to degrees for readability.
-  heading = heading * 180/M_PI; 
-  return heading;
+long imu_skipped = 0;
+
+void imu_update_task(void *pvParameters) {
+  TickType_t xLastWakeTime;
+  const TickType_t xFrequency = pdMS_TO_TICKS(1000.0/FILTER_UPDATE_RATE_HZ);
+
+  // Initialise the xLastWakeTime variable with the current time.
+  xLastWakeTime = xTaskGetTickCount();
+
+  for( ;; ) {
+    // Wait for the next cycle.
+    vTaskDelayUntil( &xLastWakeTime, xFrequency );
+    _imu_update();
+    // If we've gotten behind, reset the last wake time.
+    if (xLastWakeTime + xFrequency < xTaskGetTickCount()) {
+      xLastWakeTime = xTaskGetTickCount();
+      imu_skipped++;
+    }
+  }
 }
 
-void filter_timer_cb(TimerHandle_t xTimer) {
+sensors_event_t accel_evt, gyro_evt, mag_evt;
+void _imu_update() {
   digitalWrite(LED_RED, HIGH);
   xSemaphoreTake(xWireSemaphore, portMAX_DELAY);
 
   // get sensor events
-  sensors_event_t accel_evt, gyro_evt, mag_evt;
   lsm6ds33.getAccelerometerSensor()->getEvent(&accel_evt);
   lsm6ds33.getGyroSensor()->getEvent(&gyro_evt);
   lis3mdl.getEvent(&mag_evt);
@@ -280,6 +298,22 @@ void filter_timer_cb(TimerHandle_t xTimer) {
 
   xSemaphoreGive(xWireSemaphore);
   digitalWrite(LED_RED, LOW);
+}
+
+float getRawHeading(){
+  // Hold the module so that Z is pointing 'up' and you can measure the heading with x&y
+  // Calculate heading when the magnetometer is level, then correct for signs of axis.
+  float heading = atan2(mag_evt.magnetic.y, mag_evt.magnetic.x);
+  heading += PI;
+  // Correct for when signs are reversed.
+  if(heading < 0)
+    heading += 2*PI;
+  // Check for wrap due to addition of declination.
+  if(heading > 2*PI)
+    heading -= 2*PI;
+  // Convert radians to degrees for readability.
+  heading = heading * 180/M_PI; 
+  return heading;
 }
 
 size_t printFixed(Print& print, signed long n, uint8_t width, uint8_t base, uint8_t fill = '0')
@@ -400,6 +434,8 @@ void loop() {
 
   oled.write('\n');
   //oled.print(accel);
+  //printFixed(oled, getRawHeading(), 3, DEC, ' ');
+  //oled.write(DEG);
   oled.print(F("G"));
   //oled.print(F("test state"));
   
@@ -409,6 +445,9 @@ void loop() {
   oled.print(F(" lux "));
   printFixed(oled, c/3.5, 5, DEC, ' ');
   oled.write('\n');
+
+  oled.print(F("IMU late: "));
+  printFixed(oled, imu_skipped, 3, DEC, '0');
   
   /*
   oled.print(now.month());
