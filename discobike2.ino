@@ -118,6 +118,17 @@ StaticSemaphore_t xWireMutexBuffer;
 StaticTask_t xImuTaskBuffer;
 StackType_t xImuTaskStack[ STACK_SIZE ];
 
+// Data
+typedef enum {
+  OFF = 0,
+  AUTO,
+  DAY,
+  NIGHT,
+  BLINK,
+} headlight_mode_t;
+headlight_mode_t desired_mode = AUTO;
+headlight_mode_t actual_mode = OFF;
+float brightness = 0;
 
 void setup() {
   xWireSemaphore = xSemaphoreCreateMutexStatic( &xWireMutexBuffer );
@@ -349,17 +360,36 @@ size_t printFixed(Print& print, signed long n, uint8_t width, uint8_t base, uint
 
 const uint8_t DEG = 248;
 
-void printAngle(Print& print, float angle)
+void printAngle(Print& print, float angle, uint8_t symbol = DEG)
 {
   printFixed(print, angle, 3, DEC, ' ');
   print.write('.');
-  printFixed(print, (int)(abs(angle*100)) % 100, 2, DEC, ' ');
-  print.write(DEG);
+  printFixed(print, (int)(abs(angle*100)) % 100, 2, DEC, '0');
+  print.write(symbol);
+}
+
+float invSqrt(float x) {
+  float halfx = 0.5f * x;
+  float y = x;
+  long i = *(long *)&y;
+  i = 0x5f3759df - (i >> 1);
+  y = *(float *)&i;
+  y = y * (1.5f - (halfx * y * y));
+  y = y * (1.5f - (halfx * y * y));
+  return y;
+}
+
+float vecMag(sensors_vec_t v) {
+  return 1/invSqrt(v.x * v.x + v.y * v.y + v.z * v.z);
 }
 
 uint32_t timestamp;
+TickType_t last_move_time;
+const float ONE_G = 9.80665;
 
 void loop() {
+  TickType_t now = xTaskGetTickCount();
+
   //while ( !Serial ) delay(10); // XXX
   // print the heading, pitch and roll
   float roll, pitch, heading;
@@ -388,10 +418,55 @@ void loop() {
   apds9960.getColorData(&r, &g, &b, &c);
   // 3.5 counts/lux in the c channel according to datasheet
   xSemaphoreGive(xWireSemaphore);
-  uint16_t lux = apds9960.calculateLux(r, g, b);
+  uint16_t lux = c/3.5; //apds9960.calculateLux(r, g, b);
 
   float vbat = analogRead(PIN_VBAT) * 3.6f * 2.0f / 16384.0f;
 
+  // Update mode
+  float accel_mag = vecMag(accel_evt.acceleration);
+  if (accel_mag > 12) {
+    last_move_time = now;
+  }
+  if (vext < 11.2) {
+    brightness = 0;
+    actual_mode = OFF;
+  } else {
+    switch (desired_mode) {
+      case AUTO:
+        if (lux > 50) {
+          actual_mode = DAY;
+        } else {
+          actual_mode = NIGHT;
+        }
+        if ((now - last_move_time) > pdMS_TO_TICKS(10000)) {
+          actual_mode = OFF;
+        }
+        break;
+      default:
+        actual_mode = desired_mode;
+    }
+  }
+
+  float target_brightness = 0;
+  switch (actual_mode) {
+  case NIGHT:
+    target_brightness = 1;
+    break;
+  case DAY:
+    // TODO: Blink
+    target_brightness = 0.5;
+    break;
+  }
+  if (target_brightness > brightness) {
+    brightness += 0.01;
+    brightness = min(brightness, target_brightness);
+  } else {
+    brightness -= 0.01;
+    brightness = max(brightness, target_brightness);
+  }
+  HwPWM3.writeChannel(0, maxPWM * brightness);
+
+  // Display
   oled.clearDisplay();
 
   oled.setCursor(0, 0);
@@ -436,18 +511,31 @@ void loop() {
   //oled.print(accel);
   //printFixed(oled, getRawHeading(), 3, DEC, ' ');
   //oled.write(DEG);
-  oled.print(F("G"));
-  //oled.print(F("test state"));
-  
-  oled.write('\n');
-
+  printAngle(oled, accel_mag / ONE_G, 'G');
+  oled.print(F("G  "));
   printFixed(oled, lux, 5, DEC, ' ');
   oled.print(F(" lux "));
-  printFixed(oled, c/3.5, 5, DEC, ' ');
   oled.write('\n');
 
   oled.print(F("IMU late: "));
   printFixed(oled, imu_skipped, 3, DEC, '0');
+  oled.write('\n');
+  
+  oled.print(F("Mode: "));
+  switch (actual_mode) {
+    case DAY:
+      oled.print(F("Day"));
+      break;
+    case NIGHT:
+      oled.print(F("Night"));
+      break;
+    case OFF:
+      oled.print(F("OFF"));
+      break;
+  }
+  oled.write(' ');
+  printFixed(oled, brightness * 100, 3, DEC, ' ');
+  oled.write('%');
   
   /*
   oled.print(now.month());
