@@ -78,6 +78,10 @@
 #include <Adafruit_AHRS.h>
 #include <Adafruit_Sensor_Calibration.h>
 
+#ifndef UUID16_CHR_VOLTAGE
+#define UUID16_CHR_VOLTAGE                                    0x2B18
+#endif
+
 // Peripherals
 Adafruit_SSD1306 oled(128, 64);
 Adafruit_INA219 ina219;
@@ -96,6 +100,10 @@ BLEDis  bledis;
 //BLEUart bleuart;
 BLEBas  blebas;  // battery
 //BLEAdafruitQuaternion bleQuater;
+BLEService blevolts = BLEService(UUID16_CHR_VOLTAGE);
+BLECharacteristic blevoltc = BLECharacteristic(UUID16_CHR_VOLTAGE);
+
+SoftwareTimer notify_timer;
 
 // Sensor calibration
 #define FILE_SENSOR_CALIB       "sensor_calib.json"
@@ -129,6 +137,7 @@ typedef enum {
 headlight_mode_t desired_mode = AUTO;
 headlight_mode_t actual_mode = OFF;
 float brightness = 0;
+float vext = 0;
 
 void setup() {
   xWireSemaphore = xSemaphoreCreateMutexStatic( &xWireMutexBuffer );
@@ -211,6 +220,15 @@ void setup() {
   blebas.begin();
   blebas.write(100);
 
+  blevolts.begin();
+  blevoltc.setProperties(CHR_PROPS_READ|CHR_PROPS_NOTIFY);
+  blevoltc.setPermission(SECMODE_OPEN, SECMODE_NO_ACCESS);
+  blevoltc.setFixedLen(2);
+  // UUID docs say units are 1/64 volt, but exponent must be power of 10...
+  blevoltc.setPresentationFormatDescriptor(6, -2, UUID16_UNIT_ELECTRIC_POTENTIAL_DIFFERENCE_VOLT);
+  blevoltc.begin();
+  blevoltc.write16(0);
+
   Serial.println("bluetooth services started");
 
   // Quaternion with sensor calibration
@@ -229,6 +247,9 @@ void setup() {
                     &xImuTaskBuffer );  /* Variable to hold the task's data structure. */
 
   startAdv();
+
+  notify_timer.begin(500, notify_timer_cb, NULL, true);
+  notify_timer.start();
 
   Serial.println("begin finished");
 }
@@ -261,6 +282,13 @@ void startAdv(void)
   Bluefruit.Advertising.start(0);                // 0 = Don't stop advertising after n seconds
 }
 
+void notify_timer_cb(TimerHandle_t xTimer) {
+  uint16_t volt = vext * 100;
+  if (blevoltc.read16() != volt) {
+    blevoltc.notify16(volt);
+  }
+}
+
 long imu_skipped = 0;
 
 void imu_update_task(void *pvParameters) {
@@ -284,7 +312,7 @@ void imu_update_task(void *pvParameters) {
 
 sensors_event_t accel_evt, gyro_evt, mag_evt;
 void _imu_update() {
-  digitalWrite(LED_RED, HIGH);
+  //digitalWrite(LED_RED, HIGH);
   xSemaphoreTake(xWireSemaphore, portMAX_DELAY);
 
   // get sensor events
@@ -308,7 +336,7 @@ void _imu_update() {
                   mag_evt.magnetic.x, mag_evt.magnetic.y, mag_evt.magnetic.z);
 
   xSemaphoreGive(xWireSemaphore);
-  digitalWrite(LED_RED, LOW);
+  //digitalWrite(LED_RED, LOW);
 }
 
 float getRawHeading(){
@@ -412,7 +440,7 @@ void loop() {
     return;
   }
   float temperature = bmp280.readTemperature() * 1.8 + 32.0;
-  float vext = ina219.getBusVoltage_V();
+  vext = ina219.getBusVoltage_V();
   float current_mA = ina219.getCurrent_mA();
   uint16_t r,g,b,c;
   apds9960.getColorData(&r, &g, &b, &c);
@@ -427,6 +455,7 @@ void loop() {
   if (accel_mag > 12) {
     last_move_time = now;
   }
+  // TODO: Use IMU angle for mode too?
   if (vext < 11.2) {
     brightness = 0;
     actual_mode = OFF;
@@ -465,6 +494,10 @@ void loop() {
     brightness = max(brightness, target_brightness);
   }
   HwPWM3.writeChannel(0, maxPWM * brightness);
+
+  // Update BLE characteristics
+  // TODO: Notify
+  //blevoltc.write16(vext*64);
 
   // Display
   oled.clearDisplay();
