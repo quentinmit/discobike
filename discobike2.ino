@@ -92,7 +92,10 @@ Adafruit_APDS9960 apds9960; // Proximity, Light, Gesture, Color
 Adafruit_BMP280   bmp280;   // Temperature, Barometric
 Adafruit_SHT31    sht30;    // Humid
 
-const uint16_t maxPWM = 625;
+const uint16_t PWM_MAX_HEADLIGHT = 625;
+const uint16_t PWM_MAX_TAILLIGHT = 255;
+
+const TickType_t TAIL_PERIOD = pdMS_TO_TICKS(4000);
 
 // BLE Services
 BLEDfu  bledfu;
@@ -163,10 +166,24 @@ void setup() {
 
   HwPWM3.takeOwnership(1);
   HwPWM3.setClockDiv(NRF_PWM_CLK_125kHz);
-  HwPWM3.setMaxValue(maxPWM);
+  HwPWM3.setMaxValue(PWM_MAX_HEADLIGHT);
   HwPWM3.addPin(PIN_HEADLIGHT_DIM);
-  HwPWM3.writeChannel(0, maxPWM/2);
+  HwPWM3.writeChannel(0, PWM_MAX_HEADLIGHT/2);
   HwPWM3.begin();
+
+  pinMode(PIN_TAIL_C, OUTPUT);
+  pinMode(PIN_TAIL_L, OUTPUT);
+  pinMode(PIN_TAIL_R, OUTPUT);
+
+  HwPWM2.takeOwnership(2);
+  HwPWM2.setClockDiv(NRF_PWM_CLK_1MHz);
+  HwPWM2.setMaxValue(255);
+  HwPWM2.addPin(PIN_TAIL_C);
+  HwPWM2.addPin(PIN_TAIL_L);
+  HwPWM2.addPin(PIN_TAIL_R);
+  HwPWM2.writeChannel(0, 255);
+  HwPWM2.writeChannel(1, 255);
+  HwPWM2.writeChannel(2, 255);
 
   analogReadResolution(14);
 
@@ -411,7 +428,6 @@ float vecMag(sensors_vec_t v) {
   return 1/invSqrt(v.x * v.x + v.y * v.y + v.z * v.z);
 }
 
-uint32_t timestamp;
 TickType_t last_move_time;
 const float ONE_G = 9.80665;
 
@@ -459,7 +475,10 @@ void loop() {
   if (vext < 11.2) {
     brightness = 0;
     actual_mode = OFF;
+    digitalWrite(PIN_POWER_ENABLE, LOW);
   } else {
+    // TODO: Make sure it doesn't cause flashing if we do this too early
+    digitalWrite(PIN_POWER_ENABLE, HIGH);
     switch (desired_mode) {
       case AUTO:
         if (lux > 50) {
@@ -476,6 +495,7 @@ void loop() {
     }
   }
 
+  // Update headlight
   float target_brightness = 0;
   switch (actual_mode) {
   case NIGHT:
@@ -493,7 +513,20 @@ void loop() {
     brightness -= 0.01;
     brightness = max(brightness, target_brightness);
   }
-  HwPWM3.writeChannel(0, maxPWM * brightness);
+  HwPWM3.writeChannel(0, PWM_MAX_HEADLIGHT * brightness);
+
+  // Update taillight
+  float tail_phase = (now % TAIL_PERIOD) / (float)TAIL_PERIOD;
+  float tail_intensity = (tail_phase*2);
+  if (tail_intensity > 1) {
+    tail_intensity = 2-tail_intensity;
+  }
+  tail_intensity *= tail_intensity; // Apply gamma of 2
+  
+  uint16_t tail_pwm = PWM_MAX_TAILLIGHT * tail_intensity;
+  HwPWM2.writeChannel(0, tail_pwm);
+  HwPWM2.writeChannel(1, PWM_MAX_TAILLIGHT - tail_pwm);
+  HwPWM2.writeChannel(2, PWM_MAX_TAILLIGHT - tail_pwm);
 
   // Update BLE characteristics
   // TODO: Notify
