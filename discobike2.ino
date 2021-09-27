@@ -62,6 +62,7 @@
 #include <Adafruit_NeoPixel.h>
 #include <bluefruit.h>
 #include <BLEAdafruitService.h>
+#include "BLERunTimeStats.h"
 
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
@@ -103,6 +104,9 @@ BLEDfu  bledfu;
 BLEDis  bledis;
 //BLEUart bleuart;
 BLEBas  blebas;  // battery
+#if configGENERATE_RUN_TIME_STATS
+BLERunTimeStats bleruntimestats;
+#endif
 //BLEAdafruitQuaternion bleQuater;
 BLEService blevolts = BLEService(UUID16_CHR_VOLTAGE);
 BLECharacteristic blevoltc = BLECharacteristic(UUID16_CHR_VOLTAGE);
@@ -238,6 +242,10 @@ void setup() {
 
   blebas.begin();
   blebas.write(100);
+
+#if configGENERATE_RUN_TIME_STATS
+  bleruntimestats.begin();
+#endif
 
   blevolts.begin();
   blevoltc.setProperties(CHR_PROPS_READ|CHR_PROPS_NOTIFY);
