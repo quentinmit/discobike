@@ -26,6 +26,6 @@ class PeriodicTask
   static void task(void *pvParameters);
 };
 
-#define STACK_SIZE 200
+#define STACK_SIZE 500
 
 #endif

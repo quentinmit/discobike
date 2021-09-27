@@ -134,6 +134,10 @@ StaticSemaphore_t xWireMutexBuffer;
 
 void _imu_update();
 PeriodicTask imu_task(pdMS_TO_TICKS(1000.0/FILTER_UPDATE_RATE_HZ), "imu", 3, _imu_update);
+void _output_update();
+PeriodicTask output_task(pdMS_TO_TICKS(1000.0/30), "output", 3, _output_update);
+void _display_update();
+PeriodicTask display_task(pdMS_TO_TICKS(1000.0/5), "display", 2, _display_update);
 
 // Data
 typedef enum {
@@ -146,7 +150,11 @@ typedef enum {
 headlight_mode_t desired_mode = AUTO;
 headlight_mode_t actual_mode = OFF;
 float brightness = 0;
+
+// Measured data
 float vext = 0;
+float accel_mag = 0;
+uint16_t lux = 0;
 
 void setup() {
   xWireSemaphore = xSemaphoreCreateMutexStatic( &xWireMutexBuffer );
@@ -265,6 +273,9 @@ void setup() {
 
   filter.begin(FILTER_UPDATE_RATE_HZ);
   imu_task.create();
+
+  output_task.create();
+  display_task.create();
 
   startAdv();
 
@@ -431,24 +442,10 @@ const uint8_t PROGMEM gamma8[] = {
   177,180,182,184,186,189,191,193,196,198,200,203,205,208,210,213,
   215,218,220,223,225,228,231,233,236,239,241,244,247,249,252,255 };
 
-void loop() {
+void _output_update() {
   TickType_t now = xTaskGetTickCount();
 
   //while ( !Serial ) delay(10); // XXX
-  // print the heading, pitch and roll
-  float roll, pitch, heading;
-  roll = filter.getRoll();
-  pitch = filter.getPitch();
-  heading = 360.0f-filter.getYaw();
-
-  if (Serial) {
-    Serial.print("Orientation: ");
-    Serial.print(heading);
-    Serial.print(", ");
-    Serial.print(pitch);
-    Serial.print(", ");
-    Serial.println(roll);
-  }
   
   //lis3mdl.read();
   //float heading = filter.getRoll();
@@ -457,17 +454,14 @@ void loop() {
   }
   float temperature = bmp280.readTemperature() * 1.8 + 32.0;
   vext = ina219.getBusVoltage_V();
-  float current_mA = ina219.getCurrent_mA();
   uint16_t r,g,b,c;
   apds9960.getColorData(&r, &g, &b, &c);
   // 3.5 counts/lux in the c channel according to datasheet
   xSemaphoreGive(xWireSemaphore);
-  uint16_t lux = c/3.5; //apds9960.calculateLux(r, g, b);
-
-  float vbat = analogRead(PIN_VBAT) * 3.6f * 2.0f / 16384.0f;
+  lux = c/3.5; //apds9960.calculateLux(r, g, b);
 
   // Update mode
-  float accel_mag = vecMag(accel_evt.acceleration);
+  accel_mag = vecMag(accel_evt.acceleration);
   if (accel_mag > 12) {
     last_move_time = now;
   }
@@ -531,7 +525,35 @@ void loop() {
   // Update BLE characteristics
   // TODO: Notify
   //blevoltc.write16(vext*64);
+}
 
+void _display_update() {
+  // Display-only data
+  
+  // print the heading, pitch and roll
+  float roll, pitch, heading;
+  roll = filter.getRoll();
+  pitch = filter.getPitch();
+  heading = 360.0f-filter.getYaw();
+
+  if (Serial) {
+    Serial.print("Orientation: ");
+    Serial.print(heading);
+    Serial.print(", ");
+    Serial.print(pitch);
+    Serial.print(", ");
+    Serial.println(roll);
+  }
+  
+  if (xSemaphoreTake(xWireSemaphore, 10) != pdTRUE) {
+    return;
+  }
+  float temperature = bmp280.readTemperature() * 1.8 + 32.0;
+  float current_mA = ina219.getCurrent_mA();
+  xSemaphoreGive(xWireSemaphore);
+
+  float vbat = analogRead(PIN_VBAT) * 3.6f * 2.0f / 16384.0f;
+  
   // Display
   oled.clearDisplay();
 
@@ -575,8 +597,9 @@ void loop() {
 
   oled.write('\n');
   //oled.print(accel);
-  //printFixed(oled, getRawHeading(), 3, DEC, ' ');
-  //oled.write(DEG);
+  printFixed(oled, getRawHeading(), 3, DEC, ' ');
+  oled.write(DEG);
+  oled.write('\n');
   printAngle(oled, accel_mag / ONE_G, 'G');
   oled.print(F("G  "));
   printFixed(oled, lux, 5, DEC, ' ');
@@ -622,4 +645,10 @@ void loop() {
   }
   oled.display();
   xSemaphoreGive(xWireSemaphore);
+}
+
+void loop() {
+  // Everything is done by periodic tasks
+  suspendLoop();
+  yield();
 }
