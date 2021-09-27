@@ -550,6 +550,7 @@ void _display_update() {
   }
   float temperature = bmp280.readTemperature() * 1.8 + 32.0;
   float current_mA = ina219.getCurrent_mA();
+  int mag_ok = lis3mdl.magneticFieldAvailable();
   xSemaphoreGive(xWireSemaphore);
 
   float vbat = analogRead(PIN_VBAT) * 3.6f * 2.0f / 16384.0f;
@@ -599,6 +600,8 @@ void _display_update() {
   //oled.print(accel);
   printFixed(oled, getRawHeading(), 3, DEC, ' ');
   oled.write(DEG);
+  oled.print(mag_ok);
+
   oled.write('\n');
   printAngle(oled, accel_mag / ONE_G, 'G');
   oled.print(F("G  "));
