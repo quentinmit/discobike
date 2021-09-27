@@ -95,7 +95,8 @@ Adafruit_SHT31    sht30;    // Humid
 const uint16_t PWM_MAX_HEADLIGHT = 625;
 const uint16_t PWM_MAX_TAILLIGHT = 255;
 
-const TickType_t TAIL_PERIOD = pdMS_TO_TICKS(4000);
+const TickType_t TAIL_PERIOD = pdMS_TO_TICKS(2000);
+const TickType_t LAST_MOVE_TIMEOUT = pdMS_TO_TICKS(20000);
 
 // BLE Services
 BLEDfu  bledfu;
@@ -161,8 +162,9 @@ void setup() {
   pinMode(PIN_POWER_ENABLE, OUTPUT);
   digitalWrite(PIN_POWER_ENABLE, HIGH); // FIXME
 
+  // Headlight is at 100% if PWM is not driving
   pinMode(PIN_HEADLIGHT_DIM, OUTPUT);
-  digitalWrite(PIN_HEADLIGHT_DIM, HIGH);
+  digitalWrite(PIN_HEADLIGHT_DIM, LOW);
 
   HwPWM3.takeOwnership(1);
   HwPWM3.setClockDiv(NRF_PWM_CLK_125kHz);
@@ -431,6 +433,24 @@ float vecMag(sensors_vec_t v) {
 TickType_t last_move_time;
 const float ONE_G = 9.80665;
 
+const uint8_t PROGMEM gamma8[] = {
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  1,  1,  1,
+    1,  1,  1,  1,  1,  1,  1,  1,  1,  2,  2,  2,  2,  2,  2,  2,
+    2,  3,  3,  3,  3,  3,  3,  3,  4,  4,  4,  4,  4,  5,  5,  5,
+    5,  6,  6,  6,  6,  7,  7,  7,  7,  8,  8,  8,  9,  9,  9, 10,
+   10, 10, 11, 11, 11, 12, 12, 13, 13, 13, 14, 14, 15, 15, 16, 16,
+   17, 17, 18, 18, 19, 19, 20, 20, 21, 21, 22, 22, 23, 24, 24, 25,
+   25, 26, 27, 27, 28, 29, 29, 30, 31, 32, 32, 33, 34, 35, 35, 36,
+   37, 38, 39, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 50,
+   51, 52, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 66, 67, 68,
+   69, 70, 72, 73, 74, 75, 77, 78, 79, 81, 82, 83, 85, 86, 87, 89,
+   90, 92, 93, 95, 96, 98, 99,101,102,104,105,107,109,110,112,114,
+  115,117,119,120,122,124,126,127,129,131,133,135,137,138,140,142,
+  144,146,148,150,152,154,156,158,160,162,164,167,169,171,173,175,
+  177,180,182,184,186,189,191,193,196,198,200,203,205,208,210,213,
+  215,218,220,223,225,228,231,233,236,239,241,244,247,249,252,255 };
+
 void loop() {
   TickType_t now = xTaskGetTickCount();
 
@@ -486,7 +506,7 @@ void loop() {
         } else {
           actual_mode = NIGHT;
         }
-        if ((now - last_move_time) > pdMS_TO_TICKS(10000)) {
+        if ((now - last_move_time) > LAST_MOVE_TIMEOUT) {
           actual_mode = OFF;
         }
         break;
@@ -513,7 +533,7 @@ void loop() {
     brightness -= 0.01;
     brightness = max(brightness, target_brightness);
   }
-  HwPWM3.writeChannel(0, PWM_MAX_HEADLIGHT * brightness);
+  HwPWM3.writeChannel(0, PWM_MAX_HEADLIGHT * brightness, true); // Invert (high = off)
 
   // Update taillight
   float tail_phase = (now % TAIL_PERIOD) / (float)TAIL_PERIOD;
@@ -521,9 +541,9 @@ void loop() {
   if (tail_intensity > 1) {
     tail_intensity = 2-tail_intensity;
   }
-  tail_intensity *= tail_intensity; // Apply gamma of 2
+  //tail_intensity *= tail_intensity*tail_intensity; // Apply gamma of 3
   
-  uint16_t tail_pwm = PWM_MAX_TAILLIGHT * tail_intensity;
+  uint16_t tail_pwm = gamma8[(uint8_t)(255*tail_intensity)];
   HwPWM2.writeChannel(0, tail_pwm);
   HwPWM2.writeChannel(1, PWM_MAX_TAILLIGHT - tail_pwm);
   HwPWM2.writeChannel(2, PWM_MAX_TAILLIGHT - tail_pwm);
