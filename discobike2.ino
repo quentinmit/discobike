@@ -64,6 +64,8 @@
 #include <BLEAdafruitService.h>
 #include "BLERunTimeStats.h"
 
+#include "Task.h"
+
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
@@ -130,9 +132,8 @@ Adafruit_Madgwick filter;
 SemaphoreHandle_t xWireSemaphore = NULL;
 StaticSemaphore_t xWireMutexBuffer;
 
-#define STACK_SIZE 200
-StaticTask_t xImuTaskBuffer;
-StackType_t xImuTaskStack[ STACK_SIZE ];
+void _imu_update();
+PeriodicTask imu_task(pdMS_TO_TICKS(1000.0/FILTER_UPDATE_RATE_HZ), "imu", 3, _imu_update);
 
 // Data
 typedef enum {
@@ -263,15 +264,7 @@ void setup() {
   //bleQuater.setCalibration(&cal);
 
   filter.begin(FILTER_UPDATE_RATE_HZ);
-  // Ignore the returned task handle
-  xTaskCreateStatic(
-                    imu_update_task,       /* Function that implements the task. */
-                    "imu",           /* Text name for the task. */
-                    STACK_SIZE,      /* Number of indexes in the xStack array. */
-                    ( void * ) 1,    /* Parameter passed into the task. */
-                    3,               /* Priority at which the task is created. */
-                    xImuTaskStack,          /* Array to use as the task's stack. */
-                    &xImuTaskBuffer );  /* Variable to hold the task's data structure. */
+  imu_task.create();
 
   startAdv();
 
@@ -313,27 +306,6 @@ void notify_timer_cb(TimerHandle_t xTimer) {
   uint16_t volt = vext * 100;
   if (blevoltc.read16() != volt) {
     blevoltc.notify16(volt);
-  }
-}
-
-long imu_skipped = 0;
-
-void imu_update_task(void *pvParameters) {
-  TickType_t xLastWakeTime;
-  const TickType_t xFrequency = pdMS_TO_TICKS(1000.0/FILTER_UPDATE_RATE_HZ);
-
-  // Initialise the xLastWakeTime variable with the current time.
-  xLastWakeTime = xTaskGetTickCount();
-
-  for( ;; ) {
-    // Wait for the next cycle.
-    vTaskDelayUntil( &xLastWakeTime, xFrequency );
-    _imu_update();
-    // If we've gotten behind, reset the last wake time.
-    if (xLastWakeTime + xFrequency < xTaskGetTickCount()) {
-      xLastWakeTime = xTaskGetTickCount();
-      imu_skipped++;
-    }
   }
 }
 
@@ -612,7 +584,7 @@ void loop() {
   oled.write('\n');
 
   oled.print(F("IMU late: "));
-  printFixed(oled, imu_skipped, 3, DEC, '0');
+  printFixed(oled, imu_task.skipped(), 3, DEC, '0');
   oled.write('\n');
   
   oled.print(F("Mode: "));
