@@ -614,7 +614,7 @@ void _display_update() {
 
   oled.write('\n');
   printAngle(oled, accel_mag / ONE_G, 'G');
-  oled.print(F("G  "));
+  oled.print(F("    "));
   printFixed(oled, lux, 5, DEC, ' ');
   oled.print(F(" lux "));
   oled.write('\n');
@@ -656,6 +656,7 @@ void _display_update() {
   if (xSemaphoreTake(xWireSemaphore, 10) != pdTRUE) {
     return;
   }
+  // TODO: Hack the driver to allow yielding from within the display loop.
   oled.display();
   xSemaphoreGive(xWireSemaphore);
 }
