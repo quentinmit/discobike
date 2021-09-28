@@ -101,6 +101,8 @@ const uint16_t PWM_MAX_TAILLIGHT = 255;
 const TickType_t TAIL_PERIOD = pdMS_TO_TICKS(2000);
 const TickType_t LAST_MOVE_TIMEOUT = pdMS_TO_TICKS(20000);
 
+const bool DEBUG_IMU = true;
+
 // BLE Services
 BLEDfu  bledfu;
 BLEDis  bledis;
@@ -127,7 +129,7 @@ FatFileSystem fatfs;
 SoftwareTimer filter_timer;
 Adafruit_Madgwick filter;
 //Adafruit_NXPSensorFusion filter;
-#define FILTER_UPDATE_RATE_HZ 10
+#define FILTER_UPDATE_RATE_HZ 30
 
 SemaphoreHandle_t xWireSemaphore = NULL;
 StaticSemaphore_t xWireMutexBuffer;
@@ -195,10 +197,12 @@ void setup() {
   HwPWM2.setMaxValue(255);
   HwPWM2.addPin(PIN_TAIL_C);
   HwPWM2.addPin(PIN_TAIL_L);
-  HwPWM2.addPin(PIN_TAIL_R);
   HwPWM2.writeChannel(0, 255);
   HwPWM2.writeChannel(1, 255);
-  HwPWM2.writeChannel(2, 255);
+  if (!DEBUG_IMU) {
+    HwPWM2.addPin(PIN_TAIL_R);
+    HwPWM2.writeChannel(2, 255);
+  }
 
   analogReadResolution(14);
 
@@ -322,7 +326,9 @@ void notify_timer_cb(TimerHandle_t xTimer) {
 
 sensors_event_t accel_evt, gyro_evt, mag_evt;
 void _imu_update() {
-  //digitalWrite(LED_RED, HIGH);
+  if (DEBUG_IMU) {
+    digitalWrite(LED_RED, HIGH);
+  }
   xSemaphoreTake(xWireSemaphore, portMAX_DELAY);
 
   // get sensor events
@@ -346,7 +352,9 @@ void _imu_update() {
                   mag_evt.magnetic.x, mag_evt.magnetic.y, mag_evt.magnetic.z);
 
   xSemaphoreGive(xWireSemaphore);
-  //digitalWrite(LED_RED, LOW);
+  if (DEBUG_IMU) {
+    digitalWrite(LED_RED, LOW);
+  }
 }
 
 float getRawHeading(){
@@ -452,7 +460,6 @@ void _output_update() {
   if (xSemaphoreTake(xWireSemaphore, 10) != pdTRUE) {
     return;
   }
-  float temperature = bmp280.readTemperature() * 1.8 + 32.0;
   vext = ina219.getBusVoltage_V();
   uint16_t r,g,b,c;
   apds9960.getColorData(&r, &g, &b, &c);
@@ -520,7 +527,9 @@ void _output_update() {
   uint16_t tail_pwm = gamma8[(uint8_t)(255*tail_intensity)];
   HwPWM2.writeChannel(0, tail_pwm);
   HwPWM2.writeChannel(1, PWM_MAX_TAILLIGHT - tail_pwm);
-  HwPWM2.writeChannel(2, PWM_MAX_TAILLIGHT - tail_pwm);
+  if (!DEBUG_IMU) {
+    HwPWM2.writeChannel(2, PWM_MAX_TAILLIGHT - tail_pwm);
+  }
 
   // Update BLE characteristics
   // TODO: Notify
