@@ -86,7 +86,7 @@
 #endif
 
 // Peripherals
-Adafruit_SSD1306 oled(128, 64);
+Adafruit_SSD1306 oled(128, 64, &Wire, -1, 400000UL, 400000UL);
 Adafruit_INA219 ina219;
 Adafruit_NeoPixel underlight(35, PIN_UNDERLIGHT, NEO_GRBW | NEO_KHZ800);
 Adafruit_LSM6DS33 lsm6ds33; // Gyro and Accel
@@ -324,7 +324,7 @@ void notify_timer_cb(TimerHandle_t xTimer) {
   }
 }
 
-sensors_event_t accel_evt, gyro_evt, mag_evt;
+sensors_event_t accel_evt, gyro_evt, temp_evt, mag_evt;
 void _imu_update() {
   if (DEBUG_IMU) {
     digitalWrite(LED_RED, HIGH);
@@ -332,8 +332,7 @@ void _imu_update() {
   xSemaphoreTake(xWireSemaphore, portMAX_DELAY);
 
   // get sensor events
-  lsm6ds33.getAccelerometerSensor()->getEvent(&accel_evt);
-  lsm6ds33.getGyroSensor()->getEvent(&gyro_evt);
+  lsm6ds33.getEvent(&accel_evt, &gyro_evt, &temp_evt);
   lis3mdl.getEvent(&mag_evt);
 
   // calibrate sensor if available
