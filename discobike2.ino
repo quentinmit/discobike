@@ -129,7 +129,9 @@ FatFileSystem fatfs;
 SoftwareTimer filter_timer;
 Adafruit_Madgwick filter;
 //Adafruit_NXPSensorFusion filter;
-#define FILTER_UPDATE_RATE_HZ 30
+
+// Screen refresh takes ~28ms, so max rate without dropped updates is 35 Hz.
+#define FILTER_UPDATE_RATE_HZ 50
 
 SemaphoreHandle_t xWireSemaphore = NULL;
 StaticSemaphore_t xWireMutexBuffer;
