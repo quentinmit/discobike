@@ -537,6 +537,12 @@ void _output_update() {
   //blevoltc.write16(vext*64);
 }
 
+void i2cyield() {
+  xSemaphoreGive(xWireSemaphore);
+  yield();
+  xSemaphoreTake(xWireSemaphore, portMAX_DELAY);
+}
+
 void _display_update() {
   // Display-only data
   
@@ -656,8 +662,7 @@ void _display_update() {
   if (xSemaphoreTake(xWireSemaphore, 10) != pdTRUE) {
     return;
   }
-  // TODO: Hack the driver to allow yielding from within the display loop.
-  oled.display();
+  oled.display(i2cyield);
   xSemaphoreGive(xWireSemaphore);
 }
 
