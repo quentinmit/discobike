@@ -103,7 +103,7 @@ const TickType_t LAST_MOVE_TIMEOUT = pdMS_TO_TICKS(20000);
 const TickType_t DISPLAY_TIMEOUT = pdMS_TO_TICKS(60000);
 const float ONE_G = 9.80665;
 
-const bool DEBUG_IMU = true;
+const bool DEBUG_IMU = false;
 
 // BLE Services
 BLEDfu  bledfu;
@@ -479,12 +479,14 @@ void _output_update() {
     last_move_time = now;
   }
   // TODO: Use IMU angle for mode too?
+  bool taillight_on = false;
   if (vext < 11.2) {
     brightness = 0;
     actual_mode = OFF;
     digitalWrite(PIN_POWER_ENABLE, LOW);
   } else {
     last_vext_time = now;
+    taillight_on = true;
     // TODO: Make sure it doesn't cause flashing if we do this too early
     digitalWrite(PIN_POWER_ENABLE, HIGH);
     switch (desired_mode) {
@@ -524,18 +526,25 @@ void _output_update() {
   HwPWM3.writeChannel(0, PWM_MAX_HEADLIGHT * brightness, true); // Invert (high = off)
 
   // Update taillight
-  float tail_phase = (now % TAIL_PERIOD) / (float)TAIL_PERIOD;
-  float tail_intensity = (tail_phase*2);
-  if (tail_intensity > 1) {
-    tail_intensity = 2-tail_intensity;
-  }
-  //tail_intensity *= tail_intensity*tail_intensity; // Apply gamma of 3
-  
-  uint16_t tail_pwm = gamma8[(uint8_t)(255*tail_intensity)];
-  HwPWM2.writeChannel(0, tail_pwm);
-  HwPWM2.writeChannel(1, PWM_MAX_TAILLIGHT - tail_pwm);
-  if (!DEBUG_IMU) {
-    HwPWM2.writeChannel(2, PWM_MAX_TAILLIGHT - tail_pwm);
+  if (!taillight_on) {
+    // Onboard red LED (on channel 2) uses up to 1 mA!
+    for (int i = 0; i < 3; i++) {
+      HwPWM2.writeChannel(i, 0);
+    }
+  } else {
+    float tail_phase = (now % TAIL_PERIOD) / (float)TAIL_PERIOD;
+    float tail_intensity = (tail_phase*2);
+    if (tail_intensity > 1) {
+      tail_intensity = 2-tail_intensity;
+    }
+    //tail_intensity *= tail_intensity*tail_intensity; // Apply gamma of 3
+    
+    uint16_t tail_pwm = gamma8[(uint8_t)(255*tail_intensity)];
+    HwPWM2.writeChannel(0, tail_pwm);
+    HwPWM2.writeChannel(1, PWM_MAX_TAILLIGHT - tail_pwm);
+    if (!DEBUG_IMU) {
+      HwPWM2.writeChannel(2, PWM_MAX_TAILLIGHT - tail_pwm);
+    }
   }
 
   // Update BLE characteristics
@@ -592,10 +601,19 @@ void _display_update() {
       oled.ssd1306_command(SSD1306_CHARGEPUMP);
       oled.ssd1306_command(0x14);
       oled.ssd1306_command(SSD1306_DISPLAYON);
+      Bluefruit.autoConnLed(true);
+      if (Bluefruit.Advertising.isRunning()) {
+        Bluefruit._startConnLed();
+      } else {
+        Bluefruit._stopConnLed();
+      }
     } else {
       oled.ssd1306_command(SSD1306_DISPLAYOFF);
       oled.ssd1306_command(SSD1306_CHARGEPUMP);
       oled.ssd1306_command(0x10);
+      Bluefruit._stopConnLed();
+      Bluefruit._setConnLed(false);
+      Bluefruit.autoConnLed(false);
     }
     display_on = new_display_on;
     xSemaphoreGive(xWireSemaphore);
