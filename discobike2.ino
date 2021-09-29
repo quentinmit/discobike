@@ -100,7 +100,7 @@ const uint16_t PWM_MAX_TAILLIGHT = 255;
 
 const TickType_t TAIL_PERIOD = pdMS_TO_TICKS(2000);
 const TickType_t LAST_MOVE_TIMEOUT = pdMS_TO_TICKS(20000);
-const TickType_t LAST_VEXT_TIMEOUT = pdMS_TO_TICKS(60000);
+const TickType_t DISPLAY_TIMEOUT = pdMS_TO_TICKS(60000);
 const float ONE_G = 9.80665;
 
 const bool DEBUG_IMU = true;
@@ -581,7 +581,7 @@ void _display_update() {
 
   TickType_t now = xTaskGetTickCount();
 
-  bool new_display_on = (now-last_vext_time) < LAST_VEXT_TIMEOUT;
+  bool new_display_on = (now-max(last_move_time, last_vext_time)) < DISPLAY_TIMEOUT;
 
   if (new_display_on != display_on) {
     xSemaphoreTake(xWireSemaphore, portMAX_DELAY);
