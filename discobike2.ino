@@ -100,6 +100,8 @@ const uint16_t PWM_MAX_TAILLIGHT = 255;
 
 const TickType_t TAIL_PERIOD = pdMS_TO_TICKS(2000);
 const TickType_t LAST_MOVE_TIMEOUT = pdMS_TO_TICKS(20000);
+const TickType_t LAST_VEXT_TIMEOUT = pdMS_TO_TICKS(60000);
+const float ONE_G = 9.80665;
 
 const bool DEBUG_IMU = true;
 
@@ -155,6 +157,11 @@ headlight_mode_t desired_mode = AUTO;
 headlight_mode_t actual_mode = OFF;
 float brightness = 0;
 
+bool display_on = true;
+
+TickType_t last_move_time = 0;
+TickType_t last_vext_time = 0;
+
 // Measured data
 float vext = 0;
 float accel_mag = 0;
@@ -172,6 +179,7 @@ void setup() {
   // H- and V-flip the display
   oled.ssd1306_command(SSD1306_SEGREMAP);
   oled.ssd1306_command(SSD1306_COMSCANINC);
+  oled.clearDisplay();
   oled.display();
   oled.setTextSize(1);
   oled.setTextColor(WHITE);
@@ -430,9 +438,6 @@ float vecMag(sensors_vec_t v) {
   return 1/invSqrt(v.x * v.x + v.y * v.y + v.z * v.z);
 }
 
-TickType_t last_move_time;
-const float ONE_G = 9.80665;
-
 const uint8_t PROGMEM gamma8[] = {
     0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
     0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  1,  1,  1,
@@ -479,6 +484,7 @@ void _output_update() {
     actual_mode = OFF;
     digitalWrite(PIN_POWER_ENABLE, LOW);
   } else {
+    last_vext_time = now;
     // TODO: Make sure it doesn't cause flashing if we do this too early
     digitalWrite(PIN_POWER_ENABLE, HIGH);
     switch (desired_mode) {
@@ -570,6 +576,33 @@ void _display_update() {
   xSemaphoreGive(xWireSemaphore);
 
   float vbat = analogRead(PIN_VBAT) * 3.6f * 2.0f / 16384.0f;
+
+  //return; // XXX: Test to see what it does to power consumption
+
+  TickType_t now = xTaskGetTickCount();
+
+  bool new_display_on = (now-last_vext_time) < LAST_VEXT_TIMEOUT;
+
+  if (new_display_on != display_on) {
+    xSemaphoreTake(xWireSemaphore, portMAX_DELAY);
+    // Turning off the OLED with oled.dim(true) but continuing to draw saves about 4 mA
+    // Turning off the OLED with oled.dim(true) saves about 4.5 mA
+    // Turning off the driver and charge pump saves about 5 mA
+    if (new_display_on) {
+      oled.ssd1306_command(SSD1306_CHARGEPUMP);
+      oled.ssd1306_command(0x14);
+      oled.ssd1306_command(SSD1306_DISPLAYON);
+    } else {
+      oled.ssd1306_command(SSD1306_DISPLAYOFF);
+      oled.ssd1306_command(SSD1306_CHARGEPUMP);
+      oled.ssd1306_command(0x10);
+    }
+    display_on = new_display_on;
+    xSemaphoreGive(xWireSemaphore);
+  }
+  if (!display_on) {
+    return;
+  }
   
   // Display
   oled.clearDisplay();
@@ -644,6 +677,11 @@ void _display_update() {
   oled.write(' ');
   printFixed(oled, brightness * 100, 3, DEC, ' ');
   oled.write('%');
+  if (actual_mode != OFF) {
+    oled.write(' ');
+    printFixed(oled, (LAST_MOVE_TIMEOUT - (now-last_move_time))/configTICK_RATE_HZ, 2, DEC, ' ');
+    oled.write('s');
+  }
   
   /*
   oled.print(now.month());
