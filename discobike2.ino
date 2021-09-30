@@ -281,7 +281,15 @@ void setup() {
   lis3mdl.setOperationMode(LIS3MDL_CONTINUOUSMODE);
 
   // Temperature, Barometer
+  // 247 uA at 10 Hz
   bmp280.begin();
+  bmp280.setSampling(
+    Adafruit_BMP280::MODE_NORMAL,
+    Adafruit_BMP280::SAMPLING_X2, // temperature
+    Adafruit_BMP280::SAMPLING_X16, // pressure
+    Adafruit_BMP280::FILTER_X4, // filter
+    Adafruit_BMP280::STANDBY_MS_63 // = 10 Hz ODR
+  );
 
   // Increase I2C speed to 400 Khz
   Wire.setClock(400000);
