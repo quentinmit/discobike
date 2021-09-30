@@ -68,9 +68,8 @@
 
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
-
 #include <Adafruit_INA219.h>
-
+#include <INA219_WE.h>
 #include <Adafruit_APDS9960.h>
 #include <Adafruit_BMP280.h>
 #include <Adafruit_LIS3MDL.h>
@@ -80,16 +79,36 @@
 #include <Adafruit_SPIFlash.h>
 #include <Adafruit_AHRS.h>
 #include <Adafruit_Sensor_Calibration.h>
+#include <Adafruit_BusIO_Register.h>
 
 #ifndef UUID16_CHR_VOLTAGE
 #define UUID16_CHR_VOLTAGE                                    0x2B18
 #endif
 
+#define LSM6DS_CTRL6_C 0x15       ///< Accelerometer mode
+#define LSM6DS_CTRL7_G 0x16       ///< Gyro mode
+
+class LSM6DS33 : public Adafruit_LSM6DS33 {
+public:
+  void setLowPowerMode(bool enabled) {
+    Adafruit_BusIO_Register ctrl6 = Adafruit_BusIO_Register(
+      i2c_dev, spi_dev, ADDRBIT8_HIGH_TOREAD, LSM6DS_CTRL6_C);
+    Adafruit_BusIO_RegisterBits xl_hm_mode =
+      Adafruit_BusIO_RegisterBits(&ctrl6, 1, 4);
+    xl_hm_mode.write(enabled);
+    Adafruit_BusIO_Register ctrl7 = Adafruit_BusIO_Register(
+      i2c_dev, spi_dev, ADDRBIT8_HIGH_TOREAD, LSM6DS_CTRL7_G);
+    Adafruit_BusIO_RegisterBits g_hm_mode =
+      Adafruit_BusIO_RegisterBits(&ctrl7, 1, 7);
+    g_hm_mode.write(enabled);
+  }
+};
+
 // Peripherals
 Adafruit_SSD1306 oled(128, 64, &Wire, -1, 400000UL, 400000UL);
-Adafruit_INA219 ina219;
+INA219_WE ina219;
 Adafruit_NeoPixel underlight(35, PIN_UNDERLIGHT, NEO_GRBW | NEO_KHZ800);
-Adafruit_LSM6DS33 lsm6ds33; // Gyro and Accel
+LSM6DS33 lsm6ds33; // Gyro and Accel
 Adafruit_LIS3MDL  lis3mdl;  // Magnetometer
 Adafruit_APDS9960 apds9960; // Proximity, Light, Gesture, Color
 Adafruit_BMP280   bmp280;   // Temperature, Barometric
@@ -101,6 +120,8 @@ const uint16_t PWM_MAX_TAILLIGHT = 255;
 const TickType_t TAIL_PERIOD = pdMS_TO_TICKS(2000);
 const TickType_t LAST_MOVE_TIMEOUT = pdMS_TO_TICKS(20000);
 const TickType_t DISPLAY_TIMEOUT = pdMS_TO_TICKS(60000);
+// Check for Vext every 1s to save power
+const TickType_t VEXT_POLL_PERIOD = pdMS_TO_TICKS(1000);
 const float ONE_G = 9.80665;
 
 const bool DEBUG_IMU = false;
@@ -161,6 +182,7 @@ bool display_on = true;
 
 TickType_t last_move_time = 0;
 TickType_t last_vext_time = 0;
+TickType_t last_vext_poll_time = 0;
 
 // Measured data
 float vext = 0;
@@ -218,7 +240,11 @@ void setup() {
 
   underlight.begin();
 
-  ina219.begin();
+  // Current
+  // ~700 uA on
+  // 6 uA powered down
+  ina219.init();
+  ina219.setADCMode(SAMPLE_MODE_128);
 
   // Init flash, filesystem and calibration & load calib json
   flash.begin();
@@ -227,15 +253,21 @@ void setup() {
   cal.loadCalibration();
 
   // Light
+  // 200 uA
   apds9960.begin();
   apds9960.enableColor(true);
 
   // IMU
+  // 1250 uA high performance
+  // 900 uA normal mode
+  // 420 uA low power mode
+  // 6 uA powered down
   lsm6ds33.begin_I2C();
   lsm6ds33.setAccelRange(LSM6DS_ACCEL_RANGE_2_G);
   lsm6ds33.setGyroRange(LSM6DS_GYRO_RANGE_250_DPS);
   lsm6ds33.setAccelDataRate(LSM6DS_RATE_104_HZ);
   lsm6ds33.setGyroDataRate(LSM6DS_RATE_104_HZ);
+  lsm6ds33.setLowPowerMode(true);
 
   // Magnetometer
   lis3mdl.begin_I2C();
@@ -300,7 +332,7 @@ void setup() {
 }
 
 void startAdv(void)
-{  
+{
   // Advertising packet
   Bluefruit.Advertising.addFlags(BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE);
   Bluefruit.Advertising.addTxPower();
@@ -466,7 +498,24 @@ void _output_update() {
   if (xSemaphoreTake(xWireSemaphore, 10) != pdTRUE) {
     return;
   }
-  vext = ina219.getBusVoltage_V();
+  if (display_on) {
+    vext = ina219.getBusVoltage_V();
+  } else {
+    if ((now-last_vext_poll_time) > VEXT_POLL_PERIOD) {
+      // Wake up INA219 and trigger a voltage read
+      ina219.writeRegister(
+        INA219_REG_CONFIG,
+        INA219_CONFIG_BVOLTAGERANGE_32V |
+        INA219_CONFIG_GAIN_8_320MV | INA219_CONFIG_BADCRES_12BIT |
+        INA219_CONFIG_SADCRES_12BIT_1S_532US |
+        INA219_CONFIG_MODE_BVOLT_TRIGGERED
+      );
+      while(!(ina219.readRegister(INA219_REG_BUSVOLTAGE) & 0x0002)); // checks if sampling is completed
+      vext = ina219.getBusVoltage_V();
+      ina219.setMeasureMode(POWER_DOWN);
+      last_vext_poll_time = now;
+    }
+  }
   uint16_t r,g,b,c;
   apds9960.getColorData(&r, &g, &b, &c);
   // 3.5 counts/lux in the c channel according to datasheet
@@ -575,14 +624,6 @@ void _display_update() {
     Serial.print(", ");
     Serial.println(roll);
   }
-  
-  if (xSemaphoreTake(xWireSemaphore, 10) != pdTRUE) {
-    return;
-  }
-  float temperature = bmp280.readTemperature() * 1.8 + 32.0;
-  float current_mA = ina219.getCurrent_mA();
-  int mag_ok = lis3mdl.magneticFieldAvailable();
-  xSemaphoreGive(xWireSemaphore);
 
   float vbat = analogRead(PIN_VBAT) * 3.6f * 2.0f / 16384.0f;
 
@@ -597,6 +638,7 @@ void _display_update() {
     // Turning off the OLED with oled.dim(true) but continuing to draw saves about 4 mA
     // Turning off the OLED with oled.dim(true) saves about 4.5 mA
     // Turning off the driver and charge pump saves about 5 mA
+    // Turning off the INA219 saves about an additional 0.7 mA
     if (new_display_on) {
       oled.ssd1306_command(SSD1306_CHARGEPUMP);
       oled.ssd1306_command(0x14);
@@ -607,6 +649,10 @@ void _display_update() {
       } else {
         Bluefruit._stopConnLed();
       }
+      ina219.powerUp();
+      //ina219.init();
+      // TODO: Refactor to call common code
+      //ina219.setADCMode(SAMPLE_MODE_128);
     } else {
       oled.ssd1306_command(SSD1306_DISPLAYOFF);
       oled.ssd1306_command(SSD1306_CHARGEPUMP);
@@ -614,13 +660,23 @@ void _display_update() {
       Bluefruit._stopConnLed();
       Bluefruit._setConnLed(false);
       Bluefruit.autoConnLed(false);
+      ina219.powerDown();
     }
     display_on = new_display_on;
     xSemaphoreGive(xWireSemaphore);
   }
+
   if (!display_on) {
     return;
   }
+  
+  if (xSemaphoreTake(xWireSemaphore, 10) != pdTRUE) {
+    return;
+  }
+  float temperature = bmp280.readTemperature() * 1.8 + 32.0;
+  float current_mA = ina219.getCurrent_mA();
+  int mag_ok = lis3mdl.magneticFieldAvailable();
+  xSemaphoreGive(xWireSemaphore);
   
   // Display
   oled.clearDisplay();
