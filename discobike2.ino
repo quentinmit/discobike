@@ -463,12 +463,14 @@ size_t printFixed(Print& print, signed long n, uint8_t width, uint8_t base, uint
 
 const uint8_t DEG = 248;
 
-void printAngle(Print& print, float angle, uint8_t symbol = DEG)
+void printAngle(Print& print, float angle, uint8_t symbol = DEG, uint8_t digits1 = 3)
 {
-  printFixed(print, angle, 3, DEC, ' ');
+  printFixed(print, angle, digits1, DEC, ' ');
   print.write('.');
   printFixed(print, (int)(abs(angle*100)) % 100, 2, DEC, '0');
-  print.write(symbol);
+  if (symbol) {
+    print.write(symbol);
+  }
 }
 
 float invSqrt(float x) {
@@ -691,11 +693,14 @@ void _display_update() {
   if (xSemaphoreTake(xWireSemaphore, 10) != pdTRUE) {
     return;
   }
-  float temperature = bmp280.readTemperature() * 1.8 + 32.0;
-  float temperature2 = temp_evt.temperature * 1.8 + 32.0;
+  float temperature = bmp280.readTemperature() * 1.8 + 32.0; // degF
+  float pressure = bmp280.readPressure() / 100; // hPa
+  float temperature2 = temp_evt.temperature * 1.8 + 32.0; // degF
   float current_mA = ina219.getCurrent_mA();
   int mag_ok = lis3mdl.magneticFieldAvailable();
   xSemaphoreGive(xWireSemaphore);
+
+  float altitude = 44330 * (1.0 - pow(pressure / 1013, 0.1903));
   
   // Display
   oled.clearDisplay();
@@ -735,10 +740,13 @@ void _display_update() {
   oled.print(F("."));
   printFixed(oled, (int)(temperature * 10) % 10, 1, DEC);
   oled.write(DEG);
-  //oled.print((double)heading, 0);
-  //oled.print(F("o"));
-
   oled.write('\n');
+
+  printAngle(oled, pressure, 'h', 4);
+  oled.print(F("Pa"));
+  printAngle(oled, altitude, 'm', 3);
+  oled.write('\n');
+
   //oled.print(accel);
   printFixed(oled, getRawHeading(), 3, DEC, ' ');
   oled.write(DEG);
