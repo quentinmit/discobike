@@ -692,6 +692,7 @@ void _display_update() {
     return;
   }
   float temperature = bmp280.readTemperature() * 1.8 + 32.0;
+  float temperature2 = temp_evt.temperature * 1.8 + 32.0;
   float current_mA = ina219.getCurrent_mA();
   int mag_ok = lis3mdl.magneticFieldAvailable();
   xSemaphoreGive(xWireSemaphore);
@@ -742,6 +743,8 @@ void _display_update() {
   printFixed(oled, getRawHeading(), 3, DEC, ' ');
   oled.write(DEG);
   oled.print(mag_ok);
+
+  printAngle(oled, temperature2, DEG);
 
   oled.write('\n');
   printAngle(oled, accel_mag / ONE_G, 'G');
