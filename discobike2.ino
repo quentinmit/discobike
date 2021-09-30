@@ -283,13 +283,7 @@ void setup() {
   // Temperature, Barometer
   // 247 uA at 10 Hz
   bmp280.begin();
-  bmp280.setSampling(
-    Adafruit_BMP280::MODE_NORMAL,
-    Adafruit_BMP280::SAMPLING_X2, // temperature
-    Adafruit_BMP280::SAMPLING_X16, // pressure
-    Adafruit_BMP280::FILTER_X4, // filter
-    Adafruit_BMP280::STANDBY_MS_63 // = 10 Hz ODR
-  );
+  enableTemperature(true);
 
   // Increase I2C speed to 400 Khz
   Wire.setClock(400000);
@@ -369,6 +363,16 @@ void startAdv(void)
   Bluefruit.Advertising.setInterval(32, 510);    // in unit of 0.625 ms
   Bluefruit.Advertising.setFastTimeout(30);      // number of seconds in fast mode
   Bluefruit.Advertising.start(0);                // 0 = Don't stop advertising after n seconds
+}
+
+void enableTemperature(bool enabled) {
+  bmp280.setSampling(
+    enabled ? Adafruit_BMP280::MODE_NORMAL : Adafruit_BMP280::MODE_SLEEP,
+    Adafruit_BMP280::SAMPLING_X2, // temperature
+    Adafruit_BMP280::SAMPLING_X16, // pressure
+    Adafruit_BMP280::FILTER_X4, // filter
+    Adafruit_BMP280::STANDBY_MS_63 // = 10 Hz ODR
+  );
 }
 
 void notify_timer_cb(TimerHandle_t xTimer) {
@@ -647,6 +651,8 @@ void _display_update() {
 
   if (new_display_on != display_on) {
     xSemaphoreTake(xWireSemaphore, portMAX_DELAY);
+    // Turning off the temperature sensor saves about 247 uA
+    enableTemperature(new_display_on);
     // Turning off the OLED with oled.dim(true) but continuing to draw saves about 4 mA
     // Turning off the OLED with oled.dim(true) saves about 4.5 mA
     // Turning off the driver and charge pump saves about 5 mA
