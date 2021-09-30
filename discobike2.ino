@@ -697,7 +697,7 @@ void _display_update() {
   printFixed(oled, (int)vbat, 1, DEC, '0');
   oled.print(F("."));
   printFixed(oled, (int)(vbat * 100) % 100, 2, DEC);
-  oled.print(F("Vbat"));
+  oled.print(F("V"));
   
   oled.write('\n');
   /*oled.print(magX);
@@ -732,9 +732,11 @@ void _display_update() {
   oled.print(F(" lux "));
   oled.write('\n');
 
+  /*
   oled.print(F("IMU late: "));
   printFixed(oled, imu_task.skipped(), 3, DEC, '0');
   oled.write('\n');
+  */
   
   oled.print(F("Mode: "));
   switch (actual_mode) {
