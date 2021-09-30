@@ -270,9 +270,13 @@ void setup() {
   lsm6ds33.setLowPowerMode(true);
 
   // Magnetometer
+  // +1700 uA for 80 -> 1000 Hz (!)
+  // 270 uA high res at 20 Hz
+  // 40 uA low power at 20 Hz
+  // 1 uA powered down
   lis3mdl.begin_I2C();
   lis3mdl.setRange(LIS3MDL_RANGE_4_GAUSS);
-  lis3mdl.setDataRate(LIS3MDL_DATARATE_1000_HZ);
+  lis3mdl.setDataRate(LIS3MDL_DATARATE_80_HZ);
   lis3mdl.setPerformanceMode(LIS3MDL_MEDIUMMODE);
   lis3mdl.setOperationMode(LIS3MDL_CONTINUOUSMODE);
 
