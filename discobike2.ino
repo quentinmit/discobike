@@ -63,6 +63,7 @@
 #include <bluefruit.h>
 #include <BLEAdafruitService.h>
 #include "BLERunTimeStats.h"
+#include "BLERemoteVariable.h"
 
 #include "Task.h"
 
@@ -137,6 +138,18 @@ BLERunTimeStats bleruntimestats;
 //BLEAdafruitQuaternion bleQuater;
 BLEService blevolts = BLEService(UUID16_CHR_VOLTAGE);
 BLECharacteristic blevoltc = BLECharacteristic(UUID16_CHR_VOLTAGE);
+const uint8_t UUID128_HEADLIGHT_SERVICE[16] =
+{
+  0x87, 0x8d, 0x53, 0x29, 0x5f, 0x2e, 0x43, 0x08,
+  0x85, 0xc9, 0xbd, 0x1f, 0x00, 0x00, 0x00, 0x00
+};
+
+const uint8_t UUID128_HEADLIGHT_CHR[16] =
+  {
+    0x87, 0x8d, 0x53, 0x29, 0x5f, 0x2e, 0x43, 0x08,
+    0x85, 0xc9, 0xbd, 0x1f, 0x01, 0x00, 0x00, 0x00
+  };
+
 
 SoftwareTimer notify_timer;
 
@@ -175,6 +188,7 @@ typedef enum {
   BLINK,
 } headlight_mode_t;
 headlight_mode_t desired_mode = AUTO;
+BLERemoteVariable<headlight_mode_t> blehlmode(&desired_mode, UUID128_HEADLIGHT_SERVICE, UUID128_HEADLIGHT_CHR);
 headlight_mode_t actual_mode = OFF;
 float brightness = 0;
 
@@ -316,6 +330,7 @@ void setup() {
   blevoltc.setPresentationFormatDescriptor(6, -2, UUID16_UNIT_ELECTRIC_POTENTIAL_DIFFERENCE_VOLT);
   blevoltc.begin();
   blevoltc.write16(0);
+  blehlmode.begin();
 
   Serial.println("bluetooth services started");
 
