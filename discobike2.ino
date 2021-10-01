@@ -145,10 +145,21 @@ const uint8_t UUID128_HEADLIGHT_SERVICE[16] =
 };
 
 const uint8_t UUID128_HEADLIGHT_CHR[16] =
-  {
-    0x87, 0x8d, 0x53, 0x29, 0x5f, 0x2e, 0x43, 0x08,
-    0x85, 0xc9, 0xbd, 0x1f, 0x01, 0x00, 0x00, 0x00
-  };
+{
+  0x87, 0x8d, 0x53, 0x29, 0x5f, 0x2e, 0x43, 0x08,
+  0x85, 0xc9, 0xbd, 0x1f, 0x01, 0x00, 0x00, 0x00
+};
+const uint8_t UUID128_UNDERLIGHT_SERVICE[16] =
+{
+  0x87, 0x8d, 0x53, 0x29, 0x5f, 0x2e, 0x43, 0x08,
+  0x85, 0xc9, 0xbd, 0x1f, 0x00, 0x01, 0x00, 0x00
+};
+
+const uint8_t UUID128_UNDERLIGHT_CHR[16] =
+{
+  0x87, 0x8d, 0x53, 0x29, 0x5f, 0x2e, 0x43, 0x08,
+  0x85, 0xc9, 0xbd, 0x1f, 0x01, 0x01, 0x00, 0x00
+};
 
 
 SoftwareTimer notify_timer;
@@ -189,6 +200,13 @@ typedef enum {
 } headlight_mode_t;
 headlight_mode_t desired_mode = AUTO;
 BLERemoteVariable<headlight_mode_t> blehlmode(&desired_mode, UUID128_HEADLIGHT_SERVICE, UUID128_HEADLIGHT_CHR);
+
+typedef struct {
+  uint8_t red, green, blue, white;
+} rgbw_t;
+rgbw_t underlight_color = {0};
+BLERemoteVariable<rgbw_t> bleulcolor(&underlight_color, UUID128_UNDERLIGHT_SERVICE, UUID128_UNDERLIGHT_CHR);
+
 headlight_mode_t actual_mode = OFF;
 float brightness = 0;
 
@@ -331,6 +349,7 @@ void setup() {
   blevoltc.begin();
   blevoltc.write16(0);
   blehlmode.begin();
+  bleulcolor.begin();
 
   Serial.println("bluetooth services started");
 
@@ -627,6 +646,9 @@ void _output_update() {
     if (!DEBUG_IMU) {
       HwPWM2.writeChannel(2, PWM_MAX_TAILLIGHT - tail_pwm);
     }
+    // TODO: More complicated effects
+    underlight.fill(underlight.Color(underlight_color.red, underlight_color.green, underlight_color.blue, underlight_color.white));
+    underlight.show();
   }
 
   // Update BLE characteristics
