@@ -120,6 +120,7 @@ const uint16_t PWM_MAX_TAILLIGHT = 255;
 
 const TickType_t TAIL_PERIOD = pdMS_TO_TICKS(2000);
 const TickType_t LAST_MOVE_TIMEOUT = pdMS_TO_TICKS(20000);
+const TickType_t LAST_MOVE_TAIL_TIMEOUT = pdMS_TO_TICKS(60000);
 const TickType_t DISPLAY_TIMEOUT = pdMS_TO_TICKS(60000);
 // Check for Vext every 1s to save power
 const TickType_t VEXT_POLL_PERIOD = pdMS_TO_TICKS(1000);
@@ -587,9 +588,9 @@ void _output_update() {
     digitalWrite(PIN_POWER_ENABLE, LOW);
   } else {
     last_vext_time = now;
-    taillight_on = true;
+    taillight_on = (now - last_move_time) < LAST_MOVE_TAIL_TIMEOUT;
     // TODO: Make sure it doesn't cause flashing if we do this too early
-    digitalWrite(PIN_POWER_ENABLE, HIGH);
+    digitalWrite(PIN_POWER_ENABLE, taillight_on);
     switch (desired_mode) {
       case AUTO:
         if (lux > 50) {
