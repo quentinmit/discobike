@@ -212,8 +212,10 @@ headlight_mode_t actual_mode = OFF;
 float brightness = 0;
 
 bool display_on = true;
+bool vbus_detected = false;
 
 TickType_t last_move_time = 0;
+TickType_t last_vbus_time = 0;
 TickType_t last_vext_time = 0;
 TickType_t last_vext_poll_time = 0;
 
@@ -575,22 +577,26 @@ void _output_update() {
   xSemaphoreGive(xWireSemaphore);
   lux = c/3.5; //apds9960.calculateLux(r, g, b);
 
+  vbus_detected = NRF_POWER->USBREGSTATUS & POWER_USBREGSTATUS_VBUSDETECT_Msk;
+
   // Update mode
   accel_mag = vecMag(accel_evt.acceleration);
   if (accel_mag > 12) {
     last_move_time = now;
   }
   // TODO: Use IMU angle for mode too?
+  if (vbus_detected) {
+    last_vbus_time = now;
+  }
+  // TODO: Make sure it doesn't cause flashing if we enable power before drive is set
+  digitalWrite(PIN_POWER_ENABLE, vbus_detected);
   bool taillight_on = false;
   if (vext < 11.2) {
     brightness = 0;
     actual_mode = OFF;
-    digitalWrite(PIN_POWER_ENABLE, LOW);
   } else {
     last_vext_time = now;
     taillight_on = (now - last_move_time) < LAST_MOVE_TAIL_TIMEOUT;
-    // TODO: Make sure it doesn't cause flashing if we do this too early
-    digitalWrite(PIN_POWER_ENABLE, taillight_on);
     switch (desired_mode) {
       case AUTO:
         if (lux > 50) {
@@ -647,6 +653,8 @@ void _output_update() {
     if (!DEBUG_IMU) {
       HwPWM2.writeChannel(2, PWM_MAX_TAILLIGHT - tail_pwm);
     }
+  }
+  if (vbus_detected) {
     // TODO: More complicated effects
     underlight.fill(underlight.Color(underlight_color.red, underlight_color.green, underlight_color.blue, underlight_color.white));
     underlight.show();
@@ -687,7 +695,7 @@ void _display_update() {
 
   TickType_t now = xTaskGetTickCount();
 
-  bool new_display_on = (now-max(last_move_time, last_vext_time)) < DISPLAY_TIMEOUT;
+  bool new_display_on = (now-max(last_move_time, last_vbus_time)) < DISPLAY_TIMEOUT;
 
   if (new_display_on != display_on) {
     xSemaphoreTake(xWireSemaphore, portMAX_DELAY);
@@ -743,6 +751,7 @@ void _display_update() {
   // Display
   oled.clearDisplay();
 
+  // Line 0
   oled.setCursor(0, 0);
   printFixed(oled, (int)vext, 2, DEC, '0');
   oled.print(F("."));
@@ -759,8 +768,9 @@ void _display_update() {
   printFixed(oled, (int)vbat, 1, DEC, '0');
   oled.print(F("."));
   printFixed(oled, (int)(vbat * 100) % 100, 2, DEC);
-  oled.print(F("V"));
-  
+  oled.write(vbus_detected ? 'V' : 'v');
+
+  // Line 1
   oled.write('\n');
   /*oled.print(magX);
   oled.print(" ");
@@ -772,19 +782,21 @@ void _display_update() {
   oled.write(DEG);
   printFixed(oled, roll, 3, DEC, ' ');
   oled.write(DEG);
-  
+
   oled.setCursor(10*8, oled.getCursorY());
   printFixed(oled, (int)temperature, 3, DEC, ' ');
   oled.print(F("."));
   printFixed(oled, (int)(temperature * 10) % 10, 1, DEC);
   oled.write(DEG);
-  oled.write('\n');
 
+  // Line 2
+  oled.write('\n');
   printAngle(oled, pressure, 'h', 4);
-  oled.print(F("Pa"));
+  oled.print(F("Pa "));
   printAngle(oled, altitude, 'm', 3);
-  oled.write('\n');
 
+  // Line 3
+  oled.write('\n');
   //oled.print(accel);
   printFixed(oled, getRawHeading(), 3, DEC, ' ');
   oled.write(DEG);
@@ -792,6 +804,7 @@ void _display_update() {
 
   printAngle(oled, temperature2, DEG);
 
+  // Line 4
   oled.write('\n');
   printAngle(oled, accel_mag / ONE_G, 'G');
   oled.print(F("    "));
