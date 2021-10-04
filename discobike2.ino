@@ -68,6 +68,7 @@
 #include <hal/nrf_wdt.h>
 
 #include "Task.h"
+#include "effects.h"
 
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
@@ -208,13 +209,16 @@ typedef enum {
 underlight_mode_t underlight_mode = UL_AUTO;
 typedef enum {
   SOLID = 0,
+  COLOR_WIPE,
+  THEATER_CHASE,
+  RAINBOW,
   THEATER_CHASE_RAINBOW,
 } underlight_effect_t;
 underlight_effect_t underlight_effect = SOLID;
 typedef struct {
   uint8_t red, green, blue, white;
 } rgbw_t;
-rgbw_t underlight_color = {0};
+rgbw_t underlight_color = {0, 0, 0, 255};
 BLEService bleul(UUID(1, 0));
 BLERemoteVariable<underlight_mode_t> bleulmode(&underlight_mode, UUID(1, 1));
 BLERemoteVariable<underlight_effect_t> bleuleffect(&underlight_effect, UUID(1, 2));
@@ -235,6 +239,7 @@ TickType_t last_vext_poll_time = 0;
 float vext = 0;
 float accel_mag = 0;
 uint16_t lux = 0;
+uint16_t lux2 = 0;
 
 void setup() {
   xWireSemaphore = xSemaphoreCreateMutexStatic( &xWireMutexBuffer );
@@ -617,7 +622,8 @@ void _output_update() {
   apds9960.getColorData(&r, &g, &b, &c);
   // 3.5 counts/lux in the c channel according to datasheet
   xSemaphoreGive(xWireSemaphore);
-  lux = c/3.5; //apds9960.calculateLux(r, g, b);
+  lux = c/3.5;
+  lux2 = apds9960.calculateLux(r, g, b);
 
   vbus_detected = NRF_POWER->USBREGSTATUS & POWER_USBREGSTATUS_VBUSDETECT_Msk;
 
@@ -714,13 +720,28 @@ void _output_update() {
   //blevoltc.write16(vext*64);
 }
 
+uint32_t underlight_frame = 0;
 void _underlight_update() {
+  uint32_t color1 = underlight.Color(underlight_color.red, underlight_color.green, underlight_color.blue, underlight_color.white);
   switch (underlight_effect) {
     case SOLID:
-    underlight.fill(underlight.Color(underlight_color.red, underlight_color.green, underlight_color.blue, underlight_color.white));
+    underlight.fill(color1);
+    break;
+    case COLOR_WIPE:
+    colorWipe(underlight, underlight_frame, color1);
+    break;
+    case THEATER_CHASE:
+    theaterChase(underlight, underlight_frame, color1);
+    break;
+    case RAINBOW:
+    rainbow(underlight, underlight_frame);
+    break;
+    case THEATER_CHASE_RAINBOW:
+    theaterChaseRainbow(underlight, underlight_frame);
     break;
   }
   underlight.show();
+  underlight_frame++;
 }
 
 void i2cyield() {
@@ -852,7 +873,7 @@ void _display_update() {
   oled.printf("%7.2fhPa ", pressure);
   oled.printf("%6.2f'", altitude*3.28084);
 
-  // Line 3
+  // Line 3 (debug)
   oled.write('\n');
   //oled.print(accel);
   printFixed(oled, getRawHeading(), 3, DEC, ' ');
@@ -860,6 +881,8 @@ void _display_update() {
   oled.print(mag_ok);
 
   printAngle(oled, temperature2, DEG);
+
+  oled.printf("%4d lux", lux2);
 
   // Line 4
   oled.write('\n');
