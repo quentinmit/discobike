@@ -831,24 +831,6 @@ void _display_update() {
   oled.print(mag_ok);
 
   printAngle(oled, temperature2, DEG);
-  oled.write('\n');
-  if (nrf_wdt_started(NRF_WDT)) {
-    oled.print("WDT:");
-  } else {
-    oled.print("wdt:");
-  }
-  for (int i = 0; i <= 7; i++) {
-    nrf_wdt_rr_register_t x = (nrf_wdt_rr_register_t)i;
-    if (nrf_wdt_reload_request_is_enabled(NRF_WDT, x)) {
-      if (nrf_wdt_request_status(NRF_WDT, x)) {
-        oled.write('+');
-      } else {
-        oled.write('-');
-      }
-    } else {
-      oled.write('x');
-    }
-  }
 
   // Line 4
   oled.write('\n');
@@ -904,6 +886,26 @@ void _display_update() {
   }
   oled.display(i2cyield);
   xSemaphoreGive(xWireSemaphore);
+}
+
+void debug_wdt(Print& print) {
+  if (nrf_wdt_started(NRF_WDT)) {
+    print.print("WDT:");
+  } else {
+    print.print("wdt:");
+  }
+  for (int i = 0; i <= 7; i++) {
+    nrf_wdt_rr_register_t x = (nrf_wdt_rr_register_t)i;
+    if (nrf_wdt_reload_request_is_enabled(NRF_WDT, x)) {
+      if (nrf_wdt_request_status(NRF_WDT, x)) {
+        print.write('+');
+      } else {
+        print.write('-');
+      }
+    } else {
+      print.write('x');
+    }
+  }
 }
 
 void loop() {
