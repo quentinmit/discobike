@@ -5,31 +5,25 @@
 #include <BLEService.h>
 
 template <class T>
-class BLERemoteVariable : public BLEService
+class BLERemoteVariable : public BLECharacteristic
 {
  public:
-  static const uint8_t UUID128_SERVICE[16];
-  static const uint8_t UUID128_CHR[16];
-
-  BLERemoteVariable(T* variable, BLEUuid service_uuid, BLEUuid data_uuid)
-    : BLEService(service_uuid), _characteristic(data_uuid, CHR_PROPS_READ|CHR_PROPS_WRITE, sizeof(T), true), _variable(variable)
+  BLERemoteVariable(T* variable, BLEUuid data_uuid)
+    : BLECharacteristic(data_uuid, CHR_PROPS_READ|CHR_PROPS_WRITE, sizeof(T), true), _variable(variable)
   {
   }
 
   err_t begin()
   {
-    VERIFY_STATUS( BLEService::begin() );
-
-    _characteristic.setReadAuthorizeCallback(read_authorize_cb, false);
-    _characteristic.setWriteCallback(write_cb, false);
-    VERIFY_STATUS( _characteristic.begin() );
+    setReadAuthorizeCallback(read_authorize_cb, false);
+    setWriteCallback(write_cb, false);
+    VERIFY_STATUS( BLECharacteristic::begin() );
 
     return ERROR_NONE;
   }
 
  protected:
   T* _variable;
-  BLECharacteristic _characteristic;
 
   static void read_authorize_cb(uint16_t conn_hdl, BLECharacteristic* chr, ble_gatts_evt_read_t * request)
   {
@@ -39,7 +33,7 @@ class BLERemoteVariable : public BLEService
     reply.params.read.update = 1;
     reply.params.read.offset = 0;
     reply.params.read.len = sizeof(T);
-    BLERemoteVariable<T>* svc = (BLERemoteVariable<T>*)&(chr->parentService());
+    BLERemoteVariable<T>* svc = (BLERemoteVariable<T>*)chr;
     reply.params.read.p_data = (uint8_t*) svc->_variable;
     sd_ble_gatts_rw_authorize_reply(conn_hdl, &reply);
   }
@@ -47,7 +41,7 @@ class BLERemoteVariable : public BLEService
   static void write_cb(uint16_t conn_hdl, BLECharacteristic* chr, uint8_t* data, uint16_t len)
   {
     if (len == sizeof(T)) {
-      BLERemoteVariable<T>* svc = (BLERemoteVariable<T>*)&(chr->parentService());
+      BLERemoteVariable<T>* svc = (BLERemoteVariable<T>*)chr;
       memcpy((uint8_t*) svc->_variable, data, len);
     } else {
       Serial.print("Tried to write ");

@@ -142,29 +142,23 @@ BLERunTimeStats bleruntimestats;
 //BLEAdafruitQuaternion bleQuater;
 BLEService blevolts = BLEService(UUID16_CHR_VOLTAGE);
 BLECharacteristic blevoltc = BLECharacteristic(UUID16_CHR_VOLTAGE);
-const uint8_t UUID128_HEADLIGHT_SERVICE[16] =
+const uint8_t UUID128_BASE[16] =
 {
   0x87, 0x8d, 0x53, 0x29, 0x5f, 0x2e, 0x43, 0x08,
   0x85, 0xc9, 0xbd, 0x1f, 0x00, 0x00, 0x00, 0x00
 };
-
-const uint8_t UUID128_HEADLIGHT_CHR[16] =
-{
-  0x87, 0x8d, 0x53, 0x29, 0x5f, 0x2e, 0x43, 0x08,
-  0x85, 0xc9, 0xbd, 0x1f, 0x01, 0x00, 0x00, 0x00
-};
-const uint8_t UUID128_UNDERLIGHT_SERVICE[16] =
-{
-  0x87, 0x8d, 0x53, 0x29, 0x5f, 0x2e, 0x43, 0x08,
-  0x85, 0xc9, 0xbd, 0x1f, 0x00, 0x01, 0x00, 0x00
-};
-
-const uint8_t UUID128_UNDERLIGHT_CHR[16] =
-{
-  0x87, 0x8d, 0x53, 0x29, 0x5f, 0x2e, 0x43, 0x08,
-  0x85, 0xc9, 0xbd, 0x1f, 0x01, 0x01, 0x00, 0x00
-};
-
+BLEUuid UUID(uint8_t one, uint8_t two) {
+  uint8_t* u128 = (uint8_t*) rtos_malloc(16);
+  memcpy(u128, UUID128_BASE, 16);
+  u128[13] = one;
+  u128[12] = two;
+  uint8_t ret[16] =
+  {
+    0x87, 0x8d, 0x53, 0x29, 0x5f, 0x2e, 0x43, 0x08,
+    0x85, 0xc9, 0xbd, 0x1f, two, one, 0x00, 0x00
+  };
+  return BLEUuid(u128);
+}
 
 SoftwareTimer notify_timer;
 
@@ -203,13 +197,28 @@ typedef enum {
   BLINK,
 } headlight_mode_t;
 headlight_mode_t desired_mode = AUTO;
-BLERemoteVariable<headlight_mode_t> blehlmode(&desired_mode, UUID128_HEADLIGHT_SERVICE, UUID128_HEADLIGHT_CHR);
+BLEService blehl(UUID(0, 0));
+BLERemoteVariable<headlight_mode_t> blehlmode(&desired_mode, UUID(0, 1));
 
+typedef enum {
+  UL_OFF = 0,
+  UL_AUTO,
+  UL_ON,
+} underlight_mode_t;
+underlight_mode_t underlight_mode = UL_AUTO;
+typedef enum {
+  SOLID = 0,
+  THEATER_CHASE_RAINBOW,
+} underlight_effect_t;
+underlight_effect_t underlight_effect = SOLID;
 typedef struct {
   uint8_t red, green, blue, white;
 } rgbw_t;
 rgbw_t underlight_color = {0};
-BLERemoteVariable<rgbw_t> bleulcolor(&underlight_color, UUID128_UNDERLIGHT_SERVICE, UUID128_UNDERLIGHT_CHR);
+BLEService bleul(UUID(1, 0));
+BLERemoteVariable<underlight_mode_t> bleulmode(&underlight_mode, UUID(1, 1));
+BLERemoteVariable<underlight_effect_t> bleuleffect(&underlight_effect, UUID(1, 2));
+BLERemoteVariable<rgbw_t> bleulcolor(&underlight_color, UUID(1, 3));
 
 headlight_mode_t actual_mode = OFF;
 float brightness = 0;
@@ -250,7 +259,7 @@ void setup() {
     // Set D0.18 low using GPIO registers
     // Trigger a reset using system off + PIN_VBAT or PIN_D22 (SDA)
     // Trigger a reset using system off + external SDA pullup manually
-    //nrf_gpio_cfg_sense_input(12, NRF_GPIO_PIN_PULLDOWN, NRF_GPIO_PIN_SENSE_HIGH);
+    //nrf_gpio_cfg_sense_input(12, NRF_GPIO_PIN_PULLUP, NRF_GPIO_PIN_SENSE_HIGH);
     //sd_power_system_off();
     // Trigger a reset using system off via Arduino
     //systemOff(PIN_D22, true);
@@ -379,7 +388,11 @@ void setup() {
   blevoltc.setPresentationFormatDescriptor(6, -2, UUID16_UNIT_ELECTRIC_POTENTIAL_DIFFERENCE_VOLT);
   blevoltc.begin();
   blevoltc.write16(0);
+  blehl.begin();
   blehlmode.begin();
+  bleul.begin();
+  bleulmode.begin();
+  bleuleffect.begin();
   bleulcolor.begin();
 
   Serial.println("bluetooth services started");
@@ -617,8 +630,17 @@ void _output_update() {
   if (vbus_detected) {
     last_vbus_time = now;
   }
+  bool underlight_on = false;
+  switch (underlight_mode) {
+    case UL_ON:
+    underlight_on = true;
+    break;
+    case UL_AUTO:
+    underlight_on = vbus_detected;
+    break;
+  }
   // TODO: Make sure it doesn't cause flashing if we enable power before drive is set
-  digitalWrite(PIN_POWER_ENABLE, vbus_detected);
+  digitalWrite(PIN_POWER_ENABLE, underlight_on);
   bool taillight_on = false;
   if (vext < 11.2) {
     brightness = 0;
@@ -683,15 +705,22 @@ void _output_update() {
       HwPWM2.writeChannel(2, PWM_MAX_TAILLIGHT - tail_pwm);
     }
   }
-  if (vbus_detected) {
-    // TODO: More complicated effects
-    underlight.fill(underlight.Color(underlight_color.red, underlight_color.green, underlight_color.blue, underlight_color.white));
-    underlight.show();
+  if (underlight_on) {
+    _underlight_update();
   }
 
   // Update BLE characteristics
   // TODO: Notify
   //blevoltc.write16(vext*64);
+}
+
+void _underlight_update() {
+  switch (underlight_effect) {
+    case SOLID:
+    underlight.fill(underlight.Color(underlight_color.red, underlight_color.green, underlight_color.blue, underlight_color.white));
+    break;
+  }
+  underlight.show();
 }
 
 void i2cyield() {
