@@ -46,6 +46,7 @@
 #define PIN_TAIL_C 11
 #define PIN_TAIL_L 12
 #define PIN_TAIL_R 13
+#define PIN_RST A1
 #define PIN_HEADLIGHT_DIM A5
 #define PIN_VBAT A6
 
@@ -107,6 +108,7 @@ public:
 };
 
 // Peripherals
+Adafruit_NeoPixel neopixel = Adafruit_NeoPixel(NEOPIXEL_NUM, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
 Adafruit_SSD1306 oled(128, 64, &Wire, -1, 400000UL, 400000UL);
 INA219_WE ina219;
 Adafruit_NeoPixel underlight(35, PIN_UNDERLIGHT, NEO_GRBW | NEO_KHZ800);
@@ -232,6 +234,27 @@ void setup() {
   //while ( !Serial ) delay(10); // XXX
   //Serial.println("Connected");
 
+  pinMode(PIN_RST, INPUT_PULLUP);
+
+  if (nrf_wdt_started(NRF_WDT)) {
+    // WDT is already enabled.
+    Serial.println("WDT already enabled, first boot after DFU?");
+    Serial.flush();
+    neopixel.fill(neopixel.Color(0x11, 0, 0x11, 0));
+    neopixel.show();
+    // Wait for WDT reset
+    pinMode(PIN_RST, OUTPUT);
+    digitalWrite(PIN_RST, LOW);
+    while (1);
+    // Things that don't work:
+    // Set D0.18 low using GPIO registers
+    // Trigger a reset using system off + PIN_VBAT or PIN_D22 (SDA)
+    // Trigger a reset using system off + external SDA pullup manually
+    //nrf_gpio_cfg_sense_input(12, NRF_GPIO_PIN_PULLDOWN, NRF_GPIO_PIN_SENSE_HIGH);
+    //sd_power_system_off();
+    // Trigger a reset using system off via Arduino
+    //systemOff(PIN_D22, true);
+  }
   nrf_wdt_behaviour_set(NRF_WDT, NRF_WDT_BEHAVIOUR_RUN_SLEEP);
   nrf_wdt_reload_value_set(NRF_WDT, 10*32768);
   NRF_WDT->RREN = 0; // n.b. RR0 is enabled on reset
@@ -797,9 +820,8 @@ void _display_update() {
 
   // Line 2
   oled.write('\n');
-  printAngle(oled, pressure, 'h', 4);
-  oled.print(F("Pa "));
-  printAngle(oled, altitude, 'm', 3);
+  oled.printf("%7.2fhPa ", pressure);
+  oled.printf("%6.2f'", altitude*3.28084);
 
   // Line 3
   oled.write('\n');
@@ -809,6 +831,24 @@ void _display_update() {
   oled.print(mag_ok);
 
   printAngle(oled, temperature2, DEG);
+  oled.write('\n');
+  if (nrf_wdt_started(NRF_WDT)) {
+    oled.print("WDT:");
+  } else {
+    oled.print("wdt:");
+  }
+  for (int i = 0; i <= 7; i++) {
+    nrf_wdt_rr_register_t x = (nrf_wdt_rr_register_t)i;
+    if (nrf_wdt_reload_request_is_enabled(NRF_WDT, x)) {
+      if (nrf_wdt_request_status(NRF_WDT, x)) {
+        oled.write('+');
+      } else {
+        oled.write('-');
+      }
+    } else {
+      oled.write('x');
+    }
+  }
 
   // Line 4
   oled.write('\n');

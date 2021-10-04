@@ -7,6 +7,10 @@ PeriodicTask::PeriodicTask(TickType_t period, const char* const name, UBaseType_
 
 void PeriodicTask::create()
 {
+  if (_wdt && nrf_wdt_started(_wdt)) {
+    // Can't add more WDT channels after start
+    _wdt = NULL;
+  }
   if (_wdt) {
     for (_wdt_channel = NRF_WDT_RR0; _wdt_channel <= NRF_WDT_RR7; _wdt_channel = (nrf_wdt_rr_register_t)((uint8_t)_wdt_channel+1)) {
       if (!nrf_wdt_reload_request_is_enabled(_wdt, _wdt_channel)) {
