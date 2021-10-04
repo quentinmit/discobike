@@ -64,6 +64,7 @@
 #include <BLEAdafruitService.h>
 #include "BLERunTimeStats.h"
 #include "BLERemoteVariable.h"
+#include <hal/nrf_wdt.h>
 
 #include "Task.h"
 
@@ -185,11 +186,11 @@ SemaphoreHandle_t xWireSemaphore = NULL;
 StaticSemaphore_t xWireMutexBuffer;
 
 void _imu_update();
-PeriodicTask imu_task(pdMS_TO_TICKS(1000.0/FILTER_UPDATE_RATE_HZ), "imu", 3, _imu_update);
+PeriodicTask imu_task(pdMS_TO_TICKS(1000.0/FILTER_UPDATE_RATE_HZ), "imu", 3, _imu_update, NRF_WDT);
 void _output_update();
-PeriodicTask output_task(pdMS_TO_TICKS(1000.0/30), "output", 3, _output_update);
+PeriodicTask output_task(pdMS_TO_TICKS(1000.0/30), "output", 3, _output_update, NRF_WDT);
 void _display_update();
-PeriodicTask display_task(pdMS_TO_TICKS(1000.0/5), "display", 2, _display_update);
+PeriodicTask display_task(pdMS_TO_TICKS(1000.0/5), "display", 2, _display_update, NRF_WDT);
 
 // Data
 typedef enum {
@@ -230,6 +231,10 @@ void setup() {
   Serial.begin(115200);
   //while ( !Serial ) delay(10); // XXX
   //Serial.println("Connected");
+
+  nrf_wdt_behaviour_set(NRF_WDT, NRF_WDT_BEHAVIOUR_RUN_SLEEP);
+  nrf_wdt_reload_value_set(NRF_WDT, 10*32768);
+  NRF_WDT->RREN = 0; // n.b. RR0 is enabled on reset
 
   oled.cp437();
   oled.begin(SSD1306_SWITCHCAPVCC, I2C_SSD1315);
@@ -372,6 +377,7 @@ void setup() {
   notify_timer.start();
 
   Serial.println("begin finished");
+  nrf_wdt_task_trigger(NRF_WDT, NRF_WDT_TASK_START);
 }
 
 void startAdv(void)

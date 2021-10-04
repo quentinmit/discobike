@@ -3,11 +3,12 @@
 
 #include <FreeRTOS.h>
 #include <task.h>
+#include <hal/nrf_wdt.h>
 
 class PeriodicTask
 {
  public:
-  PeriodicTask(TickType_t period, const char* const name, UBaseType_t priority, void(*callback)());
+  PeriodicTask(TickType_t period, const char* const name, UBaseType_t priority, void(*callback)(), NRF_WDT_Type *wdt = NULL);
 
   void create();
 
@@ -22,6 +23,9 @@ class PeriodicTask
   uint32_t _skipped = 0;
 
   TaskHandle_t _task_hdl = NULL;
+
+  NRF_WDT_Type *_wdt = NULL;
+  nrf_wdt_rr_register_t _wdt_channel;
 
   static void task(void *pvParameters);
 };
