@@ -239,6 +239,7 @@ TickType_t last_vext_time = 0;
 TickType_t last_vext_poll_time = 0;
 
 // Measured data
+float vbat = 0;
 float vext = 0;
 float accel_mag = 0;
 uint16_t lux = 0;
@@ -468,6 +469,12 @@ void notify_timer_cb(TimerHandle_t xTimer) {
   if (blevoltc.read16() != volt) {
     blevoltc.notify16(volt);
   }
+
+  // Formula from https://electronics.stackexchange.com/a/551667
+  // Matches table at https://blog.ampow.com/lipo-voltage-chart/
+  float vbat_percent = 123 - (123 / pow(1+pow(vbat/3.7, 80), 0.165));
+
+  blebas.notify(vbat_percent);
 }
 
 sensors_event_t accel_evt, gyro_evt, temp_evt, mag_evt;
@@ -772,7 +779,7 @@ void _display_update() {
     Serial.println(roll);
   }
 
-  float vbat = analogRead(PIN_VBAT) * 3.6f * 2.0f / 16384.0f;
+  vbat = analogRead(PIN_VBAT) * 3.6f * 2.0f / 16384.0f;
 
   //return; // XXX: Test to see what it does to power consumption
 
