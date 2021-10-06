@@ -73,3 +73,35 @@ void theaterChaseRainbow(Adafruit_NeoPixel &strip, uint32_t frame, int16_t speed
     strip.setPixelColor(c, color); // Set pixel 'c' to value 'color'
   }
 }
+
+uint32_t colorDiv(uint32_t color, uint8_t div) {
+  uint8_t *y = (uint8_t *)&color;
+  for (int i = 0; i < 4; i++) {
+    y[i] = y[i] / div;
+  }
+  return color;
+}
+
+void cylonBounce(Adafruit_NeoPixel &strip, uint32_t frame, int16_t speed, uint32_t color) {
+  int EyeSize = 4;
+  int ReturnDelay = 5;
+
+  int steps = strip.numPixels()-EyeSize-2;
+  uint32_t frames = 2 * (steps + ReturnDelay);
+
+  frame *= speed;
+  frame /= 256;
+
+  frame %= frames;
+
+  int i = min(frame, steps);
+  if (frame > steps + ReturnDelay) {
+    i = max(0, steps - ((int)frame - (steps + ReturnDelay)));
+  }
+  strip.clear();
+  strip.setPixelColor(i, colorDiv(color, 10));
+  for(int j = 1; j <= EyeSize; j++) {
+    strip.setPixelColor(i+j, color);
+  }
+  strip.setPixelColor(i+EyeSize+1, colorDiv(color, 10));
+}

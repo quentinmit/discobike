@@ -213,6 +213,7 @@ typedef enum {
   THEATER_CHASE,
   RAINBOW,
   THEATER_CHASE_RAINBOW,
+  CYLON_BOUNCE,
 } underlight_effect_t;
 underlight_effect_t underlight_effect = SOLID;
 typedef struct {
@@ -749,6 +750,9 @@ void _underlight_update() {
     break;
     case THEATER_CHASE_RAINBOW:
     theaterChaseRainbow(underlight, underlight_frame, underlight_speed);
+    break;
+    case CYLON_BOUNCE:
+    cylonBounce(underlight, underlight_frame, underlight_speed, color1);
     break;
   }
   underlight.show();
