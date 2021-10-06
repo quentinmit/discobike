@@ -5,10 +5,13 @@
 // (as a single 'packed' 32-bit value, which you can get by calling
 // strip.Color(red, green, blue) as shown in the loop() function above),
 // and a delay time (in milliseconds) between pixels.
-void colorWipe(Adafruit_NeoPixel &strip, uint32_t frame, uint32_t color) {
+void colorWipe(Adafruit_NeoPixel &strip, uint32_t frame, int16_t speed, uint32_t color) {
+  frame *= speed;
+  // default speed is 1 frame per pixel
+  frame /= 256;
   frame %= (2*strip.numPixels());
   strip.clear();
-  for(int i=max(0, frame-strip.numPixels()); i<=min(frame, strip.numPixels()); i++) { // For each pixel in strip...
+  for(int i=max(0, (int)frame-(int)strip.numPixels()); i<=min(frame, strip.numPixels()); i++) { // For each pixel in strip...
     strip.setPixelColor(i, color);         //  Set pixel's color (in RAM)
   }
 }
@@ -16,8 +19,10 @@ void colorWipe(Adafruit_NeoPixel &strip, uint32_t frame, uint32_t color) {
 // Theater-marquee-style chasing lights. Pass in a color (32-bit value,
 // a la strip.Color(r,g,b) as mentioned above), and a delay time (in ms)
 // between frames.
-void theaterChase(Adafruit_NeoPixel &strip, uint32_t frame, uint32_t color) {
-  frame >>= 1; // 2 frames per move
+void theaterChase(Adafruit_NeoPixel &strip, uint32_t frame, int16_t speed, uint32_t color) {
+  frame *= speed;
+  // default speed is 4 frames per pixel
+  frame /= 1024;
   int b = frame % 3;
   strip.clear();         //   Set all pixels in RAM to 0 (off)
   // 'c' counts up from 'b' to end of strip in steps of 3...
@@ -27,8 +32,11 @@ void theaterChase(Adafruit_NeoPixel &strip, uint32_t frame, uint32_t color) {
 }
 
 // Rainbow cycle along whole strip. Pass delay time (in ms) between frames.
-void rainbow(Adafruit_NeoPixel &strip, uint32_t frame) {
-  long firstPixelHue = (256 * frame) % (5*65536);
+void rainbow(Adafruit_NeoPixel &strip, uint32_t frame, int16_t speed) {
+  frame *= speed;
+  // default speed is 128 frames (4.2 seconds) per loop
+  frame /= 128;
+  long firstPixelHue = (256 * frame) % 65536;
   // Hue of first pixel runs 5 complete loops through the color wheel.
   // Color wheel has a range of 65536 but it's OK if we roll over, so
   // just count from 0 to 5*65536. Adding 256 to firstPixelHue each time
@@ -48,9 +56,11 @@ void rainbow(Adafruit_NeoPixel &strip, uint32_t frame) {
 }
 
 // Rainbow-enhanced theater marquee. Pass delay time (in ms) between frames.
-void theaterChaseRainbow(Adafruit_NeoPixel &strip, uint32_t frame) {
-  int firstPixelHue = (65536 / 90) * (frame % 90);     // One cycle of color wheel over 90 frames
-  frame >>= 1; // 2 frames per move
+void theaterChaseRainbow(Adafruit_NeoPixel &strip, uint32_t frame, int16_t speed) {
+  frame *= speed;
+  frame /= 256;
+  int firstPixelHue = (65536 / 90) * (frame % 90);     // One cycle of color wheel over 90 frames / 3 seconds
+  frame >>= 2; // move at 4 frames per pixel
   int b = frame % 3; //        'b' counts from 0 to 2...
   strip.clear();         //   Set all pixels in RAM to 0 (off)
   // 'c' counts up from 'b' to end of strip in increments of 3...

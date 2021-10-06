@@ -206,7 +206,7 @@ typedef enum {
   UL_AUTO,
   UL_ON,
 } underlight_mode_t;
-underlight_mode_t underlight_mode = UL_AUTO;
+underlight_mode_t underlight_mode = UL_OFF;
 typedef enum {
   SOLID = 0,
   COLOR_WIPE,
@@ -219,10 +219,13 @@ typedef struct {
   uint8_t red, green, blue, white;
 } rgbw_t;
 rgbw_t underlight_color = {0, 0, 0, 255};
+int16_t underlight_speed = 256;
 BLEService bleul(UUID(1, 0));
 BLERemoteVariable<underlight_mode_t> bleulmode(&underlight_mode, UUID(1, 1));
 BLERemoteVariable<underlight_effect_t> bleuleffect(&underlight_effect, UUID(1, 2));
 BLERemoteVariable<rgbw_t> bleulcolor(&underlight_color, UUID(1, 3));
+BLERemoteVariable<int16_t> bleulspeed(&underlight_speed, UUID(1, 5));
+
 
 headlight_mode_t actual_mode = OFF;
 float brightness = 0;
@@ -256,7 +259,7 @@ void setup() {
     Serial.flush();
     neopixel.fill(neopixel.Color(0x11, 0, 0x11, 0));
     neopixel.show();
-    // Wait for WDT reset
+    // Wait for WDT reset; attempt to force a hardware reset
     pinMode(PIN_RST, OUTPUT);
     digitalWrite(PIN_RST, LOW);
     while (1);
@@ -399,6 +402,7 @@ void setup() {
   bleulmode.begin();
   bleuleffect.begin();
   bleulcolor.begin();
+  bleulspeed.begin();
 
   Serial.println("bluetooth services started");
 
@@ -728,16 +732,16 @@ void _underlight_update() {
     underlight.fill(color1);
     break;
     case COLOR_WIPE:
-    colorWipe(underlight, underlight_frame, color1);
+    colorWipe(underlight, underlight_frame, underlight_speed, color1);
     break;
     case THEATER_CHASE:
-    theaterChase(underlight, underlight_frame, color1);
+    theaterChase(underlight, underlight_frame, underlight_speed, color1);
     break;
     case RAINBOW:
-    rainbow(underlight, underlight_frame);
+    rainbow(underlight, underlight_frame, underlight_speed);
     break;
     case THEATER_CHASE_RAINBOW:
-    theaterChaseRainbow(underlight, underlight_frame);
+    theaterChaseRainbow(underlight, underlight_frame, underlight_speed);
     break;
   }
   underlight.show();
