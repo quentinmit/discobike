@@ -8,5 +8,6 @@ void theaterChase(Adafruit_NeoPixel &strip, uint32_t frame, int16_t speed, uint3
 void rainbow(Adafruit_NeoPixel &strip, uint32_t frame, int16_t speed);
 void theaterChaseRainbow(Adafruit_NeoPixel &strip, uint32_t frame, int16_t speed);
 void cylonBounce(Adafruit_NeoPixel &strip, uint32_t frame, int16_t speed, uint32_t color);
+void fire(Adafruit_NeoPixel &strip, uint32_t frame, int16_t speed);
 
 #endif
