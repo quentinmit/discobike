@@ -139,7 +139,7 @@ void fire(Adafruit_NeoPixel &strip, uint32_t frame, int16_t speed) {
 
   static byte* heat;
   if (heat == NULL) {
-    heat = (byte*)malloc(strip.numPixels());
+    heat = (byte*)rtos_malloc(strip.numPixels());
   }
   int cooldown;
 
