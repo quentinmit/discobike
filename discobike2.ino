@@ -125,6 +125,7 @@ const uint16_t PWM_MAX_TAILLIGHT = 255;
 const TickType_t TAIL_PERIOD = pdMS_TO_TICKS(2000);
 const TickType_t LAST_MOVE_TIMEOUT = pdMS_TO_TICKS(20000);
 const TickType_t LAST_MOVE_TAIL_TIMEOUT = pdMS_TO_TICKS(60000);
+const TickType_t LAST_MOVE_UNDER_TIMEOUT = pdMS_TO_TICKS(60000);
 const TickType_t DISPLAY_TIMEOUT = pdMS_TO_TICKS(60000);
 // Check for Vext every 1s to save power
 const TickType_t VEXT_POLL_PERIOD = pdMS_TO_TICKS(1000);
@@ -205,6 +206,7 @@ typedef enum {
   UL_OFF = 0,
   UL_AUTO,
   UL_ON,
+  UL_FORCE,
 } underlight_mode_t;
 underlight_mode_t underlight_mode = UL_OFF;
 typedef enum {
@@ -651,17 +653,20 @@ void _output_update() {
   }
   bool underlight_on = false;
   switch (underlight_mode) {
-    case UL_ON:
+    case UL_FORCE:
     underlight_on = true;
     break;
-    case UL_AUTO:
+    case UL_ON:
     underlight_on = vbus_detected;
+    break;
+    case UL_AUTO:
+    underlight_on = vbus_detected && (now - last_move_time) < LAST_MOVE_UNDER_TIMEOUT;
     break;
   }
   // TODO: Make sure it doesn't cause flashing if we enable power before drive is set
   digitalWrite(PIN_POWER_ENABLE, underlight_on);
   bool taillight_on = false;
-  if (vext < 11.2) {
+  if (vext < 11.2 || !vbus_detected) {
     brightness = 0;
     actual_mode = OFF;
   } else {
