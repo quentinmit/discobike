@@ -247,7 +247,7 @@ float vbat = 0;
 float vext = 0;
 float accel_mag = 0;
 uint16_t lux = 0;
-uint16_t lux2 = 0;
+//uint16_t lux2 = 0;
 
 void setup() {
   xWireSemaphore = xSemaphoreCreateMutexStatic( &xWireMutexBuffer );
@@ -638,7 +638,7 @@ void _output_update() {
   // 3.5 counts/lux in the c channel according to datasheet
   xSemaphoreGive(xWireSemaphore);
   lux = c/3.5;
-  lux2 = apds9960.calculateLux(r, g, b);
+  lux = max(lux, apds9960.calculateLux(r, g, b)); // If C is overloaded, use RGB
 
   vbus_detected = NRF_POWER->USBREGSTATUS & POWER_USBREGSTATUS_VBUSDETECT_Msk;
 
@@ -674,7 +674,7 @@ void _output_update() {
     taillight_on = (now - last_move_time) < LAST_MOVE_TAIL_TIMEOUT;
     switch (desired_mode) {
       case AUTO:
-        if (lux > 50) {
+        if (lux > 10) {
           actual_mode = DAY;
         } else {
           actual_mode = NIGHT;
@@ -906,7 +906,7 @@ void _display_update() {
 
   printAngle(oled, temperature2, DEG);
 
-  oled.printf("%4d lux", lux2);
+  //oled.printf("%4d lux", lux2);
 
   // Line 4
   oled.write('\n');
