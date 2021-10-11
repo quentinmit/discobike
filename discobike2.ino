@@ -282,7 +282,7 @@ void setup() {
     //systemOff(PIN_D22, true);
   }
   nrf_wdt_behaviour_set(NRF_WDT, NRF_WDT_BEHAVIOUR_RUN_SLEEP);
-  nrf_wdt_reload_value_set(NRF_WDT, 10*32768);
+  nrf_wdt_reload_value_set(NRF_WDT, 5*32768); // reset after 5 seconds
   NRF_WDT->RREN = 0; // n.b. RR0 is enabled on reset
 
   oled.cp437();
