@@ -59,6 +59,8 @@
 #define I2C_LSM6DS33 0x6A
 #define I2C_BMP280 0x77
 
+#include <limits>
+
 #include <Arduino.h>
 #include <Adafruit_NeoPixel.h>
 #include <bluefruit.h>
@@ -224,6 +226,7 @@ typedef struct {
 } rgbw_t;
 rgbw_t underlight_color = {0, 0, 0, 255};
 int16_t underlight_speed = 256;
+uint8_t underlight_brightness = 0;
 BLEService bleul(UUID(1, 0));
 BLERemoteVariable<underlight_mode_t> bleulmode(&underlight_mode, UUID(1, 1));
 BLERemoteVariable<underlight_effect_t> bleuleffect(&underlight_effect, UUID(1, 2));
@@ -605,6 +608,20 @@ const uint8_t PROGMEM gamma8[] = {
   177,180,182,184,186,189,191,193,196,198,200,203,205,208,210,213,
   215,218,220,223,225,228,231,233,236,239,241,244,247,249,252,255 };
 
+template<class T> constexpr const T addclamp(const T a, const T b) {
+  return ((std::numeric_limits<T>::max() - a) < b) ? std::numeric_limits<T>::max() : (a + b);
+}
+template<class T> constexpr const T subclamp(const T a, const T b) {
+  return (a < b) ? 0 : a - b;
+}
+template<class T> constexpr const T stepclamp(const T current, const T target, const T step) {
+  return (target < current) ? (
+    ((current - target) < step) ? target : subclamp(current, step)
+  ) : (
+    ((target - current) < step) ? target : addclamp(current, step)
+  );
+}
+
 void _output_update() {
   TickType_t now = xTaskGetTickCount();
 
@@ -651,20 +668,32 @@ void _output_update() {
   if (vbus_detected) {
     last_vbus_time = now;
   }
-  bool underlight_on = false;
+
+  // Update underlight
+  bool underlight_on = vbus_detected;
+  uint8_t underlight_target_brightness = 0;
   switch (underlight_mode) {
     case UL_FORCE:
     underlight_on = true;
-    break;
     case UL_ON:
-    underlight_on = vbus_detected;
+    underlight_target_brightness = 255;
     break;
     case UL_AUTO:
-    underlight_on = vbus_detected && (now - last_move_time) < LAST_MOVE_UNDER_TIMEOUT;
+    if (vbus_detected && (now - last_move_time) < LAST_MOVE_UNDER_TIMEOUT) {
+      underlight_target_brightness = 255;
+    }
     break;
   }
+  underlight_brightness = stepclamp(underlight_brightness, underlight_target_brightness, (uint8_t)3);
+  if (underlight_brightness == 0) {
+    // Power down completely when we reach 0 brightness
+    underlight_on = false;
+  }
+  //Serial.printf("On: %d brightness: %02x target: %02x\n", underlight_on, underlight_brightness, underlight_target_brightness);
+  underlight.setBrightness(underlight.gamma8(underlight_brightness));
   // TODO: Make sure it doesn't cause flashing if we enable power before drive is set
   digitalWrite(PIN_POWER_ENABLE, underlight_on);
+
   bool taillight_on = false;
   if (vext < 11.2 || !vbus_detected) {
     brightness = 0;
@@ -699,13 +728,7 @@ void _output_update() {
     target_brightness = 0.5;
     break;
   }
-  if (target_brightness > brightness) {
-    brightness += 0.01;
-    brightness = min(brightness, target_brightness);
-  } else {
-    brightness -= 0.01;
-    brightness = max(brightness, target_brightness);
-  }
+  brightness = stepclamp(brightness, target_brightness, (float)0.01);
   HwPWM3.writeChannel(0, PWM_MAX_HEADLIGHT * brightness, true); // Invert (high = off)
 
   // Update taillight
