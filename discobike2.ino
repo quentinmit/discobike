@@ -236,6 +236,7 @@ BLERemoteVariable<int16_t> bleulspeed(&underlight_speed, UUID(1, 5));
 
 headlight_mode_t actual_mode = OFF;
 float brightness = 0;
+float taillight_brightness = 0;
 
 bool display_on = true;
 bool vbus_detected = false;
@@ -697,6 +698,7 @@ void _output_update() {
   bool taillight_on = false;
   if (vext < 11.2 || !vbus_detected) {
     brightness = 0;
+    taillight_brightness = 0;
     actual_mode = OFF;
   } else {
     last_vext_time = now;
@@ -732,7 +734,9 @@ void _output_update() {
   HwPWM3.writeChannel(0, PWM_MAX_HEADLIGHT * brightness, true); // Invert (high = off)
 
   // Update taillight
-  if (!taillight_on) {
+  float taillight_target_brightness = taillight_on ? 1 : 0;
+  taillight_brightness = stepclamp(taillight_brightness, taillight_target_brightness, (float)0.05);
+  if (taillight_brightness == 0) {
     // Onboard red LED (on channel 2) uses up to 1 mA!
     for (int i = 0; i < 3; i++) {
       HwPWM2.writeChannel(i, 0);
@@ -744,12 +748,12 @@ void _output_update() {
       tail_intensity = 2-tail_intensity;
     }
     //tail_intensity *= tail_intensity*tail_intensity; // Apply gamma of 3
-    
-    uint16_t tail_pwm = gamma8[(uint8_t)(255*tail_intensity)];
-    HwPWM2.writeChannel(0, tail_pwm);
-    HwPWM2.writeChannel(1, PWM_MAX_TAILLIGHT - tail_pwm);
+    uint16_t tail_pwm_1 = gamma8[(uint8_t)(255*taillight_brightness*tail_intensity)];
+    uint16_t tail_pwm_2 = gamma8[(uint8_t)(255*taillight_brightness*(1-tail_intensity))];
+    HwPWM2.writeChannel(0, tail_pwm_1);
+    HwPWM2.writeChannel(1, tail_pwm_2);
     if (!DEBUG_IMU) {
-      HwPWM2.writeChannel(2, PWM_MAX_TAILLIGHT - tail_pwm);
+      HwPWM2.writeChannel(2, tail_pwm_2);
     }
   }
   if (underlight_on) {
