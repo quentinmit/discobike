@@ -377,7 +377,7 @@ void setup() {
   // Increase I2C speed to 400 Khz
   Wire.setClock(400000);
 
-  Bluefruit.begin();
+  Bluefruit.begin(2);
   Bluefruit.setTxPower(4);
   Bluefruit.setName("Discobike");
   //Bluefruit.Periph.setConnectCallback(connect_callback);
