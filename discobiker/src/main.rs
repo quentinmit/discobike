@@ -47,6 +47,9 @@ async fn softdevice_task(sd: &'static Softdevice) {
 async fn bluetooth_task(sd: &'static Softdevice) {
     let server: Server = unwrap!(gatt_server::register(sd));
 
+    let v = unwrap!(server.bas.battery_level_get());
+    info!("Initial battery level: {=u8}", v);
+
     #[rustfmt::skip]
     let adv_data = &[
         // 0x01 = flags
@@ -165,7 +168,7 @@ fn main() -> ! {
     let led = Output::new(p.P0_13, Level::Low, OutputDrive::Standard);
 
     let saadc = p.SAADC;
-    let mut pin_vbat = p.P0_29;
+    let pin_vbat = p.P0_29;
 
     let executor = EXECUTOR.put(Executor::new());
     executor.run(|spawner| {
