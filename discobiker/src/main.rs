@@ -9,15 +9,21 @@ use embassy::executor::Executor;
 use embassy::time::{Duration, Timer};
 use embassy::util::Forever;
 use embassy_nrf as _;
-use embassy_nrf::gpio::{Level, Output, OutputDrive};
+use embassy_nrf::saadc;
+use embassy_nrf::interrupt;
+use embassy_nrf::gpio::{Level, Pull, Input, Output, OutputDrive};
 use embassy_nrf::interrupt::Priority;
-use embassy_nrf::peripherals::P0_13;
-use embassy_nrf::Peripherals;
+use embassy_nrf::peripherals;
+use embassy_nrf::peripherals::{P0_13, SAADC};
 
 use nrf_softdevice::ble::{gatt_server, peripheral};
 use nrf_softdevice::{raw, Softdevice};
 use nrf_softdevice_defmt_rtt as _;
 use panic_probe as _;
+
+use num_traits::float::Float;
+
+type PIN_VBAT = peripherals::P0_29;
 
 static EXECUTOR: Forever<Executor> = Forever::new();
 
@@ -77,6 +83,32 @@ async fn bluetooth_task(sd: &'static Softdevice) {
 }
 
 #[embassy::task]
+async fn adc_task(psaadc: SAADC, pin_vbat: PIN_VBAT, interval: Duration) {
+    let config = saadc::Config::default();
+    let channel_config = saadc::ChannelConfig::single_ended(pin_vbat);
+    let mut saadc = saadc::Saadc::new(psaadc, interrupt::take!(SAADC), config, [channel_config]);
+
+    loop {
+        let mut buf = [0; 1];
+        saadc.sample(&mut buf).await;
+        let vbat = (buf[0] as f32) * 3.6 * 2.0 / 16384.0;
+        let vbat_percent = if vbat <= 0.0 {
+            0
+        } else {
+            123 - (
+                123.0 / (
+                    (1f32+
+                     (vbat/3.7).powi(80)
+                    ).powf(0.165)
+                )
+            ) as u8
+        };
+        info!("vbat: {=i16} = {=f32} V = {=u8} %", &buf[0], vbat, vbat_percent);
+        Timer::after(interval).await;
+    }
+}
+
+#[embassy::task]
 async fn blinker(mut led: Output<'static, P0_13>, interval: Duration) {
     loop {
         led.set_high();
@@ -132,10 +164,14 @@ fn main() -> ! {
 
     let led = Output::new(p.P0_13, Level::Low, OutputDrive::Standard);
 
+    let saadc = p.SAADC;
+    let mut pin_vbat = p.P0_29;
+
     let executor = EXECUTOR.put(Executor::new());
     executor.run(|spawner| {
         unwrap!(spawner.spawn(softdevice_task(sd)));
         unwrap!(spawner.spawn(bluetooth_task(sd)));
+        unwrap!(spawner.spawn(adc_task(saadc, pin_vbat, Duration::from_millis(500))));
         unwrap!(spawner.spawn(blinker(led, Duration::from_millis(300))));
     });
 }
