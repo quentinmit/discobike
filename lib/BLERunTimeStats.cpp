@@ -1,3 +1,6 @@
+#include <FreeRTOS.h>
+#include <task.h>
+
 #include "BLERunTimeStats.h"
 
 const uint8_t BLERunTimeStats::UUID128_SERVICE[16] =
