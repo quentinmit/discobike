@@ -2,10 +2,12 @@
 #![no_main]
 #![feature(type_alias_impl_trait)]
 
+use core::cell::RefCell;
 use core::mem;
 use cortex_m_rt::entry;
 use defmt::*;
-use embassy::executor::Executor;
+use embassy::blocking_mutex::ThreadModeMutex;
+use embassy::executor::{Executor, Spawner};
 use embassy::time::{Duration, Timer};
 use embassy::util::Forever;
 use embassy_nrf as _;
@@ -43,12 +45,17 @@ async fn softdevice_task(sd: &'static Softdevice) {
     sd.run().await;
 }
 
+static SERVER: ThreadModeMutex<RefCell<Option<Server>>> =
+    ThreadModeMutex::new(RefCell::new(None));
+
 #[embassy::task]
 async fn bluetooth_task(sd: &'static Softdevice) {
     let server: Server = unwrap!(gatt_server::register(sd));
 
     let v = unwrap!(server.bas.battery_level_get());
     info!("Initial battery level: {=u8}", v);
+
+    SERVER.borrow().replace(Some(server));
 
     #[rustfmt::skip]
     let adv_data = &[
@@ -73,14 +80,16 @@ async fn bluetooth_task(sd: &'static Softdevice) {
         let conn = unwrap!(peripheral::advertise_connectable(sd, adv, &config).await);
 
         info!("advertising done!");
-        // Run the GATT server on the connection. This returns when the connection gets disconnected.
-        let res = gatt_server::run(&conn, &server, |e| match e {
-            ServerEvent::Bas(_) => {},
-        })
-        .await;
+        if let Some(server) = SERVER.borrow().borrow().as_ref() {
+            // Run the GATT server on the connection. This returns when the connection gets disconnected.
+            let res = gatt_server::run(&conn, server, |e| match e {
+                ServerEvent::Bas(_) => {},
+            })
+                .await;
 
-        if let Err(e) = res {
-            info!("gatt_server run exited with error: {:?}", e);
+            if let Err(e) = res {
+                info!("gatt_server run exited with error: {:?}", e);
+            }
         }
     }
 }
@@ -107,6 +116,9 @@ async fn adc_task(psaadc: SAADC, pin_vbat: PIN_VBAT, interval: Duration) {
             ) as u8
         };
         info!("vbat: {=i16} = {=f32} V = {=u8} %", &buf[0], vbat, vbat_percent);
+        if let Some(server) = SERVER.borrow().borrow().as_ref() {
+            server.bas.battery_level_set(vbat_percent);
+        }
         Timer::after(interval).await;
     }
 }
