@@ -26,14 +26,21 @@ use nrf_softdevice::{raw, Softdevice};
 use nrf_softdevice_defmt_rtt as _;
 use panic_probe as _;
 
+use apds9960::{Apds9960, LightData};
+use embassy::time::Instant;
+use uom::si::{quantities::Illuminance, illuminance::lux};
+
 mod ina219;
 use crate::ina219::{INA219, INA219_ADDR};
+mod output;
 
 use shared_bus::{BusManager};
 
 //use self::csmutex::CriticalSectionBusMutex;
 
 use num_traits::float::Float;
+
+type I2c = Twim<'static, TWISPI0>;
 
 type PIN_VBAT = peripherals::P0_29;
 
@@ -201,24 +208,23 @@ fn main() -> ! {
     let irq = interrupt::take!(SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0);
     let twi = Twim::new(p.TWISPI0, irq, p.P0_12, p.P0_11, twimconfig);
 
-    let twi_bus = cortex_m::singleton!(
-        : BusManager<csmutex::CriticalSectionBusMutex<twim::Twim<TWISPI0>>>
-            = BusManager::new(twi)
-    ).unwrap();
+    // let twi_bus = cortex_m::singleton!(
+    //     : BusManager<csmutex::CriticalSectionBusMutex<twim::Twim<TWISPI0>>>
+    //         = BusManager::new(twi)
+    // ).unwrap();
 
-    let mut ina219_dev = INA219::new(twi_bus.acquire_i2c(), INA219_ADDR);
-    if let Err(e) = ina219_dev.set_adc_mode(ina219::ADCMode::SampleMode128) {
-        error!("failed to set ina219 mode: {:?}", e);
-    }
-    //let mut ina219_dev = INA219::new(twi_bus.acquire_i2c(), INA219_ADDR);
-    // ina219_dev.i2c.write(ina219_dev.address, &[
-    //     0,
-        
+    // let mut ina219_dev = INA219::new(twi_bus.acquire_i2c(), INA219_ADDR);
+    // if let Err(e) = ina219_dev.set_adc_mode(ina219::ADCMode::SampleMode128) {
+    //     error!("failed to set ina219 mode: {:?}", e);
+    // }
+
+    let apds9960 = Apds9960::new(twi);
 
     let executor = EXECUTOR.put(Executor::new());
     executor.run(|spawner| {
         unwrap!(spawner.spawn(softdevice_task(sd)));
         unwrap!(spawner.spawn(bluetooth_task(sd)));
+        unwrap!(spawner.spawn(output::output_task(apds9960)));
         unwrap!(spawner.spawn(adc_task(saadc, pin_vbat, Duration::from_millis(500))));
         unwrap!(spawner.spawn(blinker(led, Duration::from_millis(300))));
     });

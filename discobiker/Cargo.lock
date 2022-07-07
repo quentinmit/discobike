@@ -31,6 +31,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "apds9960"
+version = "0.1.0"
+source = "git+https://github.com/quentinmit/apds9960-rs?branch=async#592de596ff048538017c836c9c482080215346ae"
+dependencies = [
+ "embedded-hal 0.2.7",
+ "embedded-hal-async",
+]
+
+[[package]]
 name = "as-slice"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -284,6 +293,7 @@ dependencies = [
 name = "discobiker"
 version = "0.1.0"
 dependencies = [
+ "apds9960",
  "byteorder",
  "cortex-m 0.7.5",
  "cortex-m-rt",
@@ -293,6 +303,7 @@ dependencies = [
  "embassy",
  "embassy-nrf",
  "embedded-hal 0.2.7",
+ "embedded-hal-async",
  "embedded-storage",
  "embedded-storage-async",
  "fixed",
@@ -999,8 +1010,7 @@ checksum = "5bd2fe26506023ed7b5e1e315add59d6f584c621d037f9368fea9cfb988f368c"
 [[package]]
 name = "uom"
 version = "0.33.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "53e68fe0bfdacf0a6cef0efec5dcc295b836cde69b01ad93feb18488fa82050d"
+source = "git+https://github.com/quentinmit/uom?branch=photometric#746b5fafab80d056c8e2076883ec9b7f5bd0f511"
 dependencies = [
  "num-traits",
  "typenum",

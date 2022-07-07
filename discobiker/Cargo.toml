@@ -6,7 +6,7 @@ version = "0.1.0"
 
 [dependencies]
 embassy = { version = "0.1.0", features = ["nightly", "defmt"]}
-embassy-nrf = { version = "0.1.0", features = [ "nightly", "defmt", "nrf52840", "gpiote", "time-driver-rtc1" ]}
+embassy-nrf = { version = "0.1.0", features = [ "nightly", "defmt", "nrf52840", "gpiote", "time-driver-rtc1", "unstable-traits" ]}
 cortex-m        = { version = "0.7.3" }
 cortex-m-rt = "0.7.0"
 defmt = { version = "0.3", features = [] }
@@ -27,7 +27,9 @@ shared-bus = "0.2.4"
 critical-section = "0.2.7"
 modular-bitfield = "0.11.2"
 byteorder = { version = "1.4.3", default-features = false }
-uom = {version = "0.33.0", default-features = false, features = ["autoconvert", "f32", "si"] }
+uom = { version = "0.33.0", default-features = false, features = ["autoconvert", "f32", "si"] }
+apds9960 = { version = "0.1.0", default-features = false, features = ["async"] }
+embedded-hal-async = "0.1.0-alpha.1"
 
 [patch.crates-io]
 embassy = { git = "https://github.com/embassy-rs/embassy" }
@@ -36,3 +38,5 @@ embassy-macros = { git = "https://github.com/embassy-rs/embassy" }
 nrf-softdevice = { git = "https://github.com/embassy-rs/nrf-softdevice" }
 nrf-softdevice-s140 = { git = "https://github.com/embassy-rs/nrf-softdevice" }
 nrf-softdevice-defmt-rtt = { git = "https://github.com/embassy-rs/nrf-softdevice" }
+apds9960 = { git = "https://github.com/quentinmit/apds9960-rs", branch = "async" }
+uom = { git = "https://github.com/quentinmit/uom", branch = "photometric" }
