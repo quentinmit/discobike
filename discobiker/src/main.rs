@@ -2,6 +2,8 @@
 #![no_main]
 #![feature(type_alias_impl_trait)]
 
+mod csmutex;
+
 use core::cell::RefCell;
 use core::mem;
 use cortex_m_rt::entry;
@@ -16,12 +18,20 @@ use embassy_nrf::interrupt;
 use embassy_nrf::gpio::{Level, Pull, Input, Output, OutputDrive};
 use embassy_nrf::interrupt::Priority;
 use embassy_nrf::peripherals;
-use embassy_nrf::peripherals::{P0_13, SAADC};
+use embassy_nrf::peripherals::{P0_13, SAADC, TWISPI0};
+use embassy_nrf::twim::{self, Twim};
 
 use nrf_softdevice::ble::{gatt_server, peripheral};
 use nrf_softdevice::{raw, Softdevice};
 use nrf_softdevice_defmt_rtt as _;
 use panic_probe as _;
+
+mod ina219;
+use crate::ina219::{INA219, INA219_ADDR};
+
+use shared_bus::{BusManager};
+
+//use self::csmutex::CriticalSectionBusMutex;
 
 use num_traits::float::Float;
 
@@ -117,7 +127,9 @@ async fn adc_task(psaadc: SAADC, pin_vbat: PIN_VBAT, interval: Duration) {
         };
         info!("vbat: {=i16} = {=f32} V = {=u8} %", &buf[0], vbat, vbat_percent);
         if let Some(server) = SERVER.borrow().borrow().as_ref() {
-            server.bas.battery_level_set(vbat_percent);
+            if let Err(e) = server.bas.battery_level_set(vbat_percent) {
+                error!("battery_level_set had error: {:?}", e);
+            }
         }
         Timer::after(interval).await;
     }
@@ -181,6 +193,25 @@ fn main() -> ! {
 
     let saadc = p.SAADC;
     let pin_vbat = p.P0_29;
+
+    let mut twimconfig = twim::Config::default();
+    twimconfig.frequency = twim::Frequency::K400;
+    twimconfig.sda_pullup = true;
+    twimconfig.scl_pullup = true;
+    let irq = interrupt::take!(SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0);
+    let twi = Twim::new(p.TWISPI0, irq, p.P0_12, p.P0_11, twimconfig);
+
+    let twi_bus = cortex_m::singleton!(
+        : BusManager<csmutex::CriticalSectionBusMutex<twim::Twim<TWISPI0>>>
+            = BusManager::new(twi)
+    ).unwrap();
+
+    let mut ina219_dev = INA219::new(twi_bus.acquire_i2c(), INA219_ADDR);
+
+    //let mut ina219_dev = INA219::new(twi_bus.acquire_i2c(), INA219_ADDR);
+    // ina219_dev.i2c.write(ina219_dev.address, &[
+    //     0,
+        
 
     let executor = EXECUTOR.put(Executor::new());
     executor.run(|spawner| {

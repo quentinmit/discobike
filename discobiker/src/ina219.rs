@@ -1,0 +1,173 @@
+//use tock_registers::register_bitfields;
+use embedded_hal::blocking::i2c;
+use modular_bitfield::prelude::*;
+
+use byteorder::{BigEndian, ByteOrder, LittleEndian};
+
+pub const INA219_ADDR: u8 = 0x41;
+
+enum Register {
+    Configuration = 0x00,
+    ShuntVoltage = 0x01,
+    BusVoltage = 0x02,
+    Power = 0x03,
+    Current = 0x04,
+    Calibration = 0x05,
+}
+
+#[derive(Copy, Clone, BitfieldSpecifier)]
+#[bits = 1]
+enum BusVoltageRange {
+    V16 = 0,
+    V32 = 1,
+}
+#[derive(Copy, Clone, BitfieldSpecifier)]
+#[bits = 2]
+enum Gain {
+    Full = 0,
+    Half = 1,
+    Quarter = 2,
+    Eighth = 3,
+}
+impl Gain {
+    pub const mV40: Gain = Gain::Full;
+    pub const mV80: Gain = Gain::Half;
+    pub const mV160: Gain = Gain::Quarter;
+    pub const mV320: Gain = Gain::Eighth;
+}
+#[derive(Copy, Clone, BitfieldSpecifier)]
+#[bits = 4]
+enum ADCMode {
+    BitMode9 = 0b00000000,
+    BitMode10 = 0b00000001,
+    BitMode11 = 0b00000010,
+    BitMode12 = 0b00000011,
+    SampleMode2 = 0b00001001,
+    SampleMode4 = 0b00001010,
+    SampleMode8 = 0b00001011,
+    SampleMode16 = 0b00001100,
+    SampleMode32 = 0b00001101,
+    SampleMode64 = 0b00001110,
+    SampleMode128 = 0b00001111,
+}
+#[derive(Copy, Clone)]
+#[bitfield(bits = 16)]
+struct Configuration {
+    sample_shunt: bool,
+    sample_bus: bool,
+    sample_continuous: bool,
+    shunt_adc_mode: ADCMode,
+    bus_adc_mode: ADCMode,
+    shunt_gain: Gain,
+    bus_voltage_range: BusVoltageRange,
+    #[skip]
+    unused1: bool,
+    reset: bool,
+}
+
+impl From<u16> for Configuration {
+    fn from(val: u16) -> Self {
+        let mut buf = [0; 2];
+        LittleEndian::write_u16(&mut buf, val);
+        Self::from_bytes(buf)
+    }
+}
+
+// register_bitfields![
+//     u16,
+//     Configuration [
+//         RST 15,
+//         BRNG 13,
+//         PG OFFSET(11) NUMBITS(2) [
+//             PG40mV = 0,
+//             PG80mV = 1,
+//             PG160mV = 2,
+//             PG320mV = 3,
+//             ],
+//         BADC OFFSET(7) NUMBITS(4) [
+//             BIT_MODE_9      = 0b00000000,
+//             BIT_MODE_10     = 0b00000001,
+//             BIT_MODE_11     = 0b00000010,
+//             BIT_MODE_12     = 0b00000011,
+//             SAMPLE_MODE_2   = 0b00001001,
+//             SAMPLE_MODE_4   = 0b00001010,
+//             SAMPLE_MODE_8   = 0b00001011,
+//             SAMPLE_MODE_16  = 0b00001100,
+//             SAMPLE_MODE_32  = 0b00001101,
+//             SAMPLE_MODE_64  = 0b00001110,
+//             SAMPLE_MODE_128 = 0b00001111
+//         ],
+//         SADC OFFSET(3) NUMBITS(4) [
+//             BIT_MODE_9      = 0b00000000,
+//             BIT_MODE_10     = 0b00000001,
+//             BIT_MODE_11     = 0b00000010,
+//             BIT_MODE_12     = 0b00000011,
+//             SAMPLE_MODE_2   = 0b00001001,
+//             SAMPLE_MODE_4   = 0b00001010,
+//             SAMPLE_MODE_8   = 0b00001011,
+//             SAMPLE_MODE_16  = 0b00001100,
+//             SAMPLE_MODE_32  = 0b00001101,
+//             SAMPLE_MODE_64  = 0b00001110,
+//             SAMPLE_MODE_128 = 0b00001111
+//         ],
+//         TRIGGER_MODE OFFSET(2) NUMBITS(1) [
+//             Continuous = 1,
+//             Triggered = 0,
+//         ],
+//         BUS_MEASURE OFFSET(1) NUMBITS(1),
+//         SHUNT_MEASURE OFFSET(0) NUMBITS(1),
+//     ]
+// ];
+
+pub struct INA219<I2C> {
+    i2c: I2C,
+    address: u8,
+    last_config: Option<Configuration>,
+}
+
+impl<I2C, E> INA219<I2C>
+where
+    I2C: i2c::Write<Error = E> + i2c::Read<Error = E> + i2c::WriteRead<Error = E>,
+{
+    pub fn new(i2c: I2C, address: u8) -> INA219<I2C> {
+        INA219 {
+            i2c,
+            address,
+            last_config: None,
+        }
+    }
+    pub fn set_adc_mode(&mut self, mode: ADCMode) -> Result<(), E> {
+        self.modify_config(|c| c.with_bus_adc_mode(mode).with_shunt_adc_mode(mode))
+    }
+    fn read_register(&mut self, reg: Register) -> Result<u16, E> {
+        let mut bytes = [0; 2];
+        self.i2c
+            .write_read(self.address, &[reg as u8], &mut bytes)?;
+        return Ok(BigEndian::read_u16(&bytes));
+    }
+    // fn read_register_le(&mut self, reg: Register) -> Result<[u8; 2], E> {
+    //     let val = self.read_register_u16(reg)?;
+    //     let mut buf = [0; 2];
+    //     LittleEndian::write_u16(&mut buf, val);
+    //     Ok(buf)
+    // }
+    fn modify_config<F>(&mut self, f: F) -> Result<(), E>
+    where
+        F: FnOnce(Configuration) -> Configuration,
+    {
+        let old_config: Configuration = self.read_register(Register::Configuration)?.into();
+        let new_config = f(old_config);
+        let mut new_config_bytes = [Register::Configuration as u8, 0, 0];
+        new_config_bytes[1..].clone_from_slice(&new_config.into_bytes());
+        match self.i2c.write(self.address, &new_config_bytes) {
+            Ok(()) => {
+                self.last_config = Some(new_config);
+                Ok(())
+            }
+            Err(error) => {
+                self.last_config = None;
+                Err(error)
+            }
+        }
+    }
+}
