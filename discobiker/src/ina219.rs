@@ -72,6 +72,12 @@ impl From<u16> for Configuration {
         Self::from_bytes(buf)
     }
 }
+impl From<Configuration> for u16 {
+    fn from(val: Configuration) -> u16 {
+        let bytes = val.into_bytes();
+        LittleEndian::read_u16(&bytes)
+    }
+}
 
 // register_bitfields![
 //     u16,
@@ -145,6 +151,11 @@ where
             .write_read(self.address, &[reg as u8], &mut bytes)?;
         return Ok(BigEndian::read_u16(&bytes));
     }
+    fn write_register(&mut self, reg: Register, val: u16) -> Result<(), E> {
+        let mut new_config_bytes = [reg as u8, 0, 0];
+        BigEndian::write_u16(&mut new_config_bytes[1..2], val);
+        return self.i2c.write(self.address, &new_config_bytes);
+    }
     // fn read_register_le(&mut self, reg: Register) -> Result<[u8; 2], E> {
     //     let val = self.read_register_u16(reg)?;
     //     let mut buf = [0; 2];
@@ -157,9 +168,7 @@ where
     {
         let old_config: Configuration = self.read_register(Register::Configuration)?.into();
         let new_config = f(old_config);
-        let mut new_config_bytes = [Register::Configuration as u8, 0, 0];
-        new_config_bytes[1..].clone_from_slice(&new_config.into_bytes());
-        match self.i2c.write(self.address, &new_config_bytes) {
+        match self.write_register(Register::Configuration, new_config.into()) {
             Ok(()) => {
                 self.last_config = Some(new_config);
                 Ok(())
