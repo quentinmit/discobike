@@ -306,6 +306,7 @@ dependencies = [
  "num-traits",
  "panic-probe",
  "shared-bus",
+ "uom",
 ]
 
 [[package]]
@@ -994,6 +995,16 @@ name = "unicode-ident"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5bd2fe26506023ed7b5e1e315add59d6f584c621d037f9368fea9cfb988f368c"
+
+[[package]]
+name = "uom"
+version = "0.33.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "53e68fe0bfdacf0a6cef0efec5dcc295b836cde69b01ad93feb18488fa82050d"
+dependencies = [
+ "num-traits",
+ "typenum",
+]
 
 [[package]]
 name = "uuid"

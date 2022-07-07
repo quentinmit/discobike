@@ -1,6 +1,8 @@
 //use tock_registers::register_bitfields;
 use embedded_hal::blocking::i2c;
 use modular_bitfield::prelude::*;
+use uom::si::f32::ElectricPotential;
+use uom::si::electric_potential::{volt, millivolt};
 
 use byteorder::{BigEndian, ByteOrder, LittleEndian};
 
@@ -65,19 +67,36 @@ struct Configuration {
     reset: bool,
 }
 
-impl From<u16> for Configuration {
-    fn from(val: u16) -> Self {
-        let mut buf = [0; 2];
-        LittleEndian::write_u16(&mut buf, val);
-        Self::from_bytes(buf)
-    }
+macro_rules! bitfield_u16 {
+    ($bitfield:ty) => {
+        impl From<u16> for $bitfield {
+            fn from(val: u16) -> Self {
+                let mut buf = [0; 2];
+                LittleEndian::write_u16(&mut buf, val);
+                Self::from_bytes(buf)
+            }
+        }
+        impl From<$bitfield> for u16 {
+            fn from(val: $bitfield) -> u16 {
+                let bytes = val.into_bytes();
+                LittleEndian::read_u16(&bytes)
+            }
+        }
+    };
 }
-impl From<Configuration> for u16 {
-    fn from(val: Configuration) -> u16 {
-        let bytes = val.into_bytes();
-        LittleEndian::read_u16(&bytes)
-    }
+
+bitfield_u16!(Configuration);
+
+#[bitfield(bits = 16)]
+struct BusVoltage {
+    overflow: bool,
+    conversion_ready: bool,
+    #[skip]
+    unused1: bool,
+    bus_voltage: B13,
 }
+
+bitfield_u16!(BusVoltage);
 
 // register_bitfields![
 //     u16,
@@ -141,6 +160,11 @@ where
             address,
             last_config: None,
         }
+    }
+    pub fn get_bus_voltage(&mut self) -> Result<ElectricPotential, E> {
+        let v: BusVoltage = self.read_register(Register::BusVoltage)?.into();
+        // LSB = 4 mV
+        Ok(ElectricPotential::new::<millivolt>(v.bus_voltage() as f32 * 4.0))
     }
     pub fn set_adc_mode(&mut self, mode: ADCMode) -> Result<(), E> {
         self.modify_config(|c| c.with_bus_adc_mode(mode).with_shunt_adc_mode(mode))
