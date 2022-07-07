@@ -207,7 +207,9 @@ fn main() -> ! {
     ).unwrap();
 
     let mut ina219_dev = INA219::new(twi_bus.acquire_i2c(), INA219_ADDR);
-
+    if let Err(e) = ina219_dev.set_adc_mode(ina219::ADCMode::SampleMode128) {
+        error!("failed to set ina219 mode: {:?}", e);
+    }
     //let mut ina219_dev = INA219::new(twi_bus.acquire_i2c(), INA219_ADDR);
     // ina219_dev.i2c.write(ina219_dev.address, &[
     //     0,

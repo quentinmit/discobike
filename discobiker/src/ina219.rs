@@ -1,4 +1,3 @@
-//use tock_registers::register_bitfields;
 use embedded_hal::blocking::i2c;
 use modular_bitfield::prelude::*;
 use uom::si::f32::ElectricPotential;
@@ -39,7 +38,7 @@ impl Gain {
 }
 #[derive(Copy, Clone, BitfieldSpecifier)]
 #[bits = 4]
-enum ADCMode {
+pub enum ADCMode {
     BitMode9 = 0b00000000,
     BitMode10 = 0b00000001,
     BitMode11 = 0b00000010,
@@ -97,52 +96,6 @@ struct BusVoltage {
 }
 
 bitfield_u16!(BusVoltage);
-
-// register_bitfields![
-//     u16,
-//     Configuration [
-//         RST 15,
-//         BRNG 13,
-//         PG OFFSET(11) NUMBITS(2) [
-//             PG40mV = 0,
-//             PG80mV = 1,
-//             PG160mV = 2,
-//             PG320mV = 3,
-//             ],
-//         BADC OFFSET(7) NUMBITS(4) [
-//             BIT_MODE_9      = 0b00000000,
-//             BIT_MODE_10     = 0b00000001,
-//             BIT_MODE_11     = 0b00000010,
-//             BIT_MODE_12     = 0b00000011,
-//             SAMPLE_MODE_2   = 0b00001001,
-//             SAMPLE_MODE_4   = 0b00001010,
-//             SAMPLE_MODE_8   = 0b00001011,
-//             SAMPLE_MODE_16  = 0b00001100,
-//             SAMPLE_MODE_32  = 0b00001101,
-//             SAMPLE_MODE_64  = 0b00001110,
-//             SAMPLE_MODE_128 = 0b00001111
-//         ],
-//         SADC OFFSET(3) NUMBITS(4) [
-//             BIT_MODE_9      = 0b00000000,
-//             BIT_MODE_10     = 0b00000001,
-//             BIT_MODE_11     = 0b00000010,
-//             BIT_MODE_12     = 0b00000011,
-//             SAMPLE_MODE_2   = 0b00001001,
-//             SAMPLE_MODE_4   = 0b00001010,
-//             SAMPLE_MODE_8   = 0b00001011,
-//             SAMPLE_MODE_16  = 0b00001100,
-//             SAMPLE_MODE_32  = 0b00001101,
-//             SAMPLE_MODE_64  = 0b00001110,
-//             SAMPLE_MODE_128 = 0b00001111
-//         ],
-//         TRIGGER_MODE OFFSET(2) NUMBITS(1) [
-//             Continuous = 1,
-//             Triggered = 0,
-//         ],
-//         BUS_MEASURE OFFSET(1) NUMBITS(1),
-//         SHUNT_MEASURE OFFSET(0) NUMBITS(1),
-//     ]
-// ];
 
 pub struct INA219<I2C> {
     i2c: I2C,
