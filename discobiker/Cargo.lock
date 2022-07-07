@@ -301,6 +301,7 @@ dependencies = [
  "defmt",
  "defmt-rtt",
  "embassy",
+ "embassy-embedded-hal",
  "embassy-nrf",
  "embedded-hal 0.2.7",
  "embedded-hal-async",
@@ -350,6 +351,20 @@ dependencies = [
  "embassy",
  "embassy-hal-common",
  "embassy-macros",
+]
+
+[[package]]
+name = "embassy-embedded-hal"
+version = "0.1.0"
+source = "git+https://github.com/embassy-rs/embassy#1fb70e2fac11afb4139ec2ed89293ce7ae1f6e65"
+dependencies = [
+ "embassy",
+ "embedded-hal 0.2.7",
+ "embedded-hal 1.0.0-alpha.8",
+ "embedded-hal-async",
+ "embedded-storage",
+ "embedded-storage-async",
+ "nb 1.0.0",
 ]
 
 [[package]]

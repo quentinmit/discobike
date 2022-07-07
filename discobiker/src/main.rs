@@ -21,6 +21,10 @@ use embassy_nrf::peripherals;
 use embassy_nrf::peripherals::{P0_13, SAADC, TWISPI0};
 use embassy_nrf::twim::{self, Twim};
 
+use embassy_embedded_hal::shared_bus::i2c::I2cBusDevice;
+use embassy::mutex::Mutex;
+use embassy::blocking_mutex::raw::ThreadModeRawMutex;
+
 use nrf_softdevice::ble::{gatt_server, peripheral};
 use nrf_softdevice::{raw, Softdevice};
 use nrf_softdevice_defmt_rtt as _;
@@ -33,8 +37,6 @@ use uom::si::{quantities::Illuminance, illuminance::lux};
 mod ina219;
 use crate::ina219::{INA219, INA219_ADDR};
 mod output;
-
-use shared_bus::{BusManager};
 
 //use self::csmutex::CriticalSectionBusMutex;
 
@@ -152,6 +154,8 @@ async fn blinker(mut led: Output<'static, P0_13>, interval: Duration) {
     }
 }
 
+type I2cDevice = I2cBusDevice::<'static, ThreadModeRawMutex, Twim<'static, TWISPI0>>;
+
 #[entry]
 fn main() -> ! {
     info!("Hello World!");
@@ -210,25 +214,21 @@ fn main() -> ! {
     twimconfig.sda_pullup = true;
     twimconfig.scl_pullup = true;
     let irq = interrupt::take!(SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0);
-    let twi = Twim::new(p.TWISPI0, irq, p.P0_12, p.P0_11, twimconfig);
+    let i2c = Twim::new(p.TWISPI0, irq, p.P0_12, p.P0_11, twimconfig);
 
-    // let twi_bus = cortex_m::singleton!(
-    //     : BusManager<csmutex::CriticalSectionBusMutex<twim::Twim<TWISPI0>>>
-    //         = BusManager::new(twi)
-    // ).unwrap();
+    static I2C_BUS: Forever<Mutex::<ThreadModeRawMutex, Twim<TWISPI0>>> = Forever::new();
+    let i2c_bus = Mutex::<ThreadModeRawMutex, _>::new(i2c);
+    let i2c_bus = I2C_BUS.put(i2c_bus);
 
-    // let mut ina219_dev = INA219::new(twi_bus.acquire_i2c(), INA219_ADDR);
-    // if let Err(e) = ina219_dev.set_adc_mode(ina219::ADCMode::SampleMode128) {
-    //     error!("failed to set ina219 mode: {:?}", e);
-    // }
+    let mut ina219_dev = INA219::new(I2cBusDevice::new(i2c_bus), INA219_ADDR);
 
-    let apds9960 = Apds9960::new(twi);
+    let apds9960 = Apds9960::new(I2cBusDevice::new(i2c_bus));
 
     let executor = EXECUTOR.put(Executor::new());
     executor.run(|spawner| {
         unwrap!(spawner.spawn(softdevice_task(sd)));
         unwrap!(spawner.spawn(bluetooth_task(sd)));
-        unwrap!(spawner.spawn(output::output_task(power, apds9960)));
+        unwrap!(spawner.spawn(output::output_task(power, ina219_dev, apds9960)));
         unwrap!(spawner.spawn(adc_task(saadc, pin_vbat, Duration::from_millis(500))));
         unwrap!(spawner.spawn(blinker(led, Duration::from_millis(300))));
     });

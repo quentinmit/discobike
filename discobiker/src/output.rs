@@ -1,10 +1,11 @@
 use defmt::*;
+use crate::ina219::{INA219, ADCMode};
 use apds9960::{Apds9960, LightData};
 use embassy::time::{Duration, Instant, Timer};
 use embedded_hal_async::i2c;
 use embassy_nrf::pac;
 use core::cmp::max;
-use crate::I2c;
+use crate::I2cDevice;
 use uom::si::{quantities::Illuminance, illuminance::lux};
 
 trait CalculateIlluminance {
@@ -31,8 +32,12 @@ impl EventTimer {
 }
 
 #[embassy::task]
-pub async fn output_task(power: pac::POWER, mut apds9960: Apds9960<I2c>)
+pub async fn output_task(power: pac::POWER, mut ina219: INA219<I2cDevice>, mut apds9960: Apds9960<I2cDevice>)
 {
+    if let Err(e) = ina219.set_adc_mode(ADCMode::SampleMode128).await {
+        // TODO: Add defmt to I2cBusDevice
+        error!("failed to set ina219 mode: {:?}", defmt::Debug2Format(&e));
+    }
     let mut vbus_timer: EventTimer = EventTimer::new();
     loop {
         let now = Instant::now();
@@ -68,6 +73,13 @@ pub async fn output_task(power: pac::POWER, mut apds9960: Apds9960<I2c>)
             error!("failed to read light sensor: {:?}", defmt::Debug2Format(&e));
         }
 
+        //   // Update mode
+        //   accel_mag = vecMag(accel_evt.acceleration);
+        //   if (accel_mag > 12) {
+        //     last_move_time = now;
+        //   }
+        //   // TODO: Use IMU angle for mode too?
+
         let vbus_detected = power.usbregstatus.read().vbusdetect().is_vbus_present();
 
         info!("vbus detected: {:?}", vbus_detected);
@@ -76,16 +88,6 @@ pub async fn output_task(power: pac::POWER, mut apds9960: Apds9960<I2c>)
         Timer::after(Duration::from_millis(1000/30)).await;
     }
 }
-
-//   // Update mode
-//   accel_mag = vecMag(accel_evt.acceleration);
-//   if (accel_mag > 12) {
-//     last_move_time = now;
-//   }
-//   // TODO: Use IMU angle for mode too?
-//   if (vbus_detected) {
-//     last_vbus_time = now;
-//   }
 
 //   // Update underlight
 //   bool underlight_on = vbus_detected;

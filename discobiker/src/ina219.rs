@@ -1,4 +1,4 @@
-use embedded_hal::blocking::i2c;
+use embedded_hal_async::i2c;
 use modular_bitfield::prelude::*;
 use uom::si::f32::ElectricPotential;
 use uom::si::electric_potential::{volt, millivolt, microvolt};
@@ -105,7 +105,7 @@ pub struct INA219<I2C> {
 
 impl<I2C, E> INA219<I2C>
 where
-    I2C: i2c::Write<Error = E> + i2c::Read<Error = E> + i2c::WriteRead<Error = E>,
+    I2C: i2c::I2c<Error = E>,
 {
     pub fn new(i2c: I2C, address: u8) -> INA219<I2C> {
         INA219 {
@@ -114,38 +114,38 @@ where
             last_config: None,
         }
     }
-    pub fn get_bus_voltage(&mut self) -> Result<ElectricPotential, E> {
-        let v: BusVoltage = self.read_register(Register::BusVoltage)?.into();
+    pub async fn get_bus_voltage(&mut self) -> Result<ElectricPotential, E> {
+        let v: BusVoltage = self.read_register(Register::BusVoltage).await?.into();
         // LSB = 4 mV
         Ok(ElectricPotential::new::<millivolt>(v.bus_voltage() as f32 * 4.0))
     }
-    pub fn get_shunt_voltage(&mut self) -> Result<ElectricPotential, E> {
-        let v = self.read_register(Register::ShuntVoltage)? as i16;
+    pub async fn get_shunt_voltage(&mut self) -> Result<ElectricPotential, E> {
+        let v = self.read_register(Register::ShuntVoltage).await? as i16;
         // LSB = 10 µV
         Ok(ElectricPotential::new::<microvolt>(v as f32 * 10.0))
     }
 
-    pub fn set_adc_mode(&mut self, mode: ADCMode) -> Result<(), E> {
-        self.modify_config(|c| c.with_bus_adc_mode(mode).with_shunt_adc_mode(mode))
+    pub async fn set_adc_mode(&mut self, mode: ADCMode) -> Result<(), E> {
+        self.modify_config(|c| c.with_bus_adc_mode(mode).with_shunt_adc_mode(mode)).await
     }
-    fn read_register(&mut self, reg: Register) -> Result<u16, E> {
+    async fn read_register(&mut self, reg: Register) -> Result<u16, E> {
         let mut bytes = [0; 2];
         self.i2c
-            .write_read(self.address, &[reg as u8], &mut bytes)?;
+            .write_read(self.address, &[reg as u8], &mut bytes).await?;
         return Ok(BigEndian::read_u16(&bytes));
     }
-    fn write_register(&mut self, reg: Register, val: u16) -> Result<(), E> {
+    async fn write_register(&mut self, reg: Register, val: u16) -> Result<(), E> {
         let mut new_config_bytes = [reg as u8, 0, 0];
         BigEndian::write_u16(&mut new_config_bytes[1..2], val);
-        return self.i2c.write(self.address, &new_config_bytes);
+        return self.i2c.write(self.address, &new_config_bytes).await;
     }
-    fn modify_config<F>(&mut self, f: F) -> Result<(), E>
+    async fn modify_config<F>(&mut self, f: F) -> Result<(), E>
     where
         F: FnOnce(Configuration) -> Configuration,
     {
-        let old_config: Configuration = self.read_register(Register::Configuration)?.into();
+        let old_config: Configuration = self.read_register(Register::Configuration).await?.into();
         let new_config = f(old_config);
-        match self.write_register(Register::Configuration, new_config.into()) {
+        match self.write_register(Register::Configuration, new_config.into()).await {
             Ok(()) => {
                 self.last_config = Some(new_config);
                 Ok(())

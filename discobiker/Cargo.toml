@@ -7,6 +7,7 @@ version = "0.1.0"
 [dependencies]
 embassy = { version = "0.1.0", features = ["nightly", "defmt"]}
 embassy-nrf = { version = "0.1.0", features = [ "nightly", "defmt", "nrf52840", "gpiote", "time-driver-rtc1", "unstable-traits", "unstable-pac" ]}
+embassy-embedded-hal = "0.1.0"
 cortex-m        = { version = "0.7.3" }
 cortex-m-rt = "0.7.0"
 defmt = { version = "0.3", features = [] }
@@ -35,6 +36,7 @@ embedded-hal-async = "0.1.0-alpha.1"
 embassy = { git = "https://github.com/embassy-rs/embassy" }
 embassy-nrf = { git = "https://github.com/embassy-rs/embassy" }
 embassy-macros = { git = "https://github.com/embassy-rs/embassy" }
+embassy-embedded-hal = { git = "https://github.com/embassy-rs/embassy" }
 nrf-softdevice = { git = "https://github.com/embassy-rs/nrf-softdevice" }
 nrf-softdevice-s140 = { git = "https://github.com/embassy-rs/nrf-softdevice" }
 nrf-softdevice-defmt-rtt = { git = "https://github.com/embassy-rs/nrf-softdevice" }
