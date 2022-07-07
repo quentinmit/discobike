@@ -6,7 +6,7 @@ version = "0.1.0"
 
 [dependencies]
 embassy = { version = "0.1.0", features = ["nightly", "defmt"]}
-embassy-nrf = { version = "0.1.0", features = [ "nightly", "defmt", "nrf52840", "gpiote", "time-driver-rtc1", "unstable-traits" ]}
+embassy-nrf = { version = "0.1.0", features = [ "nightly", "defmt", "nrf52840", "gpiote", "time-driver-rtc1", "unstable-traits", "unstable-pac" ]}
 cortex-m        = { version = "0.7.3" }
 cortex-m-rt = "0.7.0"
 defmt = { version = "0.3", features = [] }

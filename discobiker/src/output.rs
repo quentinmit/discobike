@@ -2,6 +2,7 @@ use defmt::*;
 use apds9960::{Apds9960, LightData};
 use embassy::time::{Duration, Instant, Timer};
 use embedded_hal_async::i2c;
+use embassy_nrf::pac;
 use core::cmp::max;
 use crate::I2c;
 use uom::si::{quantities::Illuminance, illuminance::lux};
@@ -15,9 +16,24 @@ impl CalculateIlluminance for LightData {
     }
 }
 
+struct EventTimer {
+    last: Instant
+}
+impl EventTimer {
+    fn new() -> Self {
+        EventTimer{last: Instant::MIN}
+    }
+    fn update(&mut self, state: bool) {
+        if state {
+            self.last = Instant::now();
+        }
+    }
+}
+
 #[embassy::task]
-pub async fn output_task(mut apds9960: Apds9960<I2c>)
+pub async fn output_task(power: pac::POWER, mut apds9960: Apds9960<I2c>)
 {
+    let mut vbus_timer: EventTimer = EventTimer::new();
     loop {
         let now = Instant::now();
 
@@ -52,11 +68,14 @@ pub async fn output_task(mut apds9960: Apds9960<I2c>)
             error!("failed to read light sensor: {:?}", defmt::Debug2Format(&e));
         }
 
+        let vbus_detected = power.usbregstatus.read().vbusdetect().is_vbus_present();
+
+        info!("vbus detected: {:?}", vbus_detected);
+        vbus_timer.update(vbus_detected);
+
         Timer::after(Duration::from_millis(1000/30)).await;
     }
 }
-
-//   vbus_detected = NRF_POWER->USBREGSTATUS & POWER_USBREGSTATUS_VBUSDETECT_Msk;
 
 //   // Update mode
 //   accel_mag = vecMag(accel_evt.acceleration);

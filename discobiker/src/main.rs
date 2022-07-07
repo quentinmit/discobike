@@ -13,7 +13,7 @@ use embassy::executor::{Executor, Spawner};
 use embassy::time::{Duration, Timer};
 use embassy::util::Forever;
 use embassy_nrf as _;
-use embassy_nrf::saadc;
+use embassy_nrf::{pac, saadc};
 use embassy_nrf::interrupt;
 use embassy_nrf::gpio::{Level, Pull, Input, Output, OutputDrive};
 use embassy_nrf::interrupt::Priority;
@@ -201,6 +201,10 @@ fn main() -> ! {
     let saadc = p.SAADC;
     let pin_vbat = p.P0_29;
 
+    // Requires embassy-nrf/unstable-pac
+    // TODO: Replace with safe API when one exists.
+    let power: pac::POWER = unsafe { mem::transmute(()) };
+
     let mut twimconfig = twim::Config::default();
     twimconfig.frequency = twim::Frequency::K400;
     twimconfig.sda_pullup = true;
@@ -224,7 +228,7 @@ fn main() -> ! {
     executor.run(|spawner| {
         unwrap!(spawner.spawn(softdevice_task(sd)));
         unwrap!(spawner.spawn(bluetooth_task(sd)));
-        unwrap!(spawner.spawn(output::output_task(apds9960)));
+        unwrap!(spawner.spawn(output::output_task(power, apds9960)));
         unwrap!(spawner.spawn(adc_task(saadc, pin_vbat, Duration::from_millis(500))));
         unwrap!(spawner.spawn(blinker(led, Duration::from_millis(300))));
     });
