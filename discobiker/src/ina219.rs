@@ -2,7 +2,7 @@
 use embedded_hal::blocking::i2c;
 use modular_bitfield::prelude::*;
 use uom::si::f32::ElectricPotential;
-use uom::si::electric_potential::{volt, millivolt};
+use uom::si::electric_potential::{volt, millivolt, microvolt};
 
 use byteorder::{BigEndian, ByteOrder, LittleEndian};
 
@@ -166,6 +166,12 @@ where
         // LSB = 4 mV
         Ok(ElectricPotential::new::<millivolt>(v.bus_voltage() as f32 * 4.0))
     }
+    pub fn get_shunt_voltage(&mut self) -> Result<ElectricPotential, E> {
+        let v = self.read_register(Register::ShuntVoltage)? as i16;
+        // LSB = 10 µV
+        Ok(ElectricPotential::new::<microvolt>(v as f32 * 10.0))
+    }
+
     pub fn set_adc_mode(&mut self, mode: ADCMode) -> Result<(), E> {
         self.modify_config(|c| c.with_bus_adc_mode(mode).with_shunt_adc_mode(mode))
     }
@@ -180,12 +186,6 @@ where
         BigEndian::write_u16(&mut new_config_bytes[1..2], val);
         return self.i2c.write(self.address, &new_config_bytes);
     }
-    // fn read_register_le(&mut self, reg: Register) -> Result<[u8; 2], E> {
-    //     let val = self.read_register_u16(reg)?;
-    //     let mut buf = [0; 2];
-    //     LittleEndian::write_u16(&mut buf, val);
-    //     Ok(buf)
-    // }
     fn modify_config<F>(&mut self, f: F) -> Result<(), E>
     where
         F: FnOnce(Configuration) -> Configuration,
