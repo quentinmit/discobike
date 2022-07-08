@@ -42,6 +42,10 @@ pub async fn output_task(power: pac::POWER, mut ina219: INA219<I2cDevice>, mut a
     loop {
         let now = Instant::now();
 
+        let vext = ina219.get_bus_voltage().await;
+
+        info!("Vext = {:?}", defmt::Debug2Format(&vext));
+
     // if (display_on) {
     //     vext = ina219.getBusVoltage_V();
     // } else {
