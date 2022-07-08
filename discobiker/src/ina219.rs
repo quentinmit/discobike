@@ -161,9 +161,10 @@ where
         let desired_current_lsb: Ampere<f32> = max_current / 32767.;
         let cal = *(0.04096*V / (desired_current_lsb * shunt_resistance)) as u16;
         let actual_current_lsb: Ampere<f32> = 0.04096*V / ((cal as f32) * shunt_resistance);
-        info!("requested max current = {:?}", Debug2Format(&max_current));
+        info!("requested max current = {=f32} A", max_current/A);
         info!("optimal gain setting {:?}", Debug2Format(&desired_gain));
-        info!("calculated desired current LSB {:?} calibration {:?} actual current LSB {:?}", Debug2Format(&desired_current_lsb), Debug2Format(&cal), Debug2Format(&actual_current_lsb));
+        info!("calculated desired current LSB {=f32} µA calibration {=u16} actual current LSB {=f32} µA", desired_current_lsb/(MICRO*A), cal, actual_current_lsb/(MICRO*A));
+        self.write_register(Register::Calibration, cal).await?;
         Ok(())
     }
 
@@ -178,7 +179,7 @@ where
     }
     async fn write_register(&mut self, reg: Register, val: u16) -> Result<(), E> {
         let mut new_config_bytes = [reg as u8, 0, 0];
-        BigEndian::write_u16(&mut new_config_bytes[1..2], val);
+        BigEndian::write_u16(&mut new_config_bytes[1..], val);
         return self.i2c.write(self.address, &new_config_bytes).await;
     }
     async fn modify_config<F>(&mut self, f: F) -> Result<(), E>
