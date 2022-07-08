@@ -126,6 +126,17 @@ where
         Ok(v as f32 * 10.0 * MICRO * V)
     }
 
+    async fn gain(&mut self) -> Result<Gain, E> {
+        Ok(match self.last_config {
+            Some(c) => c,
+            None => {
+                let config: Configuration = self.read_register(Register::Configuration).await?.into();
+                self.last_config = Some(config);
+                config
+            }
+        }.shunt_gain())
+    }
+
     pub async fn set_adc_mode(&mut self, mode: ADCMode) -> Result<(), E> {
         self.modify_config(|c| c.with_bus_adc_mode(mode).with_shunt_adc_mode(mode)).await
     }
