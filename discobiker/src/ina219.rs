@@ -174,10 +174,9 @@ where
             }
         };
         Ok(
-            (if cal != 0 { Some(cal) } else { None })
-            .and_then(|cal|
-                      self.shunt_resistance.map(|r| 0.04096*V / ((cal as f32) * r))
-            )
+            self.shunt_resistance.zip(
+                (if cal != 0 { Some(cal) } else { None })
+            ).map(|(r, cal)| 0.04096*V / ((cal as f32) * r))
         )
     }
 
