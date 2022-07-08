@@ -6,7 +6,7 @@ use embedded_hal_async::i2c;
 use embassy_nrf::pac;
 use crate::I2cDevice;
 extern crate dimensioned as dim;
-use dim::si::{Lux, f32consts::LX};
+use dim::si::{Lux, f32consts::{LX, A, OHM}};
 use core::f32::NAN;
 
 trait CalculateIlluminance {
@@ -49,6 +49,9 @@ pub async fn output_task(power: pac::POWER, mut ina219: INA219<I2cDevice>, mut a
     if let Err(e) = ina219.set_adc_mode(ADCMode::SampleMode128).await {
         // TODO: Add defmt to I2cBusDevice
         error!("failed to set ina219 mode: {:?}", defmt::Debug2Format(&e));
+    }
+    if let Err(e) = ina219.set_current_range(3.2*A, 0.1*OHM).await {
+        error!("failed to set ina219 calibration: {:?}", defmt::Debug2Format(&e));
     }
     let mut vbus_timer: EventTimer = EventTimer::new();
     loop {

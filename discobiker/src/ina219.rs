@@ -1,7 +1,9 @@
 use embedded_hal_async::i2c;
 use modular_bitfield::prelude::*;
+use defmt::*;
 extern crate dimensioned as dim;
-use dim::si::{Volt, f32consts::V};
+use dim::si::{Volt, Ampere, Ohm};
+use dim::si::f32consts::{V, A, OHM};
 use dim::f32prefixes::*;
 
 use byteorder::{BigEndian, ByteOrder, LittleEndian};
@@ -23,7 +25,7 @@ enum BusVoltageRange {
     V16 = 0,
     V32 = 1,
 }
-#[derive(Copy, Clone, BitfieldSpecifier)]
+#[derive(Copy, Clone, BitfieldSpecifier, Debug, Format)]
 #[bits = 2]
 enum Gain {
     Full = 0,
@@ -36,6 +38,20 @@ impl Gain {
     pub const mV80: Gain = Gain::Half;
     pub const mV160: Gain = Gain::Quarter;
     pub const mV320: Gain = Gain::Eighth;
+
+    pub fn for_max_voltage(max_voltage: Volt<f32>) -> Option<Self> {
+        if max_voltage < 40.*MILLI*V {
+            Some(Self::mV40)
+        } else if max_voltage < 80.*MILLI*V {
+            Some(Self::mV80)
+        } else if max_voltage <= 160.*MILLI*V {
+            Some(Self::mV160)
+        } else if max_voltage <= 320.*MILLI*V {
+            Some(Self::mV320)
+        } else {
+            None
+        }
+    }
 }
 #[derive(Copy, Clone, BitfieldSpecifier)]
 #[bits = 4]
@@ -135,6 +151,20 @@ where
                 config
             }
         }.shunt_gain())
+    }
+
+    pub async fn set_current_range(&mut self, max_current: Ampere<f32>, shunt_resistance: Ohm<f32>) -> Result<(), E> {
+        // 1. Select gain
+        let max_vshunt: Volt<f32> = max_current * shunt_resistance;
+        let desired_gain = Gain::for_max_voltage(max_vshunt).unwrap_or(Gain::mV320);
+
+        let desired_current_lsb: Ampere<f32> = max_current / 32767.;
+        let cal = *(0.04096*V / (desired_current_lsb * shunt_resistance)) as u16;
+        let actual_current_lsb: Ampere<f32> = 0.04096*V / ((cal as f32) * shunt_resistance);
+        info!("requested max current = {:?}", Debug2Format(&max_current));
+        info!("optimal gain setting {:?}", Debug2Format(&desired_gain));
+        info!("calculated desired current LSB {:?} calibration {:?} actual current LSB {:?}", Debug2Format(&desired_current_lsb), Debug2Format(&cal), Debug2Format(&actual_current_lsb));
+        Ok(())
     }
 
     pub async fn set_adc_mode(&mut self, mode: ADCMode) -> Result<(), E> {
