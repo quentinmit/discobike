@@ -290,6 +290,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "dimensioned"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a0b0a86c5d31c93238ff4b694fa31f3acdf67440770dc314c57d90e433914397"
+dependencies = [
+ "generic-array 0.14.5",
+ "num-traits",
+ "typenum",
+]
+
+[[package]]
 name = "discobiker"
 version = "0.1.0"
 dependencies = [
@@ -300,6 +311,7 @@ dependencies = [
  "critical-section",
  "defmt",
  "defmt-rtt",
+ "dimensioned",
  "embassy",
  "embassy-embedded-hal",
  "embassy-nrf",

@@ -4,16 +4,26 @@ use apds9960::{Apds9960, LightData};
 use embassy::time::{Duration, Instant, Timer};
 use embedded_hal_async::i2c;
 use embassy_nrf::pac;
-use core::cmp::max;
 use crate::I2cDevice;
-use uom::si::{quantities::Illuminance, illuminance::lux};
+extern crate dimensioned as dim;
+use dim::si::{Lux, f32consts::LX};
+use core::f32::NAN;
 
 trait CalculateIlluminance {
-    fn calculate_lux(&self) -> Illuminance<f32>;
+    fn calculate_lux(&self) -> Lux<f32>;
 }
 impl CalculateIlluminance for LightData {
-    fn calculate_lux(&self) -> Illuminance<f32> {
-        Illuminance::new::<lux>((-0.32466 * self.red as f32) + (1.57837 * self.green as f32) + (-0.73191 * self.blue as f32))
+    fn calculate_lux(&self) -> Lux<f32> {
+        ((-0.32466 * self.red as f32) + (1.57837 * self.green as f32) + (-0.73191 * self.blue as f32)) * LX
+    }
+}
+
+#[inline]
+pub fn max<T: PartialOrd>(a: T, b: T) -> T {
+    if a > b {
+        a
+    } else {
+        b
     }
 }
 
@@ -68,8 +78,9 @@ pub async fn output_task(power: pac::POWER, mut ina219: INA219<I2cDevice>, mut a
         // 3.5 counts/lux in the c channel according to datasheet
         let lux_value = color.map(
             |color|
-            color.calculate_lux().max(
-                Illuminance::new::<lux>(color.clear as f32/3.5)
+            max(
+                color.calculate_lux(),
+                color.clear as f32/(3.5/LX)
             )
         ); // If C is overloaded, use RGB
 

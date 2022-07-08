@@ -1,7 +1,8 @@
 use embedded_hal_async::i2c;
 use modular_bitfield::prelude::*;
-use uom::si::f32::ElectricPotential;
-use uom::si::electric_potential::{volt, millivolt, microvolt};
+extern crate dimensioned as dim;
+use dim::si::{Volt, f32consts::V};
+use dim::f32prefixes::*;
 
 use byteorder::{BigEndian, ByteOrder, LittleEndian};
 
@@ -114,15 +115,15 @@ where
             last_config: None,
         }
     }
-    pub async fn get_bus_voltage(&mut self) -> Result<ElectricPotential, E> {
+    pub async fn get_bus_voltage(&mut self) -> Result<Volt<f32>, E> {
         let v: BusVoltage = self.read_register(Register::BusVoltage).await?.into();
         // LSB = 4 mV
-        Ok(ElectricPotential::new::<millivolt>(v.bus_voltage() as f32 * 4.0))
+        Ok(v.bus_voltage() as f32 * 4.0 * MILLI * V)
     }
-    pub async fn get_shunt_voltage(&mut self) -> Result<ElectricPotential, E> {
+    pub async fn get_shunt_voltage(&mut self) -> Result<Volt<f32>, E> {
         let v = self.read_register(Register::ShuntVoltage).await? as i16;
         // LSB = 10 µV
-        Ok(ElectricPotential::new::<microvolt>(v as f32 * 10.0))
+        Ok(v as f32 * 10.0 * MICRO * V)
     }
 
     pub async fn set_adc_mode(&mut self, mode: ADCMode) -> Result<(), E> {
