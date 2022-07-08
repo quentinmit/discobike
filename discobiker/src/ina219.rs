@@ -118,6 +118,9 @@ pub struct INA219<I2C> {
     i2c: I2C,
     address: u8,
     last_config: Option<Configuration>,
+    last_calibration: Option<u16>,
+    // Need to save this to convert back.
+    shunt_resistance: Option<Ohm<f32>>,
 }
 
 impl<I2C, E> INA219<I2C>
@@ -129,6 +132,8 @@ where
             i2c,
             address,
             last_config: None,
+            last_calibration: None,
+            shunt_resistance: None,
         }
     }
     pub async fn get_bus_voltage(&mut self) -> Result<Volt<f32>, E> {
@@ -142,6 +147,12 @@ where
         Ok(v as f32 * 10.0 * MICRO * V)
     }
 
+    pub async fn get_current(&mut self) -> Result<Option<Ampere<f32>>, E> {
+        let v = self.read_register(Register::Current).await? as i16;
+        let lsb = self.current_lsb().await?;
+        Ok(lsb.map(|lsb| (v as f32) * lsb))
+    }
+
     async fn gain(&mut self) -> Result<Gain, E> {
         Ok(match self.last_config {
             Some(c) => c,
@@ -151,6 +162,23 @@ where
                 config
             }
         }.shunt_gain())
+    }
+
+    async fn current_lsb(&mut self) -> Result<Option<Ampere<f32>>, E> {
+        let cal = match self.last_calibration {
+            Some(c) => c,
+            None => {
+                let c = self.read_register(Register::Calibration).await?;
+                self.last_calibration = Some(c);
+                c
+            }
+        };
+        Ok(
+            (if cal != 0 { Some(cal) } else { None })
+            .and_then(|cal|
+                      self.shunt_resistance.map(|r| 0.04096*V / ((cal as f32) * r))
+            )
+        )
     }
 
     pub async fn set_current_range(&mut self, max_current: Ampere<f32>, shunt_resistance: Ohm<f32>) -> Result<(), E> {
@@ -165,6 +193,8 @@ where
         info!("optimal gain setting {:?}", Debug2Format(&desired_gain));
         info!("calculated desired current LSB {=f32} µA calibration {=u16} actual current LSB {=f32} µA", desired_current_lsb/(MICRO*A), cal, actual_current_lsb/(MICRO*A));
         self.write_register(Register::Calibration, cal).await?;
+        self.last_calibration = Some(cal);
+        self.shunt_resistance = Some(shunt_resistance);
         Ok(())
     }
 
