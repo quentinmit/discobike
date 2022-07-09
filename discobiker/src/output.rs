@@ -4,6 +4,7 @@ use apds9960::{Apds9960, LightData};
 use embassy::time::{Duration, Instant, Timer};
 use embedded_hal_async::i2c;
 use embassy_nrf::pac;
+use embassy_nrf::wdt::WatchdogHandle;
 use crate::I2cDevice;
 extern crate dimensioned as dim;
 use dim::si::{Lux, f32consts::{LX, A, OHM}};
@@ -44,7 +45,7 @@ impl EventTimer {
 }
 
 #[embassy::task]
-pub async fn output_task(power: pac::POWER, mut ina219: INA219<I2cDevice>, mut apds9960: Apds9960<I2cDevice>)
+pub async fn output_task(mut wdt_handle: WatchdogHandle, power: pac::POWER, mut ina219: INA219<I2cDevice>, mut apds9960: Apds9960<I2cDevice>)
 {
     if let Err(e) = ina219.set_adc_mode(ADCMode::SampleMode128).await {
         // TODO: Add defmt to I2cBusDevice
@@ -56,6 +57,8 @@ pub async fn output_task(power: pac::POWER, mut ina219: INA219<I2cDevice>, mut a
     let mut vbus_timer: EventTimer = EventTimer::new();
     loop {
         let now = Instant::now();
+
+        wdt_handle.pet();
 
         let vext = ina219.get_bus_voltage().await;
 

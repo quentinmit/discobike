@@ -20,6 +20,7 @@ use embassy_nrf::interrupt::Priority;
 use embassy_nrf::peripherals;
 use embassy_nrf::peripherals::{P0_13, SAADC, TWISPI0};
 use embassy_nrf::twim::{self, Twim};
+use embassy_nrf::wdt;
 
 use embassy_embedded_hal::shared_bus::i2c::I2cBusDevice;
 use embassy::mutex::Mutex;
@@ -225,6 +226,26 @@ async fn blinker(mut led: Output<'static, PinLed>, interval: Duration) {
 
 type I2cDevice = I2cBusDevice::<'static, ThreadModeRawMutex, Twim<'static, TWISPI0>>;
 
+fn start_wdt(p_wdt: peripherals::WDT) -> wdt::WatchdogHandle {
+    let mut config = wdt::Config::default();
+    config.timeout_ticks = 32768 * 5; // 5 seconds
+
+    // This is needed for `probe-run` to be able to catch the panic message
+    // in the WDT interrupt. The core resets 2 ticks after firing the interrupt.
+    config.run_during_debug_halt = false;
+
+    let (_wdt, [mut handle]) = match wdt::Watchdog::try_new(p_wdt, config) {
+        Ok(x) => x,
+        Err(_) => {
+            info!("Watchdog already enabled; first boot after DFU? Waiting for it to timeout...");
+            // TODO: neopixel.fill(neopixel.Color(0x11, 0, 0x11, 0));
+            // TODO: neopixel.show();
+            loop {}
+        }
+    };
+    handle
+}
+
 #[entry]
 fn main() -> ! {
     info!("Hello World!");
@@ -232,6 +253,8 @@ fn main() -> ! {
     config.gpiote_interrupt_priority = Priority::P2;
     config.time_interrupt_priority = Priority::P2;
     let p = embassy_nrf::init(config);
+
+    let wdt_handle = start_wdt(p.WDT);
 
     let sdconfig = nrf_softdevice::Config {
         clock: Some(raw::nrf_clock_lf_cfg_t {
@@ -298,7 +321,7 @@ fn main() -> ! {
     executor.run(|spawner| {
         unwrap!(spawner.spawn(softdevice_task(sd)));
         unwrap!(spawner.spawn(bluetooth_task(sd)));
-        unwrap!(spawner.spawn(output::output_task(power, ina219_dev, apds9960)));
+        unwrap!(spawner.spawn(output::output_task(wdt_handle, power, ina219_dev, apds9960)));
         unwrap!(spawner.spawn(adc_task(saadc, pin_vbat, Duration::from_millis(500))));
         #[cfg(feature = "mdbt50q")]
         unwrap!(spawner.spawn(blinker(led, Duration::from_millis(300))));
