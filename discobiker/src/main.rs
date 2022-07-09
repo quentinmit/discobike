@@ -26,7 +26,7 @@ use embassy_embedded_hal::shared_bus::i2c::I2cBusDevice;
 use drogue_device::drivers::led::neopixel::rgbw::{NeoPixelRgbw, GREEN};
 
 use nrf_softdevice::ble::{gatt_server, peripheral};
-use nrf_softdevice::{raw, Softdevice};
+use nrf_softdevice::{raw, Softdevice, ble::Connection};
 use nrf_softdevice_defmt_rtt as _;
 use panic_probe as _;
 
@@ -110,13 +110,13 @@ define_pin!(Led, P0_13);
 // 0x77 - BMP280 Temperature + Pressure
 
 #[nrf_softdevice::gatt_service(uuid = "180f")]
-struct BatteryService {
+pub struct BatteryService {
     #[characteristic(uuid = "2a19", read, notify)]
     battery_level: u8,
 }
 
 #[nrf_softdevice::gatt_server]
-struct Server {
+pub struct Server {
     bas: BatteryService,
 }
 
@@ -125,11 +125,15 @@ async fn softdevice_task(sd: &'static Softdevice) {
     sd.run().await;
 }
 
-static SERVER: ThreadModeMutex<RefCell<Option<Server>>> = ThreadModeMutex::new(RefCell::new(None));
+static SERVER: ThreadModeMutex<RefCell<Option<&Server>>> = ThreadModeMutex::new(RefCell::new(None));
+static SERVER_FOREVER: Forever<Server> = Forever::new();
 
 #[embassy::task]
-async fn bluetooth_task(sd: &'static Softdevice) {
-    let server: Server = unwrap!(gatt_server::register(sd));
+async fn bluetooth_task(
+    spawner: Spawner,
+    sd: &'static Softdevice,
+) {
+    let server: &Server = SERVER_FOREVER.put(unwrap!(gatt_server::register(sd)));
 
     let v = unwrap!(server.bas.battery_level_get());
     info!("Initial battery level: {=u8}", v);
@@ -158,20 +162,30 @@ async fn bluetooth_task(sd: &'static Softdevice) {
         };
         let conn = unwrap!(peripheral::advertise_connectable(sd, adv, &config).await);
 
-        info!("advertising done!");
-        if let Some(server) = SERVER.borrow().borrow().as_ref() {
-            // Run the GATT server on the connection. This returns when the connection gets disconnected.
-            let res = gatt_server::run(&conn, server, |e| match e {
-                ServerEvent::Bas(_) => {}
-            })
-            .await;
-
-            if let Err(e) = res {
-                info!("gatt_server run exited with error: {:?}", e);
-            }
+        defmt::debug!("connection established");
+        if let Err(e) = spawner.spawn(gatt_server_task(sd, conn, server)) {
+            defmt::warn!("Error spawning gatt task: {:?}", e);
         }
     }
 }
+
+#[embassy::task(pool_size = "4")]
+pub async fn gatt_server_task(
+    sd: &'static Softdevice,
+    conn: Connection,
+    server: &'static Server,
+) {
+    // Run the GATT server on the connection. This returns when the connection gets disconnected.
+    let res = gatt_server::run(&conn, server, |e| match e {
+        ServerEvent::Bas(_) => {}
+    })
+        .await;
+
+    if let Err(e) = res {
+        info!("gatt_server run exited with error: {:?}", e);
+    }
+}
+
 
 #[embassy::task]
 async fn adc_task(psaadc: SAADC, pin_vbat: PinVbat, interval: Duration) {
@@ -313,7 +327,7 @@ async fn main(spawner: Spawner, p: Peripherals) {
     let apds9960 = Apds9960::new(I2cBusDevice::new(i2c_bus));
 
     unwrap!(spawner.spawn(softdevice_task(sd)));
-    unwrap!(spawner.spawn(bluetooth_task(sd)));
+    unwrap!(spawner.spawn(bluetooth_task(spawner, sd)));
     unwrap!(spawner.spawn(output::output_task(wdt_handle, power, ina219_dev, apds9960)));
     unwrap!(spawner.spawn(adc_task(saadc, pin_vbat, Duration::from_millis(500))));
     #[cfg(feature = "mdbt50q")]
