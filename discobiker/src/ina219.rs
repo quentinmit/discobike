@@ -175,7 +175,7 @@ where
         };
         Ok(
             self.shunt_resistance.zip(
-                (if cal != 0 { Some(cal) } else { None })
+                if cal != 0 { Some(cal) } else { None }
             ).map(|(r, cal)| 0.04096*V / ((cal as f32) * r))
         )
     }

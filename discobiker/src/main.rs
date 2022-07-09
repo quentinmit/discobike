@@ -2,42 +2,35 @@
 #![no_main]
 #![feature(type_alias_impl_trait)]
 
-mod csmutex;
-
 use core::cell::RefCell;
 use core::mem;
-use cortex_m_rt::entry;
 use defmt::*;
 use embassy::blocking_mutex::ThreadModeMutex;
-use embassy::executor::{Executor, Spawner};
+use embassy::executor::Spawner;
 use embassy::time::{Duration, Timer};
 use embassy::util::Forever;
 use embassy_nrf as _;
-use embassy_nrf::{pac, saadc};
+use embassy_nrf::gpio::{Input, Level, Output, OutputDrive, Pull};
 use embassy_nrf::interrupt;
-use embassy_nrf::gpio::{Level, Pull, Input, Output, OutputDrive};
 use embassy_nrf::interrupt::Priority;
-use embassy_nrf::{peripherals, Peripherals};
 use embassy_nrf::peripherals::{P0_13, SAADC, TWISPI0};
 use embassy_nrf::twim::{self, Twim};
 use embassy_nrf::wdt;
+use embassy_nrf::{pac, saadc};
+use embassy_nrf::{peripherals, Peripherals};
 
-use embassy_embedded_hal::shared_bus::i2c::I2cBusDevice;
-use embassy::mutex::Mutex;
 use embassy::blocking_mutex::raw::ThreadModeRawMutex;
+use embassy::mutex::Mutex;
+use embassy_embedded_hal::shared_bus::i2c::I2cBusDevice;
 
-use drogue_device::{
-    drivers::led::neopixel::rgbw::{NeoPixelRgbw, GREEN},
-};
+use drogue_device::drivers::led::neopixel::rgbw::{NeoPixelRgbw, GREEN};
 
 use nrf_softdevice::ble::{gatt_server, peripheral};
 use nrf_softdevice::{raw, Softdevice};
 use nrf_softdevice_defmt_rtt as _;
 use panic_probe as _;
 
-use apds9960::{Apds9960, LightData};
-use embassy::time::Instant;
-use uom::si::{quantities::Illuminance, illuminance::lux};
+use apds9960::Apds9960;
 
 use paste::paste;
 
@@ -45,23 +38,21 @@ mod ina219;
 use crate::ina219::{INA219, INA219_ADDR};
 mod output;
 
-//use self::csmutex::CriticalSectionBusMutex;
-
 use num_traits::float::Float;
 
 type I2c = Twim<'static, TWISPI0>;
 
 macro_rules! define_pin {
-	  ($name:ident, $pin:ident) => {
+    ($name:ident, $pin:ident) => {
         paste! {
-		        type [<Pin $name>] = peripherals::$pin;
+                type [<Pin $name>] = peripherals::$pin;
             macro_rules! [<use_pin_ $name:snake>] {
                 ($pstruct:ident) => {
                     $pstruct.$pin
                 }
             }
         }
-	  };
+    };
 }
 
 // Pins
@@ -136,8 +127,7 @@ async fn softdevice_task(sd: &'static Softdevice) {
     sd.run().await;
 }
 
-static SERVER: ThreadModeMutex<RefCell<Option<Server>>> =
-    ThreadModeMutex::new(RefCell::new(None));
+static SERVER: ThreadModeMutex<RefCell<Option<Server>>> = ThreadModeMutex::new(RefCell::new(None));
 
 #[embassy::task]
 async fn bluetooth_task(sd: &'static Softdevice) {
@@ -174,9 +164,9 @@ async fn bluetooth_task(sd: &'static Softdevice) {
         if let Some(server) = SERVER.borrow().borrow().as_ref() {
             // Run the GATT server on the connection. This returns when the connection gets disconnected.
             let res = gatt_server::run(&conn, server, |e| match e {
-                ServerEvent::Bas(_) => {},
+                ServerEvent::Bas(_) => {}
             })
-                .await;
+            .await;
 
             if let Err(e) = res {
                 info!("gatt_server run exited with error: {:?}", e);
@@ -198,15 +188,12 @@ async fn adc_task(psaadc: SAADC, pin_vbat: PinVbat, interval: Duration) {
         let vbat_percent = if vbat <= 0.0 {
             0
         } else {
-            123 - (
-                123.0 / (
-                    (1f32+
-                     (vbat/3.7).powi(80)
-                    ).powf(0.165)
-                )
-            ) as u8
+            123 - (123.0 / ((1f32 + (vbat / 3.7).powi(80)).powf(0.165))) as u8
         };
-        info!("vbat: {=i16} = {=f32} V = {=u8} %", &buf[0], vbat, vbat_percent);
+        info!(
+            "vbat: {=i16} = {=f32} V = {=u8} %",
+            &buf[0], vbat, vbat_percent
+        );
         if let Some(server) = SERVER.borrow().borrow().as_ref() {
             if let Err(e) = server.bas.battery_level_set(vbat_percent) {
                 error!("battery_level_set had error: {:?}", e);
@@ -227,7 +214,7 @@ async fn blinker(mut led: Output<'static, PinLed>, interval: Duration) {
     }
 }
 
-type I2cDevice = I2cBusDevice::<'static, ThreadModeRawMutex, Twim<'static, TWISPI0>>;
+type I2cDevice = I2cBusDevice<'static, ThreadModeRawMutex, Twim<'static, TWISPI0>>;
 
 fn start_wdt(p_wdt: peripherals::WDT) -> wdt::WatchdogHandle {
     let mut config = wdt::Config::default();
@@ -319,7 +306,7 @@ async fn main(spawner: Spawner, p: Peripherals) {
     let irq = interrupt::take!(SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0);
     let i2c = Twim::new(p.TWISPI0, irq, use_pin_sda!(p), use_pin_scl!(p), twimconfig);
 
-    static I2C_BUS: Forever<Mutex::<ThreadModeRawMutex, Twim<TWISPI0>>> = Forever::new();
+    static I2C_BUS: Forever<Mutex<ThreadModeRawMutex, Twim<TWISPI0>>> = Forever::new();
     let i2c_bus = Mutex::<ThreadModeRawMutex, _>::new(i2c);
     let i2c_bus = I2C_BUS.put(i2c_bus);
 

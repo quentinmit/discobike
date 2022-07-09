@@ -2,13 +2,11 @@ use defmt::*;
 use crate::ina219::{INA219, ADCMode};
 use apds9960::{Apds9960, LightData};
 use embassy::time::{Duration, Instant, Timer};
-use embedded_hal_async::i2c;
 use embassy_nrf::pac;
 use embassy_nrf::wdt::WatchdogHandle;
 use crate::I2cDevice;
 extern crate dimensioned as dim;
 use dim::si::{Lux, f32consts::{LX, A, OHM}};
-use core::f32::NAN;
 
 trait CalculateIlluminance {
     fn calculate_lux(&self) -> Lux<f32>;
