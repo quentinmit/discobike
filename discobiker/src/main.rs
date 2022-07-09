@@ -58,6 +58,7 @@ macro_rules! define_pin {
 // 2* / P0.10
 // 3 / P1.11 - Gyro + Accel IRQ
 // 4 / P1.10 - Blue LED ("Conn")
+define_pin!(ConnLed, P1_10);
 // 5* / P1.08 - NeoPixel Connector (Propmaker)
 define_pin!(Underlight, P1_08);
 // 6* / P0.07 - IRQ (Propmaker)
