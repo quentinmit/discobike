@@ -70,6 +70,7 @@ define_pin!(Underlight, P1_08);
 // 6* / P0.07 - IRQ (Propmaker)
 // 7 / P1.02 - Button
 // 8 / P0.16 - NeoPixel
+define_pin!(NeoPixel, P0_16);
 // 9* / P0.26 - Button (Propmaker)
 // 10* / P0.27 - Power Enable (Propmaker)
 define_pin!(PowerEnable, P0_27);
