@@ -17,7 +17,7 @@ use embassy_nrf::{pac, saadc};
 use embassy_nrf::interrupt;
 use embassy_nrf::gpio::{Level, Pull, Input, Output, OutputDrive};
 use embassy_nrf::interrupt::Priority;
-use embassy_nrf::peripherals;
+use embassy_nrf::{peripherals, Peripherals};
 use embassy_nrf::peripherals::{P0_13, SAADC, TWISPI0};
 use embassy_nrf::twim::{self, Twim};
 use embassy_nrf::wdt;
@@ -119,8 +119,6 @@ define_pin!(Led, P0_13);
 // 0x44 - SHT30 Humidity
 // 0x6A - LSM6DS33 Gyro + Accel
 // 0x77 - BMP280 Temperature + Pressure
-
-static EXECUTOR: Forever<Executor> = Forever::new();
 
 #[nrf_softdevice::gatt_service(uuid = "180f")]
 struct BatteryService {
@@ -251,18 +249,20 @@ fn start_wdt(p_wdt: peripherals::WDT) -> wdt::WatchdogHandle {
     handle
 }
 
-#[entry]
-fn main() -> ! {
-    info!("Hello World!");
+fn config() -> embassy_nrf::config::Config {
     let mut config = embassy_nrf::config::Config::default();
     config.gpiote_interrupt_priority = Priority::P2;
     config.time_interrupt_priority = Priority::P2;
-    let p = embassy_nrf::init(config);
+    config
+}
 
+#[embassy::main(config = "config()")]
+async fn main(spawner: Spawner, p: Peripherals) {
+    info!("Hello World!");
     let mut neopixel = unwrap!(NeoPixelRgbw::<'_, _, 1>::new(p.PWM0, use_pin_neo_pixel!(p)));
-    //if let Err(e) = neopixel.set(&[GREEN]).await {
-    //    error!("failed to set neopixel on boot: {:?}", e);
-    //}
+    if let Err(e) = neopixel.set(&[GREEN]).await {
+        error!("failed to set neopixel on boot: {:?}", e);
+    }
 
     let wdt_handle = start_wdt(p.WDT);
 
@@ -327,13 +327,10 @@ fn main() -> ! {
 
     let apds9960 = Apds9960::new(I2cBusDevice::new(i2c_bus));
 
-    let executor = EXECUTOR.put(Executor::new());
-    executor.run(|spawner| {
-        unwrap!(spawner.spawn(softdevice_task(sd)));
-        unwrap!(spawner.spawn(bluetooth_task(sd)));
-        unwrap!(spawner.spawn(output::output_task(wdt_handle, power, ina219_dev, apds9960)));
-        unwrap!(spawner.spawn(adc_task(saadc, pin_vbat, Duration::from_millis(500))));
-        #[cfg(feature = "mdbt50q")]
-        unwrap!(spawner.spawn(blinker(led, Duration::from_millis(300))));
-    });
+    unwrap!(spawner.spawn(softdevice_task(sd)));
+    unwrap!(spawner.spawn(bluetooth_task(sd)));
+    unwrap!(spawner.spawn(output::output_task(wdt_handle, power, ina219_dev, apds9960)));
+    unwrap!(spawner.spawn(adc_task(saadc, pin_vbat, Duration::from_millis(500))));
+    #[cfg(feature = "mdbt50q")]
+    unwrap!(spawner.spawn(blinker(led, Duration::from_millis(300))));
 }
