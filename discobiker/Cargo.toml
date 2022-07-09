@@ -16,7 +16,6 @@ embassy-embedded-hal = "0.1.0"
 cortex-m        = { version = "0.7.3" }
 cortex-m-rt = "0.7.0"
 defmt = { version = "0.3", features = [] }
-defmt-rtt = "0.3"
 nrf-softdevice-defmt-rtt = { version = "0.1.0" }
 panic-probe = { version = "0.3", features= ["print-defmt"] }
 nrf-softdevice = { version = "0.1.0", features = ["defmt", "nrf52840", "s140", "ble-peripheral", "ble-central", "ble-gatt-server", "critical-section-impl"] }
@@ -28,8 +27,6 @@ futures = { version = "0.3.5", default-features = false, features = ["async-awai
 fixed = "1.2.0"
 heapless = "0.7.1"
 num-traits = { version = "0.2.14", default-features = false, features = ["libm"] }
-ina219 = "0.1.0"
-shared-bus = "0.2.4"
 critical-section = "0.2.7"
 modular-bitfield = "0.11.2"
 byteorder = { version = "1.4.3", default-features = false }
@@ -40,7 +37,6 @@ dimensioned = { version = "0.8.0", default-features = false }
 paste = "1.0.7"
 drogue-device = { version = "0.1.0", default-features = false, features = ["defmt", "time", "neopixel", "nrf"] }
 ector = { version = "0.1.0", default-features = false }
-reqwless = { version = "0.1", features = ["defmt"] }
 
 [patch.crates-io]
 embassy = { git = "https://github.com/embassy-rs/embassy" }
