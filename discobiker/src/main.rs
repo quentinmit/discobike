@@ -13,7 +13,7 @@ use embassy_nrf as _;
 use embassy_nrf::gpio::{Input, Level, Output, OutputDrive, Pull};
 use embassy_nrf::interrupt;
 use embassy_nrf::interrupt::Priority;
-use embassy_nrf::peripherals::{P0_13, SAADC, TWISPI0};
+use embassy_nrf::peripherals::{SAADC, TWISPI0};
 use embassy_nrf::twim::{self, Twim};
 use embassy_nrf::wdt;
 use embassy_nrf::{pac, saadc};
@@ -39,8 +39,6 @@ use crate::ina219::{INA219, INA219_ADDR};
 mod output;
 
 use num_traits::float::Float;
-
-type I2c = Twim<'static, TWISPI0>;
 
 macro_rules! define_pin {
     ($name:ident, $pin:ident) => {
@@ -224,7 +222,7 @@ fn start_wdt(p_wdt: peripherals::WDT) -> wdt::WatchdogHandle {
     // in the WDT interrupt. The core resets 2 ticks after firing the interrupt.
     config.run_during_debug_halt = false;
 
-    let (_wdt, [mut handle]) = match wdt::Watchdog::try_new(p_wdt, config) {
+    let (_wdt, [handle]) = match wdt::Watchdog::try_new(p_wdt, config) {
         Ok(x) => x,
         Err(_) => {
             info!("Watchdog already enabled; first boot after DFU? Waiting for it to timeout...");

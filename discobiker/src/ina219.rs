@@ -33,6 +33,7 @@ enum Gain {
     Quarter = 2,
     Eighth = 3,
 }
+#[allow(non_upper_case_globals)]
 impl Gain {
     pub const mV40: Gain = Gain::Full;
     pub const mV80: Gain = Gain::Half;
