@@ -34,6 +34,8 @@ use apds9960::{Apds9960, LightData};
 use embassy::time::Instant;
 use uom::si::{quantities::Illuminance, illuminance::lux};
 
+use paste::paste;
+
 mod ina219;
 use crate::ina219::{INA219, INA219_ADDR};
 mod output;
@@ -44,7 +46,73 @@ use num_traits::float::Float;
 
 type I2c = Twim<'static, TWISPI0>;
 
-type PIN_VBAT = peripherals::P0_29;
+macro_rules! define_pin {
+	  ($name:ident, $pin:ident) => {
+        paste! {
+		        type [<Pin $name>] = peripherals::$pin;
+            macro_rules! [<use_pin_ $name:snake>] {
+                ($pstruct:ident) => {
+                    $pstruct.$pin
+                }
+            }
+        }
+	  };
+}
+
+// Pins
+// * = exposed on header
+// 2* / P0.10
+// 3 / P1.11 - Gyro + Accel IRQ
+// 4 / P1.10 - Blue LED ("Conn")
+// 5* / P1.08 - NeoPixel Connector (Propmaker)
+define_pin!(Underlight, P1_08);
+// 6* / P0.07 - IRQ (Propmaker)
+// 7 / P1.02 - Button
+// 8 / P0.16 - NeoPixel
+// 9* / P0.26 - Button (Propmaker)
+// 10* / P0.27 - Power Enable (Propmaker)
+define_pin!(PowerEnable, P0_27);
+// 11* / P0.06 - Red LED (Propmaker)
+define_pin!(TailC, P0_06);
+// 12* / P0.08 - Green LED (Propmaker)
+define_pin!(TailL, P0_08);
+// 13* / P1.09 - Blue LED (Propmaker)
+// 13* / P1.09 - Red LED
+define_pin!(TailR, P1_09);
+// 34 / P0.00 - PDM microphone data
+// 35 / P0.01 - PDM microphone clock
+// 36 / P1.00 - APDS9960 Light Gesture Proximity IRQ
+// 14 / A0* / P0.04 - Audio Amp Input (Propmaker)
+// 15 / A1* / P0.05
+define_pin!(Rst, P0_05);
+// 16 / A2* / P0.30
+// 17 / A3* / P0.28
+// 18 / A4* / P0.02
+// 19 / A5* / P0.03 - Headlight dim
+define_pin!(HeadlightDim, P0_03);
+// 20 / A6 / P0.29 - VOLTAGE_MONITOR (100K+100K voltage divider)
+define_pin!(Vbat, P0_29);
+// 21 / A7 / ???
+// 22 / SDA* / P0.12 - I2C data
+define_pin!(Sda, P0_12);
+// 23 / SCL* / P0.11 - I2C clock
+define_pin!(Scl, P0_11);
+// 24 / MI* / P0.15
+// 25 / MO* / P0.13
+#[cfg(feature = "mdbt50q")]
+define_pin!(Led, P0_13);
+// 26 / SCK* / P0.14
+// 0 / TX* / P0.25
+// 1 / RX* / P0.24
+// I2C devices
+// 0x18 - LIS3DH Accelerometer (on propmaker)
+// 0x1C - LIS3MDL Magnetometer
+// 0x39 - APDS9960 Light Gesture Proximity
+// 0x3C - SSD1315 OLED Display
+// 0x40 - INA219 Current sensor (on INA)
+// 0x44 - SHT30 Humidity
+// 0x6A - LSM6DS33 Gyro + Accel
+// 0x77 - BMP280 Temperature + Pressure
 
 static EXECUTOR: Forever<Executor> = Forever::new();
 
@@ -114,7 +182,7 @@ async fn bluetooth_task(sd: &'static Softdevice) {
 }
 
 #[embassy::task]
-async fn adc_task(psaadc: SAADC, pin_vbat: PIN_VBAT, interval: Duration) {
+async fn adc_task(psaadc: SAADC, pin_vbat: PinVbat, interval: Duration) {
     let config = saadc::Config::default();
     let channel_config = saadc::ChannelConfig::single_ended(pin_vbat);
     let mut saadc = saadc::Saadc::new(psaadc, interrupt::take!(SAADC), config, [channel_config]);
@@ -144,8 +212,9 @@ async fn adc_task(psaadc: SAADC, pin_vbat: PIN_VBAT, interval: Duration) {
     }
 }
 
+#[cfg(feature = "mdbt50q")]
 #[embassy::task]
-async fn blinker(mut led: Output<'static, P0_13>, interval: Duration) {
+async fn blinker(mut led: Output<'static, PinLed>, interval: Duration) {
     loop {
         led.set_high();
         Timer::after(interval).await;
@@ -200,10 +269,11 @@ fn main() -> ! {
 
     let sd = Softdevice::enable(&sdconfig);
 
-    let led = Output::new(p.P0_13, Level::Low, OutputDrive::Standard);
+    #[cfg(feature = "mdbt50q")]
+    let led = Output::new(use_pin_led!(p), Level::Low, OutputDrive::Standard);
 
     let saadc = p.SAADC;
-    let pin_vbat = p.P0_29;
+    let pin_vbat = use_pin_vbat!(p);
 
     // Requires embassy-nrf/unstable-pac
     // TODO: Replace with safe API when one exists.
@@ -214,7 +284,7 @@ fn main() -> ! {
     twimconfig.sda_pullup = true;
     twimconfig.scl_pullup = true;
     let irq = interrupt::take!(SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0);
-    let i2c = Twim::new(p.TWISPI0, irq, p.P0_12, p.P0_11, twimconfig);
+    let i2c = Twim::new(p.TWISPI0, irq, use_pin_sda!(p), use_pin_scl!(p), twimconfig);
 
     static I2C_BUS: Forever<Mutex::<ThreadModeRawMutex, Twim<TWISPI0>>> = Forever::new();
     let i2c_bus = Mutex::<ThreadModeRawMutex, _>::new(i2c);
@@ -230,6 +300,7 @@ fn main() -> ! {
         unwrap!(spawner.spawn(bluetooth_task(sd)));
         unwrap!(spawner.spawn(output::output_task(power, ina219_dev, apds9960)));
         unwrap!(spawner.spawn(adc_task(saadc, pin_vbat, Duration::from_millis(500))));
+        #[cfg(feature = "mdbt50q")]
         unwrap!(spawner.spawn(blinker(led, Duration::from_millis(300))));
     });
 }

@@ -24,7 +24,7 @@
 // A2* / P0.30
 // A3* / P0.28
 // A4* / P0.02
-// A5* / P0.03
+// A5* / P0.03 - Headlight dim
 // A6 / P0.29 - VOLTAGE_MONITOR (100K+100K voltage divider)
 // SCK* / P0.14
 // MO* / P0.13

@@ -329,6 +329,7 @@ dependencies = [
  "nrf-softdevice-s140",
  "num-traits",
  "panic-probe",
+ "paste",
  "shared-bus",
  "uom",
 ]
@@ -804,6 +805,12 @@ dependencies = [
  "cortex-m 0.7.5",
  "defmt",
 ]
+
+[[package]]
+name = "paste"
+version = "1.0.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0c520e05135d6e763148b6426a837e239041653ba7becd2e538c076c738025fc"
 
 [[package]]
 name = "pin-project"
