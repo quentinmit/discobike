@@ -26,6 +26,10 @@ use embassy_embedded_hal::shared_bus::i2c::I2cBusDevice;
 use embassy::mutex::Mutex;
 use embassy::blocking_mutex::raw::ThreadModeRawMutex;
 
+use drogue_device::{
+    drivers::led::neopixel::rgbw::{NeoPixelRgbw, GREEN},
+};
+
 use nrf_softdevice::ble::{gatt_server, peripheral};
 use nrf_softdevice::{raw, Softdevice};
 use nrf_softdevice_defmt_rtt as _;
@@ -254,6 +258,11 @@ fn main() -> ! {
     config.gpiote_interrupt_priority = Priority::P2;
     config.time_interrupt_priority = Priority::P2;
     let p = embassy_nrf::init(config);
+
+    let mut neopixel = unwrap!(NeoPixelRgbw::<'_, _, 1>::new(p.PWM0, use_pin_neo_pixel!(p)));
+    //if let Err(e) = neopixel.set(&[GREEN]).await {
+    //    error!("failed to set neopixel on boot: {:?}", e);
+    //}
 
     let wdt_handle = start_wdt(p.WDT);
 

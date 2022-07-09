@@ -572,6 +572,7 @@ dependencies = [
  "embassy",
  "embassy-embedded-hal",
  "embassy-hal-common",
+ "embassy-nrf",
  "embedded-hal 0.2.7",
  "embedded-hal 1.0.0-alpha.8",
  "embedded-hal-async",
@@ -605,11 +606,11 @@ dependencies = [
 [[package]]
 name = "ector"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4b4610e75f4be0499d903428e34bae1d5680d235a20a8aec776d69002bddc332"
+source = "git+https://github.com/drogue-iot/ector.git#63c08489da17ff92c493f21411411ce5ddd6154a"
 dependencies = [
  "atomic-polyfill",
  "ector-macros",
+ "embassy",
  "embedded-hal 0.2.7",
  "embedded-hal 1.0.0-alpha.8",
  "embedded-hal-async",
@@ -619,8 +620,7 @@ dependencies = [
 [[package]]
 name = "ector-macros"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f9addbacfc1a24fe825be95f4dcc6211167fb9718f76df143953fd4841d980ac"
+source = "git+https://github.com/drogue-iot/ector.git#63c08489da17ff92c493f21411411ce5ddd6154a"
 dependencies = [
  "proc-macro2",
  "quote",

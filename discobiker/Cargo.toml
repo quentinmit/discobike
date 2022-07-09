@@ -38,7 +38,7 @@ apds9960 = { version = "0.1.0", default-features = false, features = ["async"] }
 embedded-hal-async = "0.1.0-alpha.1"
 dimensioned = { version = "0.8.0", default-features = false }
 paste = "1.0.7"
-drogue-device = { version = "0.1.0", default-features = false, features = ["defmt", "time", "neopixel"] }
+drogue-device = { version = "0.1.0", default-features = false, features = ["defmt", "time", "neopixel", "nrf"] }
 ector = { version = "0.1.0", default-features = false }
 reqwless = { version = "0.1", features = ["defmt"] }
 
@@ -55,3 +55,4 @@ apds9960 = { git = "https://github.com/quentinmit/apds9960-rs", branch = "async"
 uom = { git = "https://github.com/quentinmit/uom", branch = "photometric" }
 drogue-device = { git = "https://github.com/drogue-iot/drogue-device" }
 reqwless = { git = "https://github.com/drogue-iot/reqwless" }
+ector = { git = "https://github.com/drogue-iot/ector.git" }
