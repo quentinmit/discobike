@@ -39,6 +39,7 @@ drogue-device = { version = "0.1.0", default-features = false, features = ["defm
 ector = { version = "0.1.0", default-features = false }
 ssd1306 = { version = "0.7.0" }
 embedded-graphics = "0.7.1"
+display-interface = "0.4.1"
 
 [patch.crates-io]
 embassy = { git = "https://github.com/embassy-rs/embassy" }
@@ -54,4 +55,5 @@ uom = { git = "https://github.com/quentinmit/uom", branch = "photometric" }
 drogue-device = { git = "https://github.com/drogue-iot/drogue-device" }
 reqwless = { git = "https://github.com/drogue-iot/reqwless" }
 ector = { git = "https://github.com/drogue-iot/ector.git" }
-ssd1306 = { git = "https://github.com/simmsb/ssd1306.git" }
+ssd1306 = { git = "https://github.com/simmsb/ssd1306" }
+display-interface = { git = "https://github.com/simmsb/display-interface" }

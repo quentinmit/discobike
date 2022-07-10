@@ -1,8 +1,12 @@
+use defmt::*;
+use core::fmt;
+use embassy::time::{Duration, Timer};
 use embedded_graphics::prelude::*;
 
 use embedded_hal_async::i2c;
 
 use ssd1306::{prelude::*, I2CDisplayInterface, Ssd1306, size::DisplaySize, mode::BufferedGraphicsMode};
+use display_interface::DisplayError;
 
 use ector::{actor, Actor, Address, Inbox};
 
@@ -29,6 +33,13 @@ where
             .into_buffered_graphics_mode();
         Self { display }
     }
+
+    async fn run_display<M>(&mut self, mut inbox: &M) -> Result<(), DisplayError>
+    where M: Inbox<DisplayMessage>
+    {
+        self.display.init().await?;
+        Ok(())
+    }
 }
 
 #[actor]
@@ -36,14 +47,18 @@ impl<I2C, E, SIZE> Actor for Display<I2C, SIZE>
 where
     I2C: i2c::I2c<Error = E>,
     SIZE: DisplaySize,
+    E: fmt::Debug,
 {
     type Message<'m> = DisplayMessage;
 
     async fn on_mount<M>(&mut self, _: Address<DisplayMessage>, mut inbox: M)
     where M: Inbox<DisplayMessage>
     {
-        self.display.init().await.unwrap();
-
-        loop {}
+        loop {
+            if let Err(e) = self.run_display(&mut inbox).await {
+                error!("run_display failed: {:?}", Debug2Format(&e));
+            }
+            Timer::after(Duration::from_secs(1)).await;
+        }
     }
 }

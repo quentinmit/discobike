@@ -35,10 +35,13 @@ use apds9960::Apds9960;
 
 use paste::paste;
 
+use ector::spawn_actor;
+
 mod ina219;
 use crate::ina219::{INA219, INA219_ADDR};
 mod output;
 mod actors;
+use ssd1306::size::DisplaySize128x64;
 
 use num_traits::float::Float;
 
@@ -328,6 +331,11 @@ async fn main(spawner: Spawner, p: Peripherals) {
     let mut ina219_dev = INA219::new(I2cBusDevice::new(i2c_bus), INA219_ADDR);
 
     let apds9960 = Apds9960::new(I2cBusDevice::new(i2c_bus));
+
+    let display = spawn_actor!(
+        spawner, DISPLAY, actors::display::Display<I2cDevice, DisplaySize128x64>,
+        actors::display::Display::new(I2cBusDevice::new(i2c_bus), DisplaySize128x64)
+    );
 
     unwrap!(spawner.spawn(softdevice_task(sd)));
     unwrap!(spawner.spawn(bluetooth_task(spawner, sd)));

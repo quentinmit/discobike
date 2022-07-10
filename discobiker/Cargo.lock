@@ -515,6 +515,7 @@ dependencies = [
  "critical-section",
  "defmt",
  "dimensioned",
+ "display-interface",
  "drogue-device",
  "ector",
  "embassy",
@@ -1765,7 +1766,7 @@ dependencies = [
 [[package]]
 name = "ssd1306"
 version = "0.7.0"
-source = "git+https://github.com/simmsb/ssd1306.git#91c3fd64af376439217e8a6ad42f4f8d4a884362"
+source = "git+https://github.com/simmsb/ssd1306#91c3fd64af376439217e8a6ad42f4f8d4a884362"
 dependencies = [
  "display-interface",
  "display-interface-i2c",
