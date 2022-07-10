@@ -1,6 +1,7 @@
 #![no_std]
 #![no_main]
 #![feature(type_alias_impl_trait)]
+#![feature(generic_associated_types)]
 
 use core::cell::RefCell;
 use core::mem;
@@ -37,6 +38,7 @@ use paste::paste;
 mod ina219;
 use crate::ina219::{INA219, INA219_ADDR};
 mod output;
+mod actors;
 
 use num_traits::float::Float;
 

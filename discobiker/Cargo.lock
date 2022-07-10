@@ -521,6 +521,7 @@ dependencies = [
  "embassy-embedded-hal",
  "embassy-hal-common",
  "embassy-nrf",
+ "embedded-graphics",
  "embedded-hal 0.2.7",
  "embedded-hal-async",
  "embedded-storage",
@@ -535,7 +536,23 @@ dependencies = [
  "num-traits",
  "panic-probe",
  "paste",
+ "ssd1306",
  "uom",
+]
+
+[[package]]
+name = "display-interface"
+version = "0.4.1"
+source = "git+https://github.com/simmsb/display-interface#f2236aa105259745cfdf17fe8f70f40358f18ebb"
+
+[[package]]
+name = "display-interface-i2c"
+version = "0.4.0"
+source = "git+https://github.com/simmsb/display-interface#f2236aa105259745cfdf17fe8f70f40358f18ebb"
+dependencies = [
+ "display-interface",
+ "embedded-hal 0.2.7",
+ "embedded-hal-async",
 ]
 
 [[package]]
@@ -739,6 +756,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "embedded-graphics"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "750082c65094fbcc4baf9ba31583ce9a8bb7f52cadfb96f6164b1bc7f922f32b"
+dependencies = [
+ "az",
+ "byteorder",
+ "embedded-graphics-core",
+ "float-cmp",
+ "micromath",
+]
+
+[[package]]
+name = "embedded-graphics-core"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b8b1239db5f3eeb7e33e35bd10bd014e7b2537b17e071f726a09351431337cfa"
+dependencies = [
+ "az",
+ "byteorder",
+]
+
+[[package]]
 name = "embedded-hal"
 version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -882,6 +922,15 @@ dependencies = [
  "bytemuck",
  "half",
  "typenum",
+]
+
+[[package]]
+name = "float-cmp"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e1267f4ac4f343772758f7b1bdcbe767c218bbab93bb432acbf5162bbf85a6c4"
+dependencies = [
+ "num-traits",
 ]
 
 [[package]]
@@ -1157,6 +1206,12 @@ name = "memchr"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2dffe52ecf27772e601905b7522cb4ef790d2cc203488bbd0e2fe85fcb74566d"
+
+[[package]]
+name = "micromath"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc4010833aea396656c2f91ee704d51a6f1329ec2ab56ffd00bfd56f7481ea94"
 
 [[package]]
 name = "minimal-lexical"
@@ -1705,6 +1760,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c530c2b0d0bf8b69304b39fe2001993e267461948b890cd037d8ad4293fa1a0d"
 dependencies = [
  "lock_api",
+]
+
+[[package]]
+name = "ssd1306"
+version = "0.7.0"
+source = "git+https://github.com/simmsb/ssd1306.git#91c3fd64af376439217e8a6ad42f4f8d4a884362"
+dependencies = [
+ "display-interface",
+ "display-interface-i2c",
+ "embedded-graphics-core",
+ "embedded-hal 0.2.7",
+ "embedded-hal-async",
 ]
 
 [[package]]
