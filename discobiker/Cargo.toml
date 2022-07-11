@@ -40,6 +40,7 @@ ector = { version = "0.1.0", default-features = false }
 ssd1306 = { version = "0.7.0" }
 embedded-graphics = "0.7.1"
 display-interface = "0.4.1"
+arrayvec = { version = "0.7.2", default-features = false }
 
 [patch.crates-io]
 embassy = { git = "https://github.com/embassy-rs/embassy" }
