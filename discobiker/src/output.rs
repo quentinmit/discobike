@@ -1,5 +1,6 @@
 use defmt::*;
 use crate::ina219::{INA219, ADCMode};
+use crate::EventTimer;
 use apds9960::{Apds9960, LightData};
 use embassy::time::{Duration, Instant, Timer};
 use embassy_nrf::pac;
@@ -25,20 +26,6 @@ pub fn max<T: PartialOrd>(a: T, b: T) -> T {
         b
     } else {
         a
-    }
-}
-
-struct EventTimer {
-    last: Instant
-}
-impl EventTimer {
-    fn new() -> Self {
-        EventTimer{last: Instant::MIN}
-    }
-    fn update(&mut self, state: bool) {
-        if state {
-            self.last = Instant::now();
-        }
     }
 }
 

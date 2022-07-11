@@ -8,7 +8,7 @@ use core::mem;
 use defmt::*;
 use embassy::blocking_mutex::ThreadModeMutex;
 use embassy::executor::Spawner;
-use embassy::time::{Duration, Timer};
+use embassy::time::{Duration, Timer, Instant};
 use embassy::util::Forever;
 use embassy_nrf as _;
 use embassy_nrf::gpio::{Input, Level, Output, OutputDrive, Pull};
@@ -44,6 +44,9 @@ mod actors;
 use ssd1306::size::DisplaySize128x64;
 
 use num_traits::float::Float;
+
+use core::sync::atomic::*;
+use atomic_float::AtomicF32;
 
 macro_rules! define_pin {
     ($name:ident, $pin:ident) => {
@@ -133,6 +136,75 @@ async fn softdevice_task(sd: &'static Softdevice) {
 
 static SERVER: ThreadModeMutex<RefCell<Option<&Server>>> = ThreadModeMutex::new(RefCell::new(None));
 static SERVER_FOREVER: Forever<Server> = Forever::new();
+
+pub struct EventTimer {
+    last: Instant
+}
+impl EventTimer {
+    pub fn new() -> Self {
+        EventTimer{last: Instant::MIN}
+    }
+    pub fn update(&mut self, state: bool) {
+        if state {
+            self.last = Instant::now();
+        }
+    }
+}
+
+#[derive(PartialEq, Format)]
+enum HeadlightMode {
+    Off = 0,
+    Auto = 1,
+    Day = 2,
+    Night = 3,
+    Blink = 4,
+}
+
+#[derive(PartialEq, Format)]
+enum UnderlightMode {
+    Off = 0,
+    Auto = 1,
+    On = 2,
+    ForceOn = 3,
+}
+
+#[derive(PartialEq, Format)]
+enum Effect {
+    Solid = 0,
+    ColorWipe,
+    TheaterChase,
+    Rainbow,
+    TheaterChaseRainbow,
+    CylonBounce,
+    Fire,
+}
+
+pub struct DesiredState {
+    headlight_mode: HeadlightMode,
+    underlight_mode: UnderlightMode,
+    underlight_effect: Effect,
+    underlight_speed: AtomicI16,
+    underlight_brightness: AtomicU8,
+}
+
+pub struct ActualState {
+    headlight_mode: HeadlightMode,
+    headlight_brightness: AtomicF32,
+    taillight_brightness: AtomicF32,
+    display_on: AtomicBool,
+    vbus_detected: AtomicBool,
+
+    vbus_timer: EventTimer,
+    move_timer: EventTimer,
+    vext_timer: EventTimer,
+    vext_poll_timer: EventTimer,
+
+    // TODO: Use dim
+    vbat: AtomicF32,
+    vext: AtomicF32,
+    accel_mag: AtomicF32,
+    lux: AtomicU16,
+}
 
 #[embassy::task]
 async fn bluetooth_task(
