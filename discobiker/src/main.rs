@@ -6,6 +6,7 @@
 
 use core::cell::{Cell, RefCell};
 use core::mem;
+use core::fmt;
 use defmt::*;
 use embassy::blocking_mutex::ThreadModeMutex;
 use embassy::executor::Spawner;
@@ -156,8 +157,17 @@ impl EventTimer {
         }
     }
 }
+impl fmt::Display for EventTimer {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        if self.last == Instant::MIN {
+            core::write!(formatter, "NEVER")
+        } else {
+            core::write!(formatter, "{} s", (Instant::now() - Instant::MIN).as_secs())
+        }
+    }
+}
 
-#[derive(Copy, Clone, PartialEq, Format)]
+#[derive(Copy, Clone, PartialEq, Format, Debug)]
 enum HeadlightMode {
     Off = 0,
     Auto = 1,
@@ -166,7 +176,7 @@ enum HeadlightMode {
     Blink = 4,
 }
 
-#[derive(Copy, Clone, PartialEq, Format)]
+#[derive(Copy, Clone, PartialEq, Format, Debug)]
 enum UnderlightMode {
     Off = 0,
     Auto = 1,

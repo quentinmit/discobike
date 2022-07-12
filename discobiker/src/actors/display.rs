@@ -76,7 +76,7 @@ where
                         w.write_char('-')?;
                     }
                 } else {
-                    w.write_char('-');
+                    w.write_char('-')?;
                 };
             },
             Some(v) => {
@@ -136,6 +136,11 @@ where
             // Line 3: XXX°TXXX.XX°
             // Line 4: XXX.XXG    XXXXX lux
             // Line 5: Mode: Day XXX% XXs
+            buf.push_str_truncating("Mode: ");
+            core::write!(&mut buf, "{:?} {:3} {}", state.headlight_mode, state.headlight_brightness * 100.0, state.move_timer)?;
+            Text::with_baseline(&buf, Point::new(0, 5*line_height as i32), text_style, Baseline::Top)
+                .draw(&mut self.display)?;
+            buf.clear();
             info!("display flush start");
             self.display.flush().await?;
             info!("display flush end");
