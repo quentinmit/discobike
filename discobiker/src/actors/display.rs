@@ -6,7 +6,7 @@ use defmt::*;
 use embassy::time::{Duration, Timer};
 use embedded_graphics::prelude::*;
 use embedded_graphics::{
-    mono_font::{ascii::FONT_6X10, MonoTextStyleBuilder},
+    mono_font::{iso_8859_1::FONT_6X10, MonoTextStyleBuilder},
     pixelcolor::BinaryColor,
     text::{Baseline, Text},
 };
@@ -20,6 +20,7 @@ use ssd1306::{
 
 extern crate dimensioned as dim;
 use dim::si::{f32consts::{V, A, MPS2, LX}};
+use dim::traits::Dimensioned;
 
 use ector::{actor, Actor, Address, Inbox};
 
@@ -51,6 +52,42 @@ impl From<fmt::Error> for Error {
     }
 }
 
+trait WriteDim<T, W: Write> {
+    fn write_dim(self, w: &mut W, unit: T, width: usize, decimals: usize) -> fmt::Result;
+}
+
+impl <T, W> WriteDim<T, W> for Option<T>
+where
+    T: Dimensioned + core::ops::Div + core::ops::Mul,
+    <T as Dimensioned>::Value: PartialOrd<f32>,
+    <T as core::ops::Div>::Output: fmt::Display,
+    W: Write,
+{
+    fn write_dim(self, w: &mut W, unit: T, width: usize, decimals: usize) -> fmt::Result
+    {
+        match self {
+            None => {
+                for _ in 0..width-decimals-1 {
+                    w.write_char('-')?;
+                }
+                if decimals > 0 {
+                    w.write_char('.')?;
+                    for _ in 0..decimals {
+                        w.write_char('-')?;
+                    }
+                } else {
+                    w.write_char('-');
+                };
+            },
+            Some(v) => {
+                let decimals = if decimals > 0 && v.value_unsafe() < &0.0 { decimals - 1 } else { decimals };
+                core::write!(w, "{:0width$.precision$}", v/unit, width = width, precision = decimals)?;
+            }
+        };
+        Ok(())
+    }
+}
+
 // DisplaySize128x64
 impl<I2C, E, SIZE> Display<I2C, SIZE>
 where
@@ -75,28 +112,26 @@ where
             .text_color(BinaryColor::On)
             .build();
         const COLS: usize = 128 / 6;
+        let line_height = text_style.font.character_size.height;
         loop {
             self.display.clear();
             let mut buf = StaticString::<COLS>::new();
             let state = STATE.lock(|c| c.get());
             // Line 0: XX.XVext X.XXXA X.XXV
-            match state.vext {
-                None => buf.push_str_truncating("--.-Vext "),
-                Some(v) => core::write!(&mut buf, "{:04.1}Vext ", v / V)?
-            };
-            match state.current {
-                None => buf.push_str_truncating("-.---A "),
-                Some(v) => core::write!(&mut buf, "{:05.3}A ", v / A)?
-            };
-            match state.vbat {
-                None => buf.push_str_truncating("-.--"),
-                Some(v) => core::write!(&mut buf, "{:04.*}", if v < 0.0 * V { 1 } else { 2 }, v / V)?
-            };
+            state.vext.write_dim(&mut buf, V, 4, 1)?;
+            buf.push_str_truncating("Vext ");
+            state.current.write_dim(&mut buf, A, 5, 3)?;
+            buf.push_str_truncating("A ");
+            state.vbat.write_dim(&mut buf, V, 4, 2)?;
             buf.push_str_truncating(if state.vbus_detected { "V" } else { "v" });
             Text::with_baseline(&buf, Point::zero(), text_style, Baseline::Top)
                 .draw(&mut self.display)?;
             buf.clear();
             // Line 1: XXX°XXX° XXX.X°
+            buf.push_str_truncating("XXX°XXX° XXX.X°");
+            Text::with_baseline(&buf, Point::new(0, 1*line_height as i32), text_style, Baseline::Top)
+                .draw(&mut self.display)?;
+            buf.clear();
             // Line 2: XXXX.XXhPa XXX.XX'
             // Line 3: XXX°TXXX.XX°
             // Line 4: XXX.XXG    XXXXX lux
