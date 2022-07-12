@@ -42,6 +42,7 @@ embedded-graphics = "0.7.1"
 display-interface = "0.4.1"
 arrayvec = { version = "0.7.2", default-features = false }
 atomic_float = { version = "0.1.0", default-features = false }
+physical_constants = "0.4.1"
 
 [patch.crates-io]
 embassy = { git = "https://github.com/embassy-rs/embassy" }
@@ -59,3 +60,4 @@ reqwless = { git = "https://github.com/drogue-iot/reqwless" }
 ector = { git = "https://github.com/drogue-iot/ector.git" }
 ssd1306 = { git = "https://github.com/simmsb/ssd1306" }
 display-interface = { git = "https://github.com/simmsb/display-interface" }
+physical_constants = { git = "https://github.com/quentinmit/rust-physical_constants", branch = "no_std" }

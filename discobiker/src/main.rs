@@ -2,8 +2,9 @@
 #![no_main]
 #![feature(type_alias_impl_trait)]
 #![feature(generic_associated_types)]
+#![feature(cell_update)]
 
-use core::cell::RefCell;
+use core::cell::{Cell, RefCell};
 use core::mem;
 use defmt::*;
 use embassy::blocking_mutex::ThreadModeMutex;
@@ -21,6 +22,7 @@ use embassy_nrf::{pac, saadc};
 use embassy_nrf::{peripherals, Peripherals};
 
 use embassy::blocking_mutex::raw::ThreadModeRawMutex;
+use embassy::blocking_mutex::Mutex as BlockingMutex;
 use embassy::mutex::Mutex;
 use embassy_embedded_hal::shared_bus::i2c::I2cBusDevice;
 
@@ -47,6 +49,9 @@ use num_traits::float::Float;
 
 use core::sync::atomic::*;
 use atomic_float::AtomicF32;
+
+extern crate dimensioned as dim;
+use dim::si::{Volt, MeterPerSecond2, Lux, f32consts::{V, MPS2, LX}};
 
 macro_rules! define_pin {
     ($name:ident, $pin:ident) => {
@@ -137,11 +142,12 @@ async fn softdevice_task(sd: &'static Softdevice) {
 static SERVER: ThreadModeMutex<RefCell<Option<&Server>>> = ThreadModeMutex::new(RefCell::new(None));
 static SERVER_FOREVER: Forever<Server> = Forever::new();
 
+#[derive(Copy, Clone)]
 pub struct EventTimer {
     last: Instant
 }
 impl EventTimer {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         EventTimer{last: Instant::MIN}
     }
     pub fn update(&mut self, state: bool) {
@@ -151,7 +157,7 @@ impl EventTimer {
     }
 }
 
-#[derive(PartialEq, Format)]
+#[derive(Copy, Clone, PartialEq, Format)]
 enum HeadlightMode {
     Off = 0,
     Auto = 1,
@@ -160,7 +166,7 @@ enum HeadlightMode {
     Blink = 4,
 }
 
-#[derive(PartialEq, Format)]
+#[derive(Copy, Clone, PartialEq, Format)]
 enum UnderlightMode {
     Off = 0,
     Auto = 1,
@@ -168,7 +174,7 @@ enum UnderlightMode {
     ForceOn = 3,
 }
 
-#[derive(PartialEq, Format)]
+#[derive(Copy, Clone, PartialEq, Format)]
 enum Effect {
     Solid = 0,
     ColorWipe,
@@ -179,32 +185,51 @@ enum Effect {
     Fire,
 }
 
+#[derive(Copy, Clone, Format)]
 pub struct DesiredState {
     headlight_mode: HeadlightMode,
     underlight_mode: UnderlightMode,
     underlight_effect: Effect,
-    underlight_speed: AtomicI16,
-    underlight_brightness: AtomicU8,
+    underlight_speed: i16,
+    underlight_brightness: u8,
 }
 
+#[derive(Copy, Clone)]
 pub struct ActualState {
     headlight_mode: HeadlightMode,
-    headlight_brightness: AtomicF32,
-    taillight_brightness: AtomicF32,
-    display_on: AtomicBool,
-    vbus_detected: AtomicBool,
+    headlight_brightness: f32,
+    taillight_brightness: f32,
+    display_on: bool,
+    vbus_detected: bool,
 
     vbus_timer: EventTimer,
     move_timer: EventTimer,
     vext_timer: EventTimer,
     vext_poll_timer: EventTimer,
 
-    // TODO: Use dim
-    vbat: AtomicF32,
-    vext: AtomicF32,
-    accel_mag: AtomicF32,
-    lux: AtomicU16,
+    vbat: Option<Volt<f32>>,
+    vext: Option<Volt<f32>>,
+    accel_mag: Option<MeterPerSecond2<f32>>,
+    lux: Option<Lux<f32>>,
 }
+
+pub static STATE: BlockingMutex::<ThreadModeRawMutex, Cell<ActualState>> = BlockingMutex::new(Cell::new(ActualState {
+    headlight_mode: HeadlightMode::Off,
+    headlight_brightness: 0.0,
+    taillight_brightness: 0.0,
+    display_on: false,
+    vbus_detected: false,
+
+    vbus_timer: EventTimer::new(),
+    move_timer: EventTimer::new(),
+    vext_timer: EventTimer::new(),
+    vext_poll_timer: EventTimer::new(),
+
+    vbat: None,
+    vext: None,
+    accel_mag: None,
+    lux: None,
+}));
 
 #[embassy::task]
 async fn bluetooth_task(

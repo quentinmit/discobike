@@ -8,6 +8,7 @@ use embassy_nrf::wdt::WatchdogHandle;
 use crate::I2cDevice;
 extern crate dimensioned as dim;
 use dim::si::{Lux, f32consts::{LX, A, OHM}};
+use crate::STATE;
 
 trait CalculateIlluminance {
     fn calculate_lux(&self) -> Lux<f32>;
@@ -92,6 +93,13 @@ pub async fn output_task(mut wdt_handle: WatchdogHandle, power: pac::POWER, mut 
         let vbus_detected = power.usbregstatus.read().vbusdetect().is_vbus_present();
 
         info!("vbus detected: {:?}", vbus_detected);
+
+        STATE.lock(|c| { c.update(|s| {
+            let mut s = s;
+            s.vbus_detected = vbus_detected;
+            s.vbus_timer.update(vbus_detected);
+            s
+        })});
         vbus_timer.update(vbus_detected);
 
         Timer::after(Duration::from_millis(1000/30)).await;

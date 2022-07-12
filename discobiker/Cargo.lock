@@ -551,6 +551,7 @@ dependencies = [
  "num-traits",
  "panic-probe",
  "paste",
+ "physical_constants",
  "ssd1306",
  "uom",
 ]
@@ -1477,6 +1478,14 @@ dependencies = [
  "maplit",
  "pest",
  "sha-1",
+]
+
+[[package]]
+name = "physical_constants"
+version = "0.4.1"
+source = "git+https://github.com/quentinmit/rust-physical_constants?branch=no_std#25513e29faf09282df61e7bea3a03afdf0e714f2"
+dependencies = [
+ "regex",
 ]
 
 [[package]]
