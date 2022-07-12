@@ -553,6 +553,7 @@ dependencies = [
  "paste",
  "physical_constants",
  "ssd1306",
+ "staticvec",
  "uom",
 ]
 
@@ -1809,6 +1810,12 @@ name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
+
+[[package]]
+name = "staticvec"
+version = "0.11.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "82b92d273a1d0c3df1411f01a5bae3291c6af966724394be88697012edf5a94a"
 
 [[package]]
 name = "strsim"

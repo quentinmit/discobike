@@ -102,7 +102,7 @@ pub async fn output_task(mut wdt_handle: WatchdogHandle, power: pac::POWER, mut 
         })});
         vbus_timer.update(vbus_detected);
 
-        Timer::after(Duration::from_millis(1000/30)).await;
+        Timer::after(Duration::from_millis(1000/1)).await;
     }
 }
 

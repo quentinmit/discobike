@@ -1,4 +1,5 @@
-use arrayvec::ArrayString;
+use staticvec::StaticString;
+use crate::STATE;
 use core::fmt;
 use core::fmt::Write;
 use defmt::*;
@@ -16,6 +17,9 @@ use display_interface::DisplayError;
 use ssd1306::{
     mode::BufferedGraphicsMode, prelude::*, size::DisplaySize, I2CDisplayInterface, Ssd1306,
 };
+
+extern crate dimensioned as dim;
+use dim::si::{f32consts::{V, A, MPS2, LX}};
 
 use ector::{actor, Actor, Address, Inbox};
 
@@ -72,18 +76,26 @@ where
             .build();
         const COLS: usize = 128 / 6;
         loop {
-            let mut buf = ArrayString::<COLS>::new();
+            self.display.clear();
+            let mut buf = StaticString::<COLS>::new();
+            let state = STATE.lock(|c| c.get());
             // Line 0: XX.XVext X.XXXA X.XXV
-            core::write!(
-                &mut buf,
-                "{:04.1}Vext {:05.3}A {:04.2}{}",
-                12.1,
-                0.322,
-                4.01,
-                "V"
-            )?;
+            match state.vext {
+                None => buf.push_str_truncating("--.-Vext "),
+                Some(v) => core::write!(&mut buf, "{:04.1}Vext ", v / V)?
+            };
+            match state.current {
+                None => buf.push_str_truncating("-.---A "),
+                Some(v) => core::write!(&mut buf, "{:05.3}A ", v / A)?
+            };
+            match state.vbat {
+                None => buf.push_str_truncating("-.--"),
+                Some(v) => core::write!(&mut buf, "{:04.*}", if v < 0.0 * V { 1 } else { 2 }, v / V)?
+            };
+            buf.push_str_truncating(if state.vbus_detected { "V" } else { "v" });
             Text::with_baseline(&buf, Point::zero(), text_style, Baseline::Top)
                 .draw(&mut self.display)?;
+            buf.clear();
             // Line 1: XXX°XXX° XXX.X°
             // Line 2: XXXX.XXhPa XXX.XX'
             // Line 3: XXX°TXXX.XX°

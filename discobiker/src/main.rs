@@ -51,7 +51,7 @@ use core::sync::atomic::*;
 use atomic_float::AtomicF32;
 
 extern crate dimensioned as dim;
-use dim::si::{Volt, MeterPerSecond2, Lux, f32consts::{V, MPS2, LX}};
+use dim::si::{Volt, Ampere, MeterPerSecond2, Lux, f32consts::{V, MPS2, LX}};
 
 macro_rules! define_pin {
     ($name:ident, $pin:ident) => {
@@ -209,6 +209,7 @@ pub struct ActualState {
 
     vbat: Option<Volt<f32>>,
     vext: Option<Volt<f32>>,
+    current: Option<Ampere<f32>>,
     accel_mag: Option<MeterPerSecond2<f32>>,
     lux: Option<Lux<f32>>,
 }
@@ -227,6 +228,7 @@ pub static STATE: BlockingMutex::<ThreadModeRawMutex, Cell<ActualState>> = Block
 
     vbat: None,
     vext: None,
+    current: None,
     accel_mag: None,
     lux: None,
 }));
@@ -299,15 +301,20 @@ async fn adc_task(psaadc: SAADC, pin_vbat: PinVbat, interval: Duration) {
     loop {
         let mut buf = [0; 1];
         saadc.sample(&mut buf).await;
-        let vbat = (buf[0] as f32) * 3.6 * 2.0 / 16384.0;
-        let vbat_percent = if vbat <= 0.0 {
+        let vbat = ((buf[0] as f32) * 3.6 * 2.0 / 16384.0) * V;
+        let vbat_percent = if vbat <= 0.0*V {
             0
         } else {
-            123 - (123.0 / ((1f32 + (vbat / 3.7).powi(80)).powf(0.165))) as u8
+            123 - (123.0 / ((1f32 + (vbat / (3.7*V)).powi(80)).powf(0.165))) as u8
         };
+        STATE.lock(|c| { c.update(|s| {
+            let mut s = s;
+            s.vbat = Some(vbat);
+            s
+        })});
         info!(
             "vbat: {=i16} = {=f32} V = {=u8} %",
-            &buf[0], vbat, vbat_percent
+            &buf[0], vbat/V, vbat_percent
         );
         if let Some(server) = SERVER.borrow().borrow().as_ref() {
             if let Err(e) = server.bas.battery_level_set(vbat_percent) {
