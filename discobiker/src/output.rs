@@ -32,6 +32,7 @@ pub fn max<T: PartialOrd>(a: T, b: T) -> T {
 #[embassy::task]
 pub async fn output_task(mut wdt_handle: WatchdogHandle, power: pac::POWER, mut ina219: INA219<I2cDevice>, mut apds9960: Apds9960<I2cDevice>)
 {
+    info!("initializing ina219");
     if let Err(e) = ina219.set_adc_mode(ADCMode::SampleMode128).await {
         // TODO: Add defmt to I2cBusDevice
         error!("failed to set ina219 mode: {:?}", defmt::Debug2Format(&e));
