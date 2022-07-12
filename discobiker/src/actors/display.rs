@@ -3,7 +3,7 @@ use crate::STATE;
 use core::fmt;
 use core::fmt::Write;
 use defmt::*;
-use embassy::time::{Duration, Timer};
+use embassy::time::{Duration, Timer, Instant};
 use embedded_graphics::prelude::*;
 use embedded_graphics::{
     mono_font::{iso_8859_1::FONT_6X10, MonoTextStyleBuilder},
@@ -141,9 +141,10 @@ where
             Text::with_baseline(&buf, Point::new(0, 5*line_height as i32), text_style, Baseline::Top)
                 .draw(&mut self.display)?;
             buf.clear();
-            info!("display flush start");
+            let start_flush = Instant::now();
             self.display.flush().await?;
-            info!("display flush end");
+            info!("display.flush took {} µs", start_flush.elapsed().as_micros());
+
             Timer::after(Duration::from_millis(1000/5)).await;
         }
         Ok(())
