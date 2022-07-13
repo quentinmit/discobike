@@ -47,9 +47,10 @@ pub async fn output_task(mut wdt_handle: WatchdogHandle, power: pac::POWER, mut 
 
         wdt_handle.pet();
 
-        let vext = ina219.get_bus_voltage().await;
+        let vext = ina219.get_bus_voltage().await.ok();
+        let current = ina219.get_current().await.ok().flatten();
 
-        info!("Vext = {:?}", defmt::Debug2Format(&vext));
+        info!("Vext = {:?}, Iext = {:?}", defmt::Debug2Format(&vext), defmt::Debug2Format(&current));
 
     // if (display_on) {
     //     vext = ina219.getBusVoltage_V();
@@ -69,7 +70,9 @@ pub async fn output_task(mut wdt_handle: WatchdogHandle, power: pac::POWER, mut 
     //         last_vext_poll_time = now;
     //     }
     // }
-        let color = apds9960.read_light().await;
+        let color = apds9960.read_light().await.inspect_err(|e| {
+            error!("failed to read light sensor: {:?}", defmt::Debug2Format(&e));
+        }).ok();
         // 3.5 counts/lux in the c channel according to datasheet
         let lux_value = color.map(
             |color|
@@ -78,10 +81,6 @@ pub async fn output_task(mut wdt_handle: WatchdogHandle, power: pac::POWER, mut 
                 color.clear as f32/(3.5/LX)
             )
         ); // If C is overloaded, use RGB
-
-        if let Err(e) = lux_value {
-            error!("failed to read light sensor: {:?}", defmt::Debug2Format(&e));
-        }
 
         //   // Update mode
         //   accel_mag = vecMag(accel_evt.acceleration);
@@ -96,6 +95,9 @@ pub async fn output_task(mut wdt_handle: WatchdogHandle, power: pac::POWER, mut 
 
         STATE.lock(|c| { c.update(|s| {
             let mut s = s;
+            s.vext = vext;
+            s.current = current;
+            s.lux = lux_value;
             s.vbus_detected = vbus_detected;
             s.vbus_timer.update(vbus_detected);
             s

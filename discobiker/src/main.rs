@@ -3,6 +3,7 @@
 #![feature(type_alias_impl_trait)]
 #![feature(generic_associated_types)]
 #![feature(cell_update)]
+#![feature(result_option_inspect)]
 
 use core::cell::{Cell, RefCell};
 use core::mem;
