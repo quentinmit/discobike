@@ -33,7 +33,7 @@ byteorder = { version = "1.4.3", default-features = false }
 uom = { version = "0.33.0", default-features = false, features = ["autoconvert", "f32", "si"] }
 apds9960 = { version = "0.1.0", default-features = false, features = ["async"] }
 embedded-hal-async = "0.1.0-alpha.1"
-dimensioned = { version = "0.8.0", default-features = false }
+dimensioned = { version = "0.8.0", default-features = false, features = ["serde"] }
 paste = "1.0.7"
 drogue-device = { version = "0.1.0", default-features = false, features = ["defmt", "time", "neopixel", "nrf"] }
 ector = { version = "0.1.0", default-features = false }
@@ -44,6 +44,7 @@ arrayvec = { version = "0.7.2", default-features = false }
 atomic_float = { version = "0.1.0", default-features = false }
 physical_constants = "0.4.1"
 staticvec = { version = "0.11.6", default-features = false, features = [] }
+serde = { version = "1.0.139", default-features = false, features = ["derive"] }
 
 [patch.crates-io]
 embassy = { git = "https://github.com/embassy-rs/embassy" }
@@ -62,3 +63,4 @@ ector = { git = "https://github.com/drogue-iot/ector.git" }
 ssd1306 = { git = "https://github.com/simmsb/ssd1306" }
 display-interface = { git = "https://github.com/simmsb/display-interface" }
 physical_constants = { git = "https://github.com/quentinmit/rust-physical_constants", branch = "no_std" }
+dimensioned = { git = "https://github.com/quentinmit/dimensioned", branch = "no_std" }

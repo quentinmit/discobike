@@ -47,6 +47,8 @@ mod output;
 mod actors;
 use ssd1306::size::DisplaySize128x64;
 
+use serde::{Serialize, Deserialize, Serializer};
+
 use num_traits::float::Float;
 
 use core::sync::atomic::*;
@@ -158,6 +160,16 @@ impl EventTimer {
         }
     }
 }
+
+impl Serialize for EventTimer {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_f32(self.last.elapsed().as_micros() as f32/1e6)
+    }
+}
+
 impl fmt::Display for EventTimer {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         if self.last == Instant::MIN {
@@ -168,7 +180,7 @@ impl fmt::Display for EventTimer {
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Format, Debug)]
+#[derive(Copy, Clone, PartialEq, Format, Debug, Serialize, Deserialize)]
 enum HeadlightMode {
     Off = 0,
     Auto = 1,
@@ -177,7 +189,7 @@ enum HeadlightMode {
     Blink = 4,
 }
 
-#[derive(Copy, Clone, PartialEq, Format, Debug)]
+#[derive(Copy, Clone, PartialEq, Format, Debug, Serialize, Deserialize)]
 enum UnderlightMode {
     Off = 0,
     Auto = 1,
@@ -185,7 +197,7 @@ enum UnderlightMode {
     ForceOn = 3,
 }
 
-#[derive(Copy, Clone, PartialEq, Format)]
+#[derive(Copy, Clone, PartialEq, Format, Serialize, Deserialize)]
 enum Effect {
     Solid = 0,
     ColorWipe,
@@ -205,7 +217,7 @@ pub struct DesiredState {
     underlight_brightness: u8,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Serialize)]
 pub struct ActualState {
     headlight_mode: HeadlightMode,
     headlight_brightness: f32,
