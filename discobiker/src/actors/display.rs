@@ -2,7 +2,9 @@ use staticvec::StaticString;
 use crate::STATE;
 use core::fmt;
 use core::fmt::Write;
-use defmt::*;
+use defmt::{*, panic};
+use futures::FutureExt;
+use futures::select_biased;
 use embassy::time::{Duration, Timer, Instant};
 use embedded_graphics::prelude::*;
 use embedded_graphics::{
@@ -102,7 +104,7 @@ where
         Self { display }
     }
 
-    async fn run_display<M>(&mut self, mut inbox: &M) -> Result<(), Error>
+    async fn run_display<M>(&mut self, inbox: &mut M) -> Result<(), Error>
     where
         M: Inbox<DisplayMessage>,
     {
@@ -145,7 +147,15 @@ where
             self.display.flush().await?;
             info!("display.flush took {} µs", start_flush.elapsed().as_micros());
 
-            Timer::after(Duration::from_millis(1000/5)).await;
+            select_biased! {
+                message = inbox.next().fuse() => {
+                    match message {
+                        DisplayMessage::On => info!("display on"),
+                        DisplayMessage::Off => info!("display off"),
+                    }
+                },
+                _ = Timer::after(Duration::from_millis(1000/5)).fuse() => (),
+            };
         }
         Ok(())
     }
