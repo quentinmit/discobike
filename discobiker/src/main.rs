@@ -6,6 +6,7 @@
 #![feature(result_option_inspect)]
 
 use core::cell::{Cell, RefCell};
+use core::convert::TryInto;
 use core::mem;
 use core::fmt;
 use defmt::*;
@@ -38,6 +39,7 @@ use panic_probe as _;
 use apds9960::Apds9960;
 
 use paste::paste;
+use num_enum::TryFromPrimitive;
 
 use ector::spawn_actor;
 
@@ -133,9 +135,36 @@ pub struct BatteryService {
     battery_level: u8,
 }
 
+#[nrf_softdevice::gatt_service(uuid = "2b18")]
+pub struct ExternalBatteryService {
+    #[characteristic(uuid = "2b18", read, notify)]
+    battery_volts: u8,
+}
+
+#[nrf_softdevice::gatt_service(uuid = "878d5329-5f2e-4308-85c9-bd1f00000000")]
+pub struct HeadlightService {
+    #[characteristic(uuid = "878d5329-5f2e-4308-85c9-bd1f00010000", read, write)]
+    headlight_mode: u8,
+}
+
+#[nrf_softdevice::gatt_service(uuid = "878d5329-5f2e-4308-85c9-bd1f01000000")]
+pub struct UnderlightService {
+    #[characteristic(uuid = "878d5329-5f2e-4308-85c9-bd1f01010000", read, write)]
+    underlight_mode: u8,
+    #[characteristic(uuid = "878d5329-5f2e-4308-85c9-bd1f01020000", read, write)]
+    underlight_effect: u8,
+    #[characteristic(uuid = "878d5329-5f2e-4308-85c9-bd1f01030000", read, write)]
+    underlight_color: [u8; 4],
+    #[characteristic(uuid = "878d5329-5f2e-4308-85c9-bd1f01040000", read, write)]
+    underlight_speed: i16,
+}
+
 #[nrf_softdevice::gatt_server]
 pub struct Server {
     bas: BatteryService,
+    external_battery: ExternalBatteryService,
+    headlight: HeadlightService,
+    underlight: UnderlightService,
 }
 
 #[embassy::task]
@@ -181,7 +210,8 @@ impl fmt::Display for EventTimer {
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Format, Debug, Serialize, Deserialize)]
+#[repr(u8)]
+#[derive(Copy, Clone, PartialEq, Format, Debug, Serialize, Deserialize, TryFromPrimitive)]
 enum HeadlightMode {
     Off = 0,
     Auto = 1,
@@ -190,7 +220,8 @@ enum HeadlightMode {
     Blink = 4,
 }
 
-#[derive(Copy, Clone, PartialEq, Format, Debug, Serialize, Deserialize)]
+#[repr(u8)]
+#[derive(Copy, Clone, PartialEq, Format, Debug, Serialize, Deserialize, TryFromPrimitive)]
 enum UnderlightMode {
     Off = 0,
     Auto = 1,
@@ -198,7 +229,8 @@ enum UnderlightMode {
     ForceOn = 3,
 }
 
-#[derive(Copy, Clone, PartialEq, Format, Serialize, Deserialize)]
+#[repr(u8)]
+#[derive(Copy, Clone, PartialEq, Format, Serialize, Deserialize, TryFromPrimitive)]
 enum Effect {
     Solid = 0,
     ColorWipe,
@@ -315,7 +347,53 @@ pub async fn gatt_server_task(
 ) {
     // Run the GATT server on the connection. This returns when the connection gets disconnected.
     let res = gatt_server::run(&conn, server, |e| match e {
-        ServerEvent::Bas(_) => {}
+        ServerEvent::Bas(_) => {},
+        ServerEvent::ExternalBattery(_) => {},
+        ServerEvent::Headlight(e) => match e {
+            HeadlightServiceEvent::HeadlightModeWrite(val) => {
+                DESIRED_STATE.lock(|c| c.update(|s| {
+                    let mut s = s;
+                    if let Ok(val) = val.try_into() {
+                        s.headlight_mode = val;
+                    }
+                    s
+                }));
+            },
+        },
+        ServerEvent::Underlight(e) => match e {
+            UnderlightServiceEvent::UnderlightModeWrite(val) => {
+                DESIRED_STATE.lock(|c| c.update(|s| {
+                    let mut s = s;
+                    if let Ok(val) = val.try_into() {
+                        s.underlight_mode = val;
+                    }
+                    s
+                }));
+            },
+            UnderlightServiceEvent::UnderlightEffectWrite(val) => {
+                DESIRED_STATE.lock(|c| c.update(|s| {
+                    let mut s = s;
+                    if let Ok(val) = val.try_into() {
+                        s.underlight_effect = val;
+                    }
+                    s
+                }));
+            },
+            UnderlightServiceEvent::UnderlightColorWrite(val) => {
+                DESIRED_STATE.lock(|c| c.update(|s| {
+                    let mut s = s;
+                    //TODO: s.underlight_color = val;
+                    s
+                }));
+            },
+            UnderlightServiceEvent::UnderlightSpeedWrite(val) => {
+                DESIRED_STATE.lock(|c| c.update(|s| {
+                    let mut s = s;
+                    s.underlight_speed = val;
+                    s
+                }));
+            },
+        },
     })
         .await;
 
