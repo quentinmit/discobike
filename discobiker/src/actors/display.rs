@@ -6,6 +6,7 @@ use defmt::{*, panic};
 use futures::FutureExt;
 use futures::select_biased;
 use embassy::time::{Duration, Timer, Instant};
+use embassy::util::yield_now;
 use embedded_graphics::prelude::*;
 use embedded_graphics::{
     mono_font::{iso_8859_1::FONT_6X10, MonoTextStyleBuilder},
@@ -142,11 +143,13 @@ where
             buf.push_str_truncating(if state.vbus_detected { "V" } else { "v" });
             Text::with_baseline(&buf, Point::zero(), text_style, Baseline::Top)
                 .draw(&mut self.display)?;
+            yield_now().await;
             buf.clear();
             // Line 1: XXX°XXX° XXX.X°
             buf.push_str_truncating("XXX°XXX° XXX.X°");
             Text::with_baseline(&buf, Point::new(0, 1*line_height as i32), text_style, Baseline::Top)
                 .draw(&mut self.display)?;
+            yield_now().await;
             buf.clear();
             // Line 2: XXXX.XXhPa XXX.XX'
             // Line 3: XXX°TXXX.XX°
@@ -154,6 +157,7 @@ where
             core::write!(&mut buf, "{:?} {:02X}", desired_state.underlight_mode, state.underlight_brightness)?;
             Text::with_baseline(&buf, Point::new(0, 3*line_height as i32), text_style, Baseline::Top)
                 .draw(&mut self.display)?;
+            yield_now().await;
             buf.clear();
             // Line 4: XXX.XXG    XXXXX lux
             // Line 5: Mode: Day XXX% XXs
@@ -161,6 +165,7 @@ where
             core::write!(&mut buf, "{:?} {:3} {}", state.headlight_mode, state.headlight_brightness * 100.0, state.move_timer)?;
             Text::with_baseline(&buf, Point::new(0, 5*line_height as i32), text_style, Baseline::Top)
                 .draw(&mut self.display)?;
+            yield_now().await;
             buf.clear();
             let start_flush = Instant::now();
             self.display.flush().await?;
