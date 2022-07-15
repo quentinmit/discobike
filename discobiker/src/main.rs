@@ -41,8 +41,8 @@ use paste::paste;
 
 use ector::spawn_actor;
 
-mod ina219;
-use crate::ina219::{INA219, INA219_ADDR};
+mod drivers;
+use crate::drivers::ina219::{INA219, INA219_ADDR};
 mod output;
 mod actors;
 use ssd1306::size::DisplaySize128x64;
@@ -154,10 +154,11 @@ impl EventTimer {
     pub const fn new() -> Self {
         EventTimer{last: Instant::MIN}
     }
-    pub fn update(&mut self, state: bool) {
-        if state {
-            self.last = Instant::now();
-        }
+    pub fn update(&mut self) {
+        self.last = Instant::now();
+    }
+    pub fn elapsed(&self) -> Duration{
+        self.last.elapsed()
     }
 }
 
@@ -227,7 +228,7 @@ pub struct ActualState {
 
     vbus_timer: EventTimer,
     move_timer: EventTimer,
-    vext_timer: EventTimer,
+    vext_present_timer: EventTimer,
     vext_poll_timer: EventTimer,
 
     vbat: Option<Volt<f32>>,
@@ -246,7 +247,7 @@ pub static STATE: BlockingMutex::<ThreadModeRawMutex, Cell<ActualState>> = Block
 
     vbus_timer: EventTimer::new(),
     move_timer: EventTimer::new(),
-    vext_timer: EventTimer::new(),
+    vext_present_timer: EventTimer::new(),
     vext_poll_timer: EventTimer::new(),
 
     vbat: None,
@@ -455,9 +456,12 @@ async fn main(spawner: Spawner, p: Peripherals) {
     let i2c_bus = Mutex::<ThreadModeRawMutex, _>::new(i2c);
     let i2c_bus = I2C_BUS.put(i2c_bus);
 
-    let mut ina219_dev = INA219::new(I2cBusDevice::new(i2c_bus), INA219_ADDR);
-
     let apds9960 = Apds9960::new(I2cBusDevice::new(i2c_bus));
+
+    let power_actor = spawn_actor!(
+        spawner, POWER, actors::power::Power<I2cDevice>,
+        actors::power::Power::new(I2cBusDevice::new(i2c_bus))
+    );
 
     let display = spawn_actor!(
         spawner, DISPLAY, actors::display::Display<I2cDevice, DisplaySize128x64>,
@@ -466,7 +470,7 @@ async fn main(spawner: Spawner, p: Peripherals) {
 
     unwrap!(spawner.spawn(softdevice_task(sd)));
     unwrap!(spawner.spawn(bluetooth_task(spawner, sd)));
-    unwrap!(spawner.spawn(output::output_task(wdt_handle, power, ina219_dev, apds9960)));
+    unwrap!(spawner.spawn(output::output_task(wdt_handle, power, apds9960)));
     unwrap!(spawner.spawn(adc_task(saadc, pin_vbat, Duration::from_millis(500))));
     #[cfg(feature = "mdbt50q")]
     unwrap!(spawner.spawn(blinker(led, Duration::from_millis(300))));

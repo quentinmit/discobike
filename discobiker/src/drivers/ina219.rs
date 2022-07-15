@@ -1,10 +1,10 @@
+use defmt::*;
 use embedded_hal_async::i2c;
 use modular_bitfield::prelude::*;
-use defmt::*;
 extern crate dimensioned as dim;
-use dim::si::{Volt, Ampere, Ohm};
-use dim::si::f32consts::{V, A, OHM};
 use dim::f32prefixes::*;
+use dim::si::f32consts::{A, OHM, V};
+use dim::si::{Ampere, Ohm, Volt};
 
 use byteorder::{BigEndian, ByteOrder, LittleEndian};
 
@@ -41,13 +41,13 @@ impl Gain {
     pub const mV320: Gain = Gain::Eighth;
 
     pub fn for_max_voltage(max_voltage: Volt<f32>) -> Option<Self> {
-        if max_voltage < 40.*MILLI*V {
+        if max_voltage < 40. * MILLI * V {
             Some(Self::mV40)
-        } else if max_voltage < 80.*MILLI*V {
+        } else if max_voltage < 80. * MILLI * V {
             Some(Self::mV80)
-        } else if max_voltage <= 160.*MILLI*V {
+        } else if max_voltage <= 160. * MILLI * V {
             Some(Self::mV160)
-        } else if max_voltage <= 320.*MILLI*V {
+        } else if max_voltage <= 320. * MILLI * V {
             Some(Self::mV320)
         } else {
             None
@@ -137,7 +137,38 @@ where
             shunt_resistance: None,
         }
     }
+
+    pub async fn power_down(&mut self) -> Result<(), E> {
+        self.modify_config(|c| {
+            c.with_sample_continuous(false)
+                .with_sample_bus(false)
+                .with_sample_shunt(false)
+        })
+        .await
+    }
+    pub async fn trigger_sample(&mut self, bus: bool, shunt: bool) -> Result<(), E> {
+        self.modify_config(|c| {
+            c.with_sample_continuous(false)
+                .with_sample_bus(bus)
+                .with_sample_shunt(shunt)
+        }).await?;
+        loop {
+            let v: BusVoltage = self.read_register(Register::BusVoltage).await?.into();
+            if v.conversion_ready() {
+                return Ok(());
+            }
+        }
+    }
+    pub async fn continuous_sample(&mut self, bus: bool, shunt: bool) -> Result<(), E> {
+        self.modify_config(|c| {
+            c.with_sample_continuous(false)
+                .with_sample_bus(bus)
+                .with_sample_shunt(shunt)
+        })
+        .await
+    }
     pub async fn get_bus_voltage(&mut self) -> Result<Volt<f32>, E> {
+        let config = self.config().await?;
         let v: BusVoltage = self.read_register(Register::BusVoltage).await?.into();
         // LSB = 4 mV
         Ok(v.bus_voltage() as f32 * 4.0 * MILLI * V)
@@ -154,15 +185,20 @@ where
         Ok(lsb.map(|lsb| (v as f32) * lsb))
     }
 
-    async fn gain(&mut self) -> Result<Gain, E> {
+    async fn config(&mut self) -> Result<Configuration, E> {
         Ok(match self.last_config {
             Some(c) => c,
             None => {
-                let config: Configuration = self.read_register(Register::Configuration).await?.into();
+                let config: Configuration =
+                    self.read_register(Register::Configuration).await?.into();
                 self.last_config = Some(config);
                 config
             }
-        }.shunt_gain())
+        })
+    }
+
+    async fn gain(&mut self) -> Result<Gain, E> {
+        Ok(self.config().await?.shunt_gain())
     }
 
     async fn current_lsb(&mut self) -> Result<Option<Ampere<f32>>, E> {
@@ -174,24 +210,29 @@ where
                 c
             }
         };
-        Ok(
-            self.shunt_resistance.zip(
-                if cal != 0 { Some(cal) } else { None }
-            ).map(|(r, cal)| 0.04096*V / ((cal as f32) * r))
-        )
+        Ok(self
+            .shunt_resistance
+            .zip(if cal != 0 { Some(cal) } else { None })
+            .map(|(r, cal)| 0.04096 * V / ((cal as f32) * r)))
     }
 
-    pub async fn set_current_range(&mut self, max_current: Ampere<f32>, shunt_resistance: Ohm<f32>) -> Result<(), E> {
+    pub async fn set_current_range(
+        &mut self,
+        max_current: Ampere<f32>,
+        shunt_resistance: Ohm<f32>,
+    ) -> Result<(), E> {
         // 1. Select gain
         let max_vshunt: Volt<f32> = max_current * shunt_resistance;
         let desired_gain = Gain::for_max_voltage(max_vshunt).unwrap_or(Gain::mV320);
 
         let desired_current_lsb: Ampere<f32> = max_current / 32767.;
-        let cal = *(0.04096*V / (desired_current_lsb * shunt_resistance)) as u16;
-        let actual_current_lsb: Ampere<f32> = 0.04096*V / ((cal as f32) * shunt_resistance);
-        info!("requested max current = {=f32} A", max_current/A);
+        let cal = *(0.04096 * V / (desired_current_lsb * shunt_resistance)) as u16;
+        let actual_current_lsb: Ampere<f32> = 0.04096 * V / ((cal as f32) * shunt_resistance);
+        info!("requested max current = {=f32} A", max_current / A);
         info!("optimal gain setting {:?}", Debug2Format(&desired_gain));
         info!("calculated desired current LSB {=f32} µA calibration {=u16} actual current LSB {=f32} µA", desired_current_lsb/(MICRO*A), cal, actual_current_lsb/(MICRO*A));
+        self.modify_config(|c| c.with_shunt_gain(desired_gain))
+            .await?;
         self.write_register(Register::Calibration, cal).await?;
         self.last_calibration = Some(cal);
         self.shunt_resistance = Some(shunt_resistance);
@@ -199,12 +240,14 @@ where
     }
 
     pub async fn set_adc_mode(&mut self, mode: ADCMode) -> Result<(), E> {
-        self.modify_config(|c| c.with_bus_adc_mode(mode).with_shunt_adc_mode(mode)).await
+        self.modify_config(|c| c.with_bus_adc_mode(mode).with_shunt_adc_mode(mode))
+            .await
     }
     async fn read_register(&mut self, reg: Register) -> Result<u16, E> {
         let mut bytes = [0; 2];
         self.i2c
-            .write_read(self.address, &[reg as u8], &mut bytes).await?;
+            .write_read(self.address, &[reg as u8], &mut bytes)
+            .await?;
         return Ok(BigEndian::read_u16(&bytes));
     }
     async fn write_register(&mut self, reg: Register, val: u16) -> Result<(), E> {
@@ -218,7 +261,10 @@ where
     {
         let old_config: Configuration = self.read_register(Register::Configuration).await?.into();
         let new_config = f(old_config);
-        match self.write_register(Register::Configuration, new_config.into()).await {
+        match self
+            .write_register(Register::Configuration, new_config.into())
+            .await
+        {
             Ok(()) => {
                 self.last_config = Some(new_config);
                 Ok(())

@@ -1,21 +1,26 @@
-use defmt::*;
-use crate::ina219::{INA219, ADCMode};
 use crate::EventTimer;
+use crate::I2cDevice;
 use apds9960::{Apds9960, LightData};
+use defmt::*;
 use embassy::time::{Duration, Instant, Timer};
 use embassy_nrf::pac;
 use embassy_nrf::wdt::WatchdogHandle;
-use crate::I2cDevice;
 extern crate dimensioned as dim;
-use dim::si::{Lux, f32consts::{LX, A, OHM}};
 use crate::STATE;
+use dim::si::{
+    f32consts::{A, LX, OHM},
+    Volt, Lux,
+};
 
 trait CalculateIlluminance {
     fn calculate_lux(&self) -> Lux<f32>;
 }
 impl CalculateIlluminance for LightData {
     fn calculate_lux(&self) -> Lux<f32> {
-        ((-0.32466 * self.red as f32) + (1.57837 * self.green as f32) + (-0.73191 * self.blue as f32)) * LX
+        ((-0.32466 * self.red as f32)
+            + (1.57837 * self.green as f32)
+            + (-0.73191 * self.blue as f32))
+            * LX
     }
 }
 
@@ -31,56 +36,26 @@ pub fn max<T: PartialOrd>(a: T, b: T) -> T {
 }
 
 #[embassy::task]
-pub async fn output_task(mut wdt_handle: WatchdogHandle, power: pac::POWER, mut ina219: INA219<I2cDevice>, mut apds9960: Apds9960<I2cDevice>)
-{
-    info!("initializing ina219");
-    if let Err(e) = ina219.set_adc_mode(ADCMode::SampleMode128).await {
-        // TODO: Add defmt to I2cBusDevice
-        error!("failed to set ina219 mode: {:?}", defmt::Debug2Format(&e));
-    }
-    if let Err(e) = ina219.set_current_range(3.2*A, 0.1*OHM).await {
-        error!("failed to set ina219 calibration: {:?}", defmt::Debug2Format(&e));
-    }
-    let mut vbus_timer: EventTimer = EventTimer::new();
+pub async fn output_task(
+    mut wdt_handle: WatchdogHandle,
+    power: pac::POWER,
+    mut apds9960: Apds9960<I2cDevice>,
+) {
     loop {
         let now = Instant::now();
 
         wdt_handle.pet();
 
-        let vext = ina219.get_bus_voltage().await.ok();
-        let current = ina219.get_current().await.ok().flatten();
-
-        info!("Vext = {:?}, Iext = {:?}", defmt::Debug2Format(&vext), defmt::Debug2Format(&current));
-
-    // if (display_on) {
-    //     vext = ina219.getBusVoltage_V();
-    // } else {
-    //     if ((now-last_vext_poll_time) > VEXT_POLL_PERIOD) {
-    //         // Wake up INA219 and trigger a voltage read
-    //         ina219.writeRegister(
-    //             INA219_REG_CONFIG,
-    //             INA219_CONFIG_BVOLTAGERANGE_32V |
-    //             INA219_CONFIG_GAIN_8_320MV | INA219_CONFIG_BADCRES_12BIT |
-    //             INA219_CONFIG_SADCRES_12BIT_1S_532US |
-    //             INA219_CONFIG_MODE_BVOLT_TRIGGERED
-    //         );
-    //         while(!(ina219.readRegister(INA219_REG_BUSVOLTAGE) & 0x0002)); // checks if sampling is completed
-    //         vext = ina219.getBusVoltage_V();
-    //         ina219.setMeasureMode(POWER_DOWN);
-    //         last_vext_poll_time = now;
-    //     }
-    // }
-        let color = apds9960.read_light().await.inspect_err(|e| {
-            error!("failed to read light sensor: {:?}", defmt::Debug2Format(&e));
-        }).ok();
+        let color = apds9960
+            .read_light()
+            .await
+            .inspect_err(|e| {
+                error!("failed to read light sensor: {:?}", defmt::Debug2Format(&e));
+            })
+            .ok();
         // 3.5 counts/lux in the c channel according to datasheet
-        let lux_value = color.map(
-            |color|
-            max(
-                color.calculate_lux(),
-                color.clear as f32/(3.5/LX)
-            )
-        ); // If C is overloaded, use RGB
+        let lux_value =
+            color.map(|color| max(color.calculate_lux(), color.clear as f32 / (3.5 / LX))); // If C is overloaded, use RGB
 
         //   // Update mode
         //   accel_mag = vecMag(accel_evt.acceleration);
@@ -93,18 +68,19 @@ pub async fn output_task(mut wdt_handle: WatchdogHandle, power: pac::POWER, mut 
 
         info!("vbus detected: {:?}", vbus_detected);
 
-        STATE.lock(|c| { c.update(|s| {
-            let mut s = s;
-            s.vext = vext;
-            s.current = current;
-            s.lux = lux_value;
-            s.vbus_detected = vbus_detected;
-            s.vbus_timer.update(vbus_detected);
-            s
-        })});
-        vbus_timer.update(vbus_detected);
+        STATE.lock(|c| {
+            c.update(|s| {
+                let mut s = s;
+                s.lux = lux_value;
+                s.vbus_detected = vbus_detected;
+                if vbus_detected {
+                    s.vbus_timer.update();
+                }
+                s
+            })
+        });
 
-        Timer::after(Duration::from_millis(1000/1)).await;
+        Timer::after(Duration::from_millis(1000 / 1)).await;
     }
 }
 
