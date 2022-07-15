@@ -215,14 +215,22 @@ pub struct DesiredState {
     underlight_mode: UnderlightMode,
     underlight_effect: Effect,
     underlight_speed: i16,
-    underlight_brightness: u8,
+    // underlight_color
 }
+
+pub static DESIRED_STATE: BlockingMutex::<ThreadModeRawMutex, Cell<DesiredState>> = BlockingMutex::new(Cell::new(DesiredState {
+    headlight_mode: HeadlightMode::Auto,
+    underlight_mode: UnderlightMode::Auto,
+    underlight_effect: Effect::Rainbow,
+    underlight_speed: 1024,
+}));
 
 #[derive(Copy, Clone, Serialize)]
 pub struct ActualState {
     headlight_mode: HeadlightMode,
     headlight_brightness: f32,
     taillight_brightness: f32,
+    underlight_brightness: u8,
     display_on: bool,
     vbus_detected: bool,
 
@@ -242,6 +250,7 @@ pub static STATE: BlockingMutex::<ThreadModeRawMutex, Cell<ActualState>> = Block
     headlight_mode: HeadlightMode::Off,
     headlight_brightness: 0.0,
     taillight_brightness: 0.0,
+    underlight_brightness: 0,
     display_on: false,
     vbus_detected: false,
 
@@ -440,6 +449,7 @@ async fn main(spawner: Spawner, p: Peripherals) {
 
     let saadc = p.SAADC;
     let pin_vbat = use_pin_vbat!(p);
+    let pin_power_enable = use_pin_power_enable!(p);
 
     // Requires embassy-nrf/unstable-pac
     // TODO: Replace with safe API when one exists.
@@ -470,7 +480,7 @@ async fn main(spawner: Spawner, p: Peripherals) {
 
     unwrap!(spawner.spawn(softdevice_task(sd)));
     unwrap!(spawner.spawn(bluetooth_task(spawner, sd)));
-    unwrap!(spawner.spawn(output::output_task(wdt_handle, power, apds9960)));
+    unwrap!(spawner.spawn(output::output_task(wdt_handle, power, pin_power_enable, apds9960)));
     unwrap!(spawner.spawn(adc_task(saadc, pin_vbat, Duration::from_millis(500))));
     #[cfg(feature = "mdbt50q")]
     unwrap!(spawner.spawn(blinker(led, Duration::from_millis(300))));

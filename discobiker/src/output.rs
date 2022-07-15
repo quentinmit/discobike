@@ -5,8 +5,10 @@ use defmt::*;
 use embassy::time::{Duration, Instant, Timer};
 use embassy_nrf::pac;
 use embassy_nrf::wdt::WatchdogHandle;
+use embassy_nrf::gpio::{Level, Output, OutputDrive};
+use embedded_hal::digital::blocking::OutputPin;
 extern crate dimensioned as dim;
-use crate::STATE;
+use crate::{DESIRED_STATE, STATE};
 use dim::si::{
     f32consts::{A, LX, OHM},
     Volt, Lux,
@@ -35,12 +37,20 @@ pub fn max<T: PartialOrd>(a: T, b: T) -> T {
     }
 }
 
+const TAIL_PERIOD: Duration = Duration::from_secs(2);
+const LAST_MOVE_TIMEOUT: Duration = Duration::from_secs(20);
+const LAST_MOVE_TAIL_TIMEOUT: Duration = Duration::from_secs(60);
+const LAST_MOVE_UNDER_TIMEOUT: Duration = Duration::from_secs(60);
+const DISPLAY_TIMEOUT: Duration = Duration::from_secs(60);
+
 #[embassy::task]
 pub async fn output_task(
     mut wdt_handle: WatchdogHandle,
     power: pac::POWER,
+    pin_power_enable: crate::PinPowerEnable,
     mut apds9960: Apds9960<I2cDevice>,
 ) {
+    let mut power_enable = Output::new(pin_power_enable, Level::Low, OutputDrive::Standard);
     loop {
         let now = Instant::now();
 
@@ -68,7 +78,7 @@ pub async fn output_task(
 
         info!("vbus detected: {:?}", vbus_detected);
 
-        STATE.lock(|c| {
+        let state = STATE.lock(|c| {
             c.update(|s| {
                 let mut s = s;
                 s.lux = lux_value;
@@ -80,34 +90,48 @@ pub async fn output_task(
             })
         });
 
-        Timer::after(Duration::from_millis(1000 / 1)).await;
+        let desired_state = DESIRED_STATE.lock(|c| c.get());
+
+        // Update underlight
+        let mut underlight_on = state.vbus_detected;
+        let mut underlight_target_brightness = 0;
+        match desired_state.underlight_mode {
+            Force => {
+                underlight_on = true;
+                underlight_target_brightness = 255;
+            }
+            On => {
+                underlight_target_brightness = 255;
+            }
+            Auto => {
+                if state.vbus_detected && state.move_timer.elapsed() < LAST_MOVE_UNDER_TIMEOUT {
+                    underlight_target_brightness = 255;
+                }
+            }
+        }
+        let state = STATE.lock(|c| c.update(|s| {
+            let mut s = s;
+            s.underlight_brightness = s.underlight_brightness.saturating_add(3);
+            s
+        }));
+        if state.underlight_brightness == 0 {
+            // Power down completely when we reach 0 brightness
+            underlight_on = false;
+        }
+
+        trace!("UL: on {} brightness: {:02x} target: {:02x}", underlight_on, state.underlight_brightness, underlight_target_brightness);
+        // TODO: underlight.setBrightness(underlight.gamma8(underlight_brightness));
+
+        // TODO: Make sure it doesn't cause flashing if we enable power before drive is set
+        if let Err(e) = power_enable.set_state(underlight_on.into()) {
+            error!("failed to set power_enable: {}", e);
+        };
+
+        Timer::after(Duration::from_millis(1000 / 30)).await;
     }
 }
 
-//   // Update underlight
-//   bool underlight_on = vbus_detected;
-//   uint8_t underlight_target_brightness = 0;
-//   switch (underlight_mode) {
-//     case UL_FORCE:
-//     underlight_on = true;
-//     case UL_ON:
-//     underlight_target_brightness = 255;
-//     break;
-//     case UL_AUTO:
-//     if (vbus_detected && (now - last_move_time) < LAST_MOVE_UNDER_TIMEOUT) {
-//       underlight_target_brightness = 255;
-//     }
-//     break;
-//   }
-//   underlight_brightness = stepclamp(underlight_brightness, underlight_target_brightness, (uint8_t)3);
-//   if (underlight_brightness == 0) {
-//     // Power down completely when we reach 0 brightness
-//     underlight_on = false;
-//   }
-//   //Serial.printf("On: %d brightness: %02x target: %02x\n", underlight_on, underlight_brightness, underlight_target_brightness);
-//   underlight.setBrightness(underlight.gamma8(underlight_brightness));
-//   // TODO: Make sure it doesn't cause flashing if we enable power before drive is set
-//   digitalWrite(PIN_POWER_ENABLE, underlight_on);
+
 
 //   bool taillight_on = false;
 //   if (vext < 11.2 || !vbus_detected) {

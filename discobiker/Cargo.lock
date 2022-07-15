@@ -546,7 +546,7 @@ dependencies = [
  "embassy-hal-common",
  "embassy-nrf",
  "embedded-graphics",
- "embedded-hal 0.2.7",
+ "embedded-hal 1.0.0-alpha.8",
  "embedded-hal-async",
  "embedded-storage",
  "embedded-storage-async",
