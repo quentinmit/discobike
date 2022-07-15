@@ -157,7 +157,7 @@ impl EventTimer {
     pub fn update(&mut self) {
         self.last = Instant::now();
     }
-    pub fn elapsed(&self) -> Duration{
+    pub fn elapsed(&self) -> Duration {
         self.last.elapsed()
     }
 }

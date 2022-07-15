@@ -149,6 +149,11 @@ where
             buf.clear();
             // Line 2: XXXX.XXhPa XXX.XX'
             // Line 3: XXX°TXXX.XX°
+            buf.push_str_truncating("UL: ");
+            core::write!(&mut buf, "{:02X}", state.underlight_brightness)?;
+            Text::with_baseline(&buf, Point::new(0, 3*line_height as i32), text_style, Baseline::Top)
+                .draw(&mut self.display)?;
+            buf.clear();
             // Line 4: XXX.XXG    XXXXX lux
             // Line 5: Mode: Day XXX% XXs
             buf.push_str_truncating("Mode: ");

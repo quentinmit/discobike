@@ -110,7 +110,7 @@ pub async fn output_task(
 
         let vbus_detected = power.usbregstatus.read().vbusdetect().is_vbus_present();
 
-        info!("vbus detected: {:?}", vbus_detected);
+        // info!("vbus detected: {:?}", vbus_detected);
 
         let state = STATE.lock(|c| {
             c.update(|s| {
