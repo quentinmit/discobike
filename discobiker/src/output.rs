@@ -1,5 +1,6 @@
 use crate::EventTimer;
 use crate::I2cDevice;
+use crate::{HeadlightMode, UnderlightMode};
 use apds9960::{Apds9960, LightData};
 use defmt::*;
 use embassy::time::{Duration, Instant, Timer};
@@ -130,18 +131,19 @@ pub async fn output_task(
         let mut underlight_on = state.vbus_detected;
         let mut underlight_target_brightness = 0;
         match desired_state.underlight_mode {
-            Force => {
+            UnderlightMode::ForceOn => {
                 underlight_on = true;
                 underlight_target_brightness = 255;
             }
-            On => {
+            UnderlightMode::On => {
                 underlight_target_brightness = 255;
             }
-            Auto => {
+            UnderlightMode::Auto => {
                 if state.vbus_detected && state.move_timer.elapsed() < LAST_MOVE_UNDER_TIMEOUT {
                     underlight_target_brightness = 255;
                 }
             }
+            UnderlightMode::Off => (),
         }
         let state = STATE.lock(|c| c.update(|s| {
             let mut s = s;
@@ -153,7 +155,7 @@ pub async fn output_task(
             underlight_on = false;
         }
 
-        trace!("UL: on {} brightness: {:02x} target: {:02x}", underlight_on, state.underlight_brightness, underlight_target_brightness);
+        //trace!("UL: on {} brightness: {:02x} target: {:02x}", underlight_on, state.underlight_brightness, underlight_target_brightness);
         // TODO: underlight.setBrightness(underlight.gamma8(underlight_brightness));
 
         // TODO: Make sure it doesn't cause flashing if we enable power before drive is set

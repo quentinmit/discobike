@@ -1,5 +1,5 @@
 use staticvec::{StaticVec, StaticString};
-use crate::STATE;
+use crate::{DESIRED_STATE, STATE};
 use core::fmt;
 use core::fmt::Write;
 use defmt::{*, panic};
@@ -120,6 +120,7 @@ where
         loop {
             self.display.clear();
             let mut buf = StaticString::<COLS>::new();
+            let desired_state = DESIRED_STATE.lock(|c| c.get());
             let state = STATE.lock(|c| c.get());
 
             let mut x = StaticVec::<u8, 128>::filled_with(|| 0);
@@ -150,7 +151,7 @@ where
             // Line 2: XXXX.XXhPa XXX.XX'
             // Line 3: XXX°TXXX.XX°
             buf.push_str_truncating("UL: ");
-            core::write!(&mut buf, "{:02X}", state.underlight_brightness)?;
+            core::write!(&mut buf, "{:?} {:02X}", desired_state.underlight_mode, state.underlight_brightness)?;
             Text::with_baseline(&buf, Point::new(0, 3*line_height as i32), text_style, Baseline::Top)
                 .draw(&mut self.display)?;
             buf.clear();
