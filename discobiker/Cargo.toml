@@ -8,6 +8,9 @@ resolver = "2"
 [features]
 mdbt50q = []
 
+[profile.dev.package.nrf-softdevice]
+opt-level = 3
+
 [dependencies]
 embassy = { version = "0.1.0", features = ["nightly", "defmt"]}
 embassy-hal-common = { version = "0.1.0", features = ["defmt"] }
