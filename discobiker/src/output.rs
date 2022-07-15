@@ -5,7 +5,7 @@ use apds9960::{Apds9960, LightData};
 use defmt::*;
 use embassy::time::{Duration, Instant, Timer};
 use embassy_nrf::pac;
-use embassy_nrf::peripherals::PWM3;
+use embassy_nrf::peripherals::{PWM2, PWM3};
 use embassy_nrf::pwm::{SimplePwm, Prescaler};
 use embassy_nrf::wdt::WatchdogHandle;
 use embassy_nrf::gpio::{Level, Output, OutputDrive};
@@ -76,9 +76,13 @@ const PWM_MAX_TAILLIGHT: u16 = 255;
 pub async fn output_task(
     mut wdt_handle: WatchdogHandle,
     power: pac::POWER,
+    pwm2: PWM2,
     pwm3: PWM3,
     pin_power_enable: crate::PinPowerEnable,
     pin_headlight_dim: crate::PinHeadlightDim,
+    pin_tail_l: crate::PinTailL,
+    pin_tail_c: crate::PinTailC,
+    pin_tail_r: crate::PinTailR,
     mut apds9960: Apds9960<I2cDevice>,
 ) {
     let mut power_enable = Output::new(pin_power_enable, Level::Low, OutputDrive::Standard);
@@ -86,6 +90,12 @@ pub async fn output_task(
     headlight_pwm.set_prescaler(Prescaler::Div128); // Div128 == 125kHz
     headlight_pwm.set_max_duty(PWM_MAX_HEADLIGHT);
     headlight_pwm.set_duty(0, PWM_MAX_HEADLIGHT/2);
+    let mut taillight_pwm = SimplePwm::new_3ch(pwm2, pin_tail_c, pin_tail_l, pin_tail_r);
+    taillight_pwm.set_prescaler(Prescaler::Div16); // Div16 = 1MHz
+    taillight_pwm.set_max_duty(255);
+    taillight_pwm.set_duty(0, 255);
+    taillight_pwm.set_duty(1, 255);
+    taillight_pwm.set_duty(2, 255);
     loop {
         let now = Instant::now();
 
@@ -193,54 +203,35 @@ pub async fn output_task(
                 _ => 0.0,
             };
             s.headlight_brightness = s.headlight_brightness.step_towards(target_brightness, 0.01);
+            let target_taillight_brightness = if taillight_on { 1.0 } else { 0.0 };
+            s.taillight_brightness = s.taillight_brightness.step_towards(target_brightness, 0.05);
             s
         }));
         headlight_pwm.set_duty(0, PWM_MAX_HEADLIGHT - (PWM_MAX_HEADLIGHT as f32 * state.headlight_brightness) as u16); // TODO: Figure out how to invert polarity.
+        if state.taillight_brightness == 0.0 {
+            taillight_pwm.set_duty(0, 0);
+            taillight_pwm.set_duty(1, 0);
+            taillight_pwm.set_duty(2, 0);
+        } else {
+            let tail_phase = (now.as_ticks() % TAIL_PERIOD.as_ticks()) as f32 / TAIL_PERIOD.as_ticks() as f32;
+            let tail_intensity = 2.0 * if tail_phase > 0.5 { 1.0-tail_phase } else { tail_phase };
+
+            // TODO: gamma
+            let tail_pwm_1 = (255.0 * state.taillight_brightness * tail_intensity) as u16;
+            let tail_pwm_2 = (255.0 * state.taillight_brightness * (1.0-tail_intensity)) as u16;
+
+            taillight_pwm.set_duty(0, tail_pwm_1);
+            taillight_pwm.set_duty(1, tail_pwm_2);
+            taillight_pwm.set_duty(2, tail_pwm_2);
+        }
+
+        if underlight_on {
+            // TODO: Update underlight
+        }
 
         Timer::after(Duration::from_millis(1000 / 30)).await;
     }
 }
-
-//   // Update headlight
-//   float target_brightness = 0;
-//   switch (actual_mode) {
-//   case NIGHT:
-//     target_brightness = 1;
-//     break;
-//   case DAY:
-//     // TODO: Blink
-//     target_brightness = 0.5;
-//     break;
-//   }
-//   brightness = stepclamp(brightness, target_brightness, (float)0.01);
-//   HwPWM3.writeChannel(0, PWM_MAX_HEADLIGHT * brightness, true); // Invert (high = off)
-
-//   // Update taillight
-//   float taillight_target_brightness = taillight_on ? 1 : 0;
-//   taillight_brightness = stepclamp(taillight_brightness, taillight_target_brightness, (float)0.05);
-//   if (taillight_brightness == 0) {
-//     // Onboard red LED (on channel 2) uses up to 1 mA!
-//     for (int i = 0; i < 3; i++) {
-//       HwPWM2.writeChannel(i, 0);
-//     }
-//   } else {
-//     float tail_phase = (now % TAIL_PERIOD) / (float)TAIL_PERIOD;
-//     float tail_intensity = (tail_phase*2);
-//     if (tail_intensity > 1) {
-//       tail_intensity = 2-tail_intensity;
-//     }
-//     //tail_intensity *= tail_intensity*tail_intensity; // Apply gamma of 3
-//     uint16_t tail_pwm_1 = gamma8[(uint8_t)(255*taillight_brightness*tail_intensity)];
-//     uint16_t tail_pwm_2 = gamma8[(uint8_t)(255*taillight_brightness*(1-tail_intensity))];
-//     HwPWM2.writeChannel(0, tail_pwm_1);
-//     HwPWM2.writeChannel(1, tail_pwm_2);
-//     if (!DEBUG_IMU) {
-//       HwPWM2.writeChannel(2, tail_pwm_2);
-//     }
-//   }
-//   if (underlight_on) {
-//     _underlight_update();
-//   }
 
 //   // Update BLE characteristics
 //   // TODO: Notify

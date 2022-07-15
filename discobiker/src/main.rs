@@ -557,7 +557,12 @@ async fn main(spawner: Spawner, p: Peripherals) {
 
     unwrap!(spawner.spawn(softdevice_task(sd)));
     unwrap!(spawner.spawn(bluetooth_task(spawner, sd)));
-    unwrap!(spawner.spawn(output::output_task(wdt_handle, power, p.PWM3, use_pin_power_enable!(p), use_pin_headlight_dim!(p), apds9960)));
+    unwrap!(spawner.spawn(output::output_task(
+        wdt_handle, power,
+        p.PWM2, p.PWM3,
+        use_pin_power_enable!(p), use_pin_headlight_dim!(p),
+        use_pin_tail_l!(p), use_pin_tail_c!(p), use_pin_tail_r!(p),
+        apds9960)));
     unwrap!(spawner.spawn(adc_task(saadc, pin_vbat, Duration::from_millis(500))));
     #[cfg(feature = "mdbt50q")]
     unwrap!(spawner.spawn(blinker(led, Duration::from_millis(300))));
