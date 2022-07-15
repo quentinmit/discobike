@@ -1,4 +1,4 @@
-use staticvec::StaticString;
+use staticvec::{StaticVec, StaticString};
 use crate::STATE;
 use core::fmt;
 use core::fmt::Write;
@@ -19,6 +19,8 @@ use display_interface::DisplayError;
 use ssd1306::{
     mode::BufferedGraphicsMode, prelude::*, size::DisplaySize, I2CDisplayInterface, Ssd1306,
 };
+
+use bincode;
 
 extern crate dimensioned as dim;
 use dim::si::{f32consts::{V, A, MPS2, LX}};
@@ -119,6 +121,17 @@ where
             self.display.clear();
             let mut buf = StaticString::<COLS>::new();
             let state = STATE.lock(|c| c.get());
+
+            let mut x = StaticVec::<u8, 128>::filled_with(|| 0);
+            match bincode::serde::encode_into_slice(&state, x.as_mut_slice(), bincode::config::standard()) {
+                Err(e) =>
+                    error!("serializing state: {}", Debug2Format(&e)),
+                Ok(n) => {
+                    x.truncate(n);
+                    info!("current state: {=[u8]}", x.as_slice());
+                }
+            }
+
             // Line 0: XX.XVext X.XXXA X.XXV
             state.vext.write_dim(&mut buf, V, 4, 1)?;
             buf.push_str_truncating("Vext ");
