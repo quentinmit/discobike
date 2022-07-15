@@ -4,13 +4,15 @@ use apds9960::{Apds9960, LightData};
 use defmt::*;
 use embassy::time::{Duration, Instant, Timer};
 use embassy_nrf::pac;
+use embassy_nrf::peripherals::PWM3;
+use embassy_nrf::pwm::{SimplePwm, Prescaler};
 use embassy_nrf::wdt::WatchdogHandle;
 use embassy_nrf::gpio::{Level, Output, OutputDrive};
 use embedded_hal::digital::blocking::OutputPin;
 extern crate dimensioned as dim;
 use crate::{DESIRED_STATE, STATE};
 use dim::si::{
-    f32consts::{A, LX, OHM},
+    f32consts::{V, A, LX, OHM},
     Volt, Lux,
 };
 
@@ -37,20 +39,52 @@ pub fn max<T: PartialOrd>(a: T, b: T) -> T {
     }
 }
 
+trait StepTowards {
+    fn step_towards(self, target: Self, step: Self) -> Self;
+}
+
+impl StepTowards for u8 {
+    fn step_towards(self, target: Self, step: Self) -> Self {
+        if self > target {
+            target.max(self.saturating_sub(step))
+        } else {
+            target.min(self.saturating_add(step))
+        }
+    }
+}
+impl StepTowards for f32 {
+    fn step_towards(self, target: Self, step: Self) -> Self {
+        if self > target {
+            target.max(self-step)
+        } else {
+            target.min(self+step)
+        }
+    }
+}
+
 const TAIL_PERIOD: Duration = Duration::from_secs(2);
 const LAST_MOVE_TIMEOUT: Duration = Duration::from_secs(20);
 const LAST_MOVE_TAIL_TIMEOUT: Duration = Duration::from_secs(60);
 const LAST_MOVE_UNDER_TIMEOUT: Duration = Duration::from_secs(60);
 const DISPLAY_TIMEOUT: Duration = Duration::from_secs(60);
 
+const PWM_MAX_HEADLIGHT: u16 = 625;
+const PWM_MAX_TAILLIGHT: u16 = 255;
+
 #[embassy::task]
 pub async fn output_task(
     mut wdt_handle: WatchdogHandle,
     power: pac::POWER,
+    pwm3: PWM3,
     pin_power_enable: crate::PinPowerEnable,
+    pin_headlight_dim: crate::PinHeadlightDim,
     mut apds9960: Apds9960<I2cDevice>,
 ) {
     let mut power_enable = Output::new(pin_power_enable, Level::Low, OutputDrive::Standard);
+    let mut headlight_pwm = SimplePwm::new_1ch(pwm3, pin_headlight_dim);
+    headlight_pwm.set_prescaler(Prescaler::Div128); // Div128 == 125kHz
+    headlight_pwm.set_max_duty(PWM_MAX_HEADLIGHT);
+    headlight_pwm.set_duty(0, PWM_MAX_HEADLIGHT/2);
     loop {
         let now = Instant::now();
 
@@ -111,7 +145,7 @@ pub async fn output_task(
         }
         let state = STATE.lock(|c| c.update(|s| {
             let mut s = s;
-            s.underlight_brightness = s.underlight_brightness.saturating_add(3);
+            s.underlight_brightness = s.underlight_brightness.step_towards(underlight_target_brightness, 3);
             s
         }));
         if state.underlight_brightness == 0 {
@@ -127,35 +161,43 @@ pub async fn output_task(
             error!("failed to set power_enable: {}", e);
         };
 
+        let mut taillight_on = false;
+        let state = STATE.lock(|c| c.update(|s| {
+            let mut s = s;
+            use crate::HeadlightMode::*;
+            if s.vext.map_or(true, |v| v < 11.2*V) || !s.vbus_detected {
+                s.headlight_brightness = 0.0;
+                s.taillight_brightness = 0.0;
+                s.headlight_mode = Off;
+            } else {
+                s.vext_present_timer.update();
+                taillight_on = s.move_timer.elapsed() < LAST_MOVE_TAIL_TIMEOUT;
+                s.headlight_mode = match desired_state.headlight_mode {
+                    Auto => {
+                        if s.move_timer.elapsed() > LAST_MOVE_TIMEOUT {
+                            Off
+                        } else if s.lux.map_or(true, |l| l > 10.0*LX) {
+                            Day
+                        } else {
+                            Night
+                        }
+                    }
+                    _ => desired_state.headlight_mode
+                };
+            }
+            let target_brightness = match state.headlight_mode {
+                Night => 1.0,
+                Day => 0.5, // TODO: Blink
+                _ => 0.0,
+            };
+            s.headlight_brightness = s.headlight_brightness.step_towards(target_brightness, 0.01);
+            s
+        }));
+        headlight_pwm.set_duty(0, PWM_MAX_HEADLIGHT - (PWM_MAX_HEADLIGHT as f32 * state.headlight_brightness) as u16); // TODO: Figure out how to invert polarity.
+
         Timer::after(Duration::from_millis(1000 / 30)).await;
     }
 }
-
-
-
-//   bool taillight_on = false;
-//   if (vext < 11.2 || !vbus_detected) {
-//     brightness = 0;
-//     taillight_brightness = 0;
-//     actual_mode = OFF;
-//   } else {
-//     last_vext_time = now;
-//     taillight_on = (now - last_move_time) < LAST_MOVE_TAIL_TIMEOUT;
-//     switch (desired_mode) {
-//       case AUTO:
-//         if (lux > 10) {
-//           actual_mode = DAY;
-//         } else {
-//           actual_mode = NIGHT;
-//         }
-//         if ((now - last_move_time) > LAST_MOVE_TIMEOUT) {
-//           actual_mode = OFF;
-//         }
-//         break;
-//       default:
-//         actual_mode = desired_mode;
-//     }
-//   }
 
 //   // Update headlight
 //   float target_brightness = 0;
