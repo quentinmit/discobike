@@ -29,7 +29,7 @@ use embassy::blocking_mutex::Mutex as BlockingMutex;
 use embassy::mutex::Mutex;
 use embassy_embedded_hal::shared_bus::i2c::I2cBusDevice;
 
-use drogue_device::drivers::led::neopixel::rgbw::{NeoPixelRgbw, GREEN};
+use drogue_device::drivers::led::neopixel::{rgb, rgb::NeoPixelRgb};
 
 use nrf_softdevice::ble::{gatt_server, peripheral};
 use nrf_softdevice::{raw, Softdevice, ble::Connection};
@@ -449,7 +449,7 @@ async fn blinker(mut led: Output<'static, PinLed>, interval: Duration) {
 
 type I2cDevice = I2cBusDevice<'static, ThreadModeRawMutex, Twim<'static, TWISPI0>>;
 
-fn start_wdt(p_wdt: peripherals::WDT) -> wdt::WatchdogHandle {
+async fn start_wdt<'l, T: embassy_nrf::pwm::Instance>(p_wdt: peripherals::WDT, neopixel: &mut NeoPixelRgb<'l, T, 1>) -> wdt::WatchdogHandle {
     let mut config = wdt::Config::default();
     config.timeout_ticks = 32768 * 5; // 5 seconds
 
@@ -461,8 +461,9 @@ fn start_wdt(p_wdt: peripherals::WDT) -> wdt::WatchdogHandle {
         Ok(x) => x,
         Err(_) => {
             info!("Watchdog already enabled; first boot after DFU? Waiting for it to timeout...");
-            // TODO: neopixel.fill(neopixel.Color(0x11, 0, 0x11, 0));
-            // TODO: neopixel.show();
+            if let Err(e) = neopixel.set(&[rgb::Rgb8::new(0x11, 0, 0x11)]).await {
+                error!("failed to set neopixel: {}", e);
+            }
             loop {}
         }
     };
@@ -479,12 +480,12 @@ fn config() -> embassy_nrf::config::Config {
 #[embassy::main(config = "config()")]
 async fn main(spawner: Spawner, p: Peripherals) {
     info!("Hello World!");
-    let mut neopixel = unwrap!(NeoPixelRgbw::<'_, _, 1>::new(p.PWM0, use_pin_neo_pixel!(p)));
-    if let Err(e) = neopixel.set(&[GREEN]).await {
+    let mut neopixel = unwrap!(NeoPixelRgb::<'_, _, 1>::new(p.PWM0, use_pin_neo_pixel!(p)));
+    if let Err(e) = neopixel.set(&[rgb::GREEN]).await {
         error!("failed to set neopixel on boot: {:?}", e);
     }
 
-    let wdt_handle = start_wdt(p.WDT);
+    let wdt_handle = start_wdt(p.WDT, &mut neopixel).await;
 
     let sdconfig = nrf_softdevice::Config {
         clock: Some(raw::nrf_clock_lf_cfg_t {
