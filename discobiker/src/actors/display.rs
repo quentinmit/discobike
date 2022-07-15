@@ -26,6 +26,7 @@ use bincode;
 extern crate dimensioned as dim;
 use dim::si::{f32consts::{V, A, MPS2, LX}};
 use dim::traits::Dimensioned;
+use physical_constants::STANDARD_ACCELERATION_OF_GRAVITY;
 
 use ector::{actor, Actor, Address, Inbox};
 
@@ -160,6 +161,14 @@ where
             yield_now().await;
             buf.clear();
             // Line 4: XXX.XXG    XXXXX lux
+            state.accel_mag.write_dim(&mut buf, STANDARD_ACCELERATION_OF_GRAVITY as f32*MPS2, 6, 2)?;
+            buf.push_str_truncating("G    ");
+            state.lux.write_dim(&mut buf, LX, 5, 0)?;
+            buf.push_str_truncating(" lux");
+            Text::with_baseline(&buf, Point::new(0, 4*line_height as i32), text_style, Baseline::Top)
+                .draw(&mut self.display)?;
+            yield_now().await;
+            buf.clear();
             // Line 5: Mode: Day XXX% XXs
             buf.push_str_truncating("Mode: ");
             core::write!(&mut buf, "{:?} {:3} {}", state.headlight_mode, state.headlight_brightness * 100.0, state.move_timer)?;
