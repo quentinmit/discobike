@@ -39,7 +39,7 @@ byteorder = { version = "1.4.3", default-features = false }
 uom = { version = "0.33.0", default-features = false, features = ["autoconvert", "f32", "si"] }
 apds9960 = { version = "0.1.0", default-features = false, features = ["async"] }
 embedded-hal-async = "0.1.0-alpha.1"
-dimensioned = { version = "0.8.0", default-features = false, features = ["serde"] }
+dimensioned = { version = "0.8.0", default-features = false, features = ["serde", "nightly"] }
 paste = "1.0.7"
 drogue-device = { version = "0.1.0", default-features = false, features = ["defmt", "time", "neopixel", "nrf"] }
 ector = { version = "0.1.0", default-features = false }
