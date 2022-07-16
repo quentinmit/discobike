@@ -553,6 +553,7 @@ dependencies = [
  "fixed",
  "futures",
  "heapless",
+ "lsm6ds33",
  "modular-bitfield",
  "nrf-softdevice",
  "nrf-softdevice-defmt-rtt",
@@ -1223,6 +1224,15 @@ checksum = "327fa5b6a6940e4699ec49a9beae1ea4845c6bab9314e4f84ac68742139d8c53"
 dependencies = [
  "autocfg",
  "scopeguard",
+]
+
+[[package]]
+name = "lsm6ds33"
+version = "0.2.0"
+source = "git+https://github.com/quentinmit/lsm6ds33?branch=async#4d83fd43fbbe9a6477182b8bdbc5b86214efd923"
+dependencies = [
+ "embedded-hal 0.2.7",
+ "embedded-hal-async",
 ]
 
 [[package]]

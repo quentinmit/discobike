@@ -56,6 +56,7 @@ use num_traits::float::Float;
 use core::sync::atomic::*;
 use atomic_float::AtomicF32;
 
+#[macro_use]
 extern crate dimensioned as dim;
 use dim::si::{Volt, Ampere, MeterPerSecond2, Lux, f32consts::{V, MPS2, LX}};
 
@@ -127,6 +128,7 @@ define_pin!(Led, P0_13);
 // 0x40 - INA219 Current sensor (on INA)
 // 0x44 - SHT30 Humidity
 // 0x6A - LSM6DS33 Gyro + Accel
+const LSM6DS33_ADDR: u8 = 0x6A;
 // 0x77 - BMP280 Temperature + Pressure
 
 #[nrf_softdevice::gatt_service(uuid = "180f")]

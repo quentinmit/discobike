@@ -55,6 +55,7 @@ bincode = { version = "2.0.0-rc.1", default-features = false, features = ["serde
 serde_cbor = { version = "0.11.2", default-features = false }
 num-derive = "0.3.3"
 num_enum = { version = "0.5.7", default-features = false }
+lsm6ds33 = "0.2.0"
 
 [patch.crates-io]
 embassy = { git = "https://github.com/embassy-rs/embassy" }
@@ -75,3 +76,4 @@ display-interface = { git = "https://github.com/simmsb/display-interface" }
 physical_constants = { git = "https://github.com/quentinmit/rust-physical_constants", branch = "no_std" }
 dimensioned = { git = "https://github.com/quentinmit/dimensioned", branch = "no_std" }
 bincode = { git = "https://github.com/bincode-org/bincode" }
+lsm6ds33 = { git = "https://github.com/quentinmit/lsm6ds33", branch = "async" }
