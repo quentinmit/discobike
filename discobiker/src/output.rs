@@ -1,7 +1,7 @@
 use crate::EventTimer;
 use crate::I2cDevice;
 use crate::{HeadlightMode, UnderlightMode};
-use apds9960::{Apds9960, LightData};
+use apds9960::{Apds9960Async as Apds9960, LightData};
 use defmt::*;
 use embassy::time::{Duration, Instant, Timer};
 use embassy_nrf::pac;

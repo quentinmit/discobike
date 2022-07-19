@@ -1,10 +1,14 @@
 use defmt::*;
-use embedded_hal_async::i2c;
 use modular_bitfield::prelude::*;
 extern crate dimensioned as dim;
 use dim::f32prefixes::*;
 use dim::si::f32consts::{A, OHM, V};
 use dim::si::{Ampere, Ohm, Volt};
+use maybe_async_cfg;
+
+use embedded_hal::i2c::blocking as i2c_mod;
+#[cfg(feature = "async")]
+use embedded_hal_async::i2c as i2c_mod_async;
 
 use byteorder::{BigEndian, ByteOrder, LittleEndian};
 
@@ -115,6 +119,7 @@ struct BusVoltage {
 
 bitfield_u16!(BusVoltage);
 
+#[maybe_async_cfg::maybe(sync(keep_self), async(feature="async"))]
 pub struct INA219<I2C> {
     i2c: I2C,
     address: u8,
@@ -124,9 +129,10 @@ pub struct INA219<I2C> {
     shunt_resistance: Option<Ohm<f32>>,
 }
 
+#[maybe_async_cfg::maybe(sync(keep_self), async(feature="async", idents(i2c_mod(fn))))]
 impl<I2C, E> INA219<I2C>
 where
-    I2C: i2c::I2c<Error = E>,
+    I2C: i2c_mod::I2c<Error = E>,
 {
     pub fn new(i2c: I2C, address: u8) -> INA219<I2C> {
         INA219 {
@@ -151,7 +157,8 @@ where
             c.with_sample_continuous(false)
                 .with_sample_bus(bus)
                 .with_sample_shunt(shunt)
-        }).await?;
+        })
+        .await?;
         loop {
             let v: BusVoltage = self.read_register(Register::BusVoltage).await?.into();
             if v.conversion_ready() {

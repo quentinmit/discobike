@@ -19,7 +19,7 @@ derived!(ucum, UCUM: RadianPerSecond = Radian / Second);
 //const RADPS: RadianPerSecond<f32> = RAD / S;
 
 pub struct Imu<I2C> {
-    lsm6ds33: Lsm6ds33<I2C>,
+    lsm6ds33: Lsm6ds33Async<I2C>,
 }
 
 pub enum ImuMessage {}
@@ -56,7 +56,7 @@ where
     I2C: i2c::I2c<Error = E>,
 {
     pub async fn new(i2c: I2C) -> Result<Self, Error<I2C>> {
-        let lsm6ds33 = Lsm6ds33::new(i2c, LSM6DS33_ADDR).await?;
+        let lsm6ds33 = Lsm6ds33Async::new(i2c, LSM6DS33_ADDR).await?;
         Ok(Imu { lsm6ds33 })
     }
     async fn run_imu<M>(&mut self, _inbox: &mut M) -> Result<(), Error<I2C>>

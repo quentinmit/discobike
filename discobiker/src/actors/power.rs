@@ -1,7 +1,7 @@
 use crate::STATE;
 use core::fmt;
 use defmt::{*, panic};
-use crate::drivers::ina219::{INA219, INA219_ADDR, ADCMode};
+use crate::drivers::ina219::{INA219Async, INA219_ADDR, ADCMode};
 use ector::{actor, Actor, Address, Inbox};
 use embedded_hal_async::i2c;
 use embassy::time::{Duration, Timer, Instant};
@@ -11,7 +11,7 @@ use dim::si::{
 };
 
 pub struct Power<I2C> {
-    ina219: INA219<I2C>,
+    ina219: INA219Async<I2C>,
 }
 
 pub enum PowerMessage {
@@ -27,7 +27,7 @@ where
     I2C: i2c::I2c<Error = E>,
 {
     pub fn new(i2c: I2C) -> Self {
-        let ina219 = INA219::new(i2c, INA219_ADDR);
+        let ina219 = INA219Async::new(i2c, INA219_ADDR);
         Power {
             ina219
         }

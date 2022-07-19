@@ -6,6 +6,8 @@ version = "0.1.0"
 resolver = "2"
 
 [features]
+default = ["async"]
+async = []
 mdbt50q = []
 
 [profile.dev.package.nrf-softdevice]
@@ -55,7 +57,8 @@ bincode = { version = "2.0.0-rc.1", default-features = false, features = ["serde
 serde_cbor = { version = "0.11.2", default-features = false }
 num-derive = "0.3.3"
 num_enum = { version = "0.5.7", default-features = false }
-lsm6ds33 = "0.2.0"
+lsm6ds33 = { version = "0.2.0", default-features = false, features = ["async"] }
+maybe-async-cfg = "0.2.1"
 
 [patch.crates-io]
 embassy = { git = "https://github.com/embassy-rs/embassy" }

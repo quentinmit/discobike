@@ -36,7 +36,7 @@ use nrf_softdevice::{raw, Softdevice, ble::Connection};
 use nrf_softdevice_defmt_rtt as _;
 use panic_probe as _;
 
-use apds9960::Apds9960;
+use apds9960::Apds9960Async as Apds9960;
 
 use paste::paste;
 use num_enum::TryFromPrimitive;
@@ -44,7 +44,6 @@ use num_enum::TryFromPrimitive;
 use ector::spawn_actor;
 
 mod drivers;
-use crate::drivers::ina219::{INA219, INA219_ADDR};
 mod output;
 mod actors;
 use ssd1306::size::DisplaySize128x64;
