@@ -92,10 +92,10 @@ pub async fn output_task(
     headlight_pwm.set_duty(0, PWM_MAX_HEADLIGHT/2);
     let mut taillight_pwm = SimplePwm::new_3ch(pwm2, pin_tail_c, pin_tail_l, pin_tail_r);
     taillight_pwm.set_prescaler(Prescaler::Div16); // Div16 = 1MHz
-    taillight_pwm.set_max_duty(255);
-    taillight_pwm.set_duty(0, 255);
-    taillight_pwm.set_duty(1, 255);
-    taillight_pwm.set_duty(2, 255);
+    taillight_pwm.set_max_duty(PWM_MAX_TAILLIGHT);
+    taillight_pwm.set_duty(0, PWM_MAX_TAILLIGHT);
+    taillight_pwm.set_duty(1, PWM_MAX_TAILLIGHT);
+    taillight_pwm.set_duty(2, PWM_MAX_TAILLIGHT);
     loop {
         let now = Instant::now();
 
