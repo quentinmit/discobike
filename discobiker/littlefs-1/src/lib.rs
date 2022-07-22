@@ -4,6 +4,7 @@ extern crate alloc;
 use alloc::vec::Vec;
 use binrw::io::*;
 use binrw::*;
+use core::str;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 #[binrw]
@@ -16,40 +17,39 @@ enum DirEntryType {
 }
 
 #[binrw]
-#[brw(little)]
-#[derive(Debug)]
-struct DirEntryFile {
-    file_head: u32,
-    file_size: u32,
-}
-
-#[binrw]
-#[brw(little)]
-#[derive(Debug)]
-struct DirEntrySuperblock {
-    root_directory: [u32; 2],
-    block_size: u32,
-    block_count: u32,
-    version: u32,
-}
-
-#[binrw]
 #[br(little, import(ty: DirEntryType))]
 #[bw(little)]
 #[derive(Debug)]
 enum DirEntryData {
     #[br(pre_assert(ty == DirEntryType::File))]
-    File(DirEntryFile),
+    File{ file_head: u32, file_size: u32 },
     #[br(pre_assert(ty == DirEntryType::Directory))]
-    Directory([u32; 2]),
+    Directory{ directory_ptr: [u32; 2] },
     #[br(pre_assert(ty == DirEntryType::Superblock))]
-    Superblock(DirEntrySuperblock),
+    Superblock{
+        root_directory: [u32; 2],
+        block_size: u32,
+        block_count: u32,
+        version: u32,
+    }
+}
+
+impl From<&DirEntryData> for DirEntryType {
+    fn from(data: &DirEntryData) -> Self {
+        match data {
+            DirEntryData::File{..} => DirEntryType::File,
+            DirEntryData::Directory{..} => DirEntryType::Directory,
+            DirEntryData::Superblock{..} => DirEntryType::Superblock
+        }
+    }
 }
 
 #[binrw]
 #[brw(little)]
 #[derive(Debug)]
 struct DirEntry {
+    #[br(temp)]
+    #[bw(calc(entry_data.into()))]
     entry_type: DirEntryType,
 
     #[br(temp)]
@@ -71,6 +71,16 @@ struct DirEntry {
 
     #[br(args { count: name_length as usize } )]
     name: Vec<u8>,
+}
+
+impl DirEntry {
+    pub fn entry_type(&self) -> DirEntryType {
+        (&self.entry_data).into()
+    }
+
+    pub fn name_str(&self) -> &str {
+        str::from_utf8(&self.name).unwrap()
+    }
 }
 
 pub fn byte_size<Reader, T, Arg, Ret>(
@@ -150,9 +160,9 @@ mod test {
         assert_eq!(block.crc, 0xc50b74fa);
         assert_eq!(block.dir_entries.len(), 1);
         let entry = &block.dir_entries[0];
-        assert_eq!(entry.entry_type, crate::DirEntryType::Superblock);
+        assert_eq!(entry.entry_type(), crate::DirEntryType::Superblock);
         assert_eq!(entry.attributes.len(), 0);
-        assert_eq!(std::str::from_utf8(&entry.name).unwrap(), "littlefs");
+        assert_eq!(entry.name_str(), "littlefs");
     }
     #[test]
     fn directory() {
