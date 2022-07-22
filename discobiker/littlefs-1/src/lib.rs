@@ -17,6 +17,7 @@ enum DirEntryType {
 
 #[binrw]
 #[brw(little)]
+#[derive(Debug)]
 struct DirEntryFile {
     file_head: u32,
     file_size: u32,
@@ -24,6 +25,7 @@ struct DirEntryFile {
 
 #[binrw]
 #[brw(little)]
+#[derive(Debug)]
 struct DirEntrySuperblock {
     root_directory: [u32; 2],
     block_size: u32,
@@ -34,6 +36,7 @@ struct DirEntrySuperblock {
 #[binrw]
 #[br(little, import(ty: DirEntryType))]
 #[bw(little)]
+#[derive(Debug)]
 enum DirEntryData {
     #[br(pre_assert(ty == DirEntryType::File))]
     File(DirEntryFile),
@@ -45,6 +48,7 @@ enum DirEntryData {
 
 #[binrw]
 #[brw(little)]
+#[derive(Debug)]
 struct DirEntry {
     entry_type: DirEntryType,
 
@@ -158,6 +162,16 @@ mod test {
             0x00, 0x00, 0x6d, 0x69, 0x6c, 0x6b, 0x34, 0x22, 0x08, 0x00, 0x05, 0x25, 0x00, 0x00,
             0x00, 0x24, 0x00, 0x00, 0x00, 0x6d, 0x69, 0x6c, 0x6b, 0x35, 0x06, 0x31, 0x6e, 0xc8,
         ];
+        let mut reader = Cursor::new(bytes);
+        let block: crate::MetadataBlock = reader.read_le().unwrap();
+        assert_eq!(block.revision_count, 10);
+        assert_eq!(block.dir_size, 154);
+        assert_eq!(block.tail_pointer, [37, 36]);
+        assert_eq!(block.crc, 0xc86e3106);
+        assert_eq!(block.dir_entries.len(), 8);
+        assert_eq!(block.dir_entries.iter().map(
+            |entry| std::str::from_utf8(&entry.name).unwrap()
+        ).collect::<Vec<&str>>(), ["tea", "coffee", "soda", "milk1", "milk2", "milk3", "milk4", "milk5"]);
     }
 }
 
