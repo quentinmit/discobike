@@ -111,6 +111,12 @@ where
 #[brw(little)]
 struct MetadataBlock {
     revision_count: u32,
+    // High bit means continued on next block
+    #[br(restore_position, map = |x: u32| x & 0x80000000 > 0)]
+    #[bw(ignore)]
+    continued: bool,
+    #[br(map = |x: u32| x & 0x7FFFFFFF)]
+    #[bw(map = |x| if *continued { *x | 0x80000000 } else { *x })]
     dir_size: u32,
     tail_pointer: [u32; 2],
     #[br(parse_with = byte_size((dir_size-5*4) as usize))]
@@ -136,13 +142,14 @@ mod test {
             0x74, 0x74, 0x6c, 0x65, 0x66, 0x73, 0xfa, 0x74, 0x0b, 0xc5,
         ];
         let mut reader = Cursor::new(bytes);
-        let superblock: crate::MetadataBlock = reader.read_le().unwrap();
-        assert_eq!(superblock.revision_count, 3);
-        assert_eq!(superblock.dir_size, 52);
-        assert_eq!(superblock.tail_pointer, [3, 2]);
-        assert_eq!(superblock.crc, 0xc50b74fa);
-        assert_eq!(superblock.dir_entries.len(), 1);
-        let entry = &superblock.dir_entries[0];
+        let block: crate::MetadataBlock = reader.read_le().unwrap();
+        assert_eq!(block.revision_count, 3);
+        assert_eq!(block.continued, false);
+        assert_eq!(block.dir_size, 52);
+        assert_eq!(block.tail_pointer, [3, 2]);
+        assert_eq!(block.crc, 0xc50b74fa);
+        assert_eq!(block.dir_entries.len(), 1);
+        let entry = &block.dir_entries[0];
         assert_eq!(entry.entry_type, crate::DirEntryType::Superblock);
         assert_eq!(entry.attributes.len(), 0);
         assert_eq!(std::str::from_utf8(&entry.name).unwrap(), "littlefs");
