@@ -30,7 +30,7 @@ mod bytes {
                 bytes.read_with::<u32>(offset, endian)?,
                 bytes.read_with::<u32>(offset, endian)?,
             ];
-            let contents = bytes.read_with::<&[u8]>(offset, Bytes::Len(dir_size as usize - 16))?;
+            let contents = bytes.read_with::<&[u8]>(offset, Bytes::Len(dir_size as usize - *offset - 4))?;
             let crc = bytes.read_with(offset, endian)?;
             // TODO: Check crc
             Ok((
@@ -53,14 +53,21 @@ mod bytes {
             let endian = LE;
 
             bytes.write_with(offset, self.revision_count, endian)?;
-            let dir_size =
-                (self.contents.len() + 16) as u32 | if self.continued { 0x80000000 } else { 0 };
-            bytes.write_with(offset, dir_size, endian)?;
+            let dir_size_offset = &mut offset.clone();
+            // Fill in dir size later
+            bytes.write_with::<u32>(offset, 0, endian)?;
             bytes.write_with(offset, self.tail_pointer[0], endian)?;
             bytes.write_with(offset, self.tail_pointer[1], endian)?;
             bytes.write(offset, self.contents)?;
+            let crc_offset = &mut offset.clone();
+            bytes.write_with::<u32>(offset, 0, endian)?;
+
+            // Fill in dir size now that we know it
+            let dir_size = *offset as u32 | if self.continued { 0x80000000 } else { 0 };
+            bytes.write_with(dir_size_offset, dir_size, endian)?;
+
             // TODO: Calculate crc
-            bytes.write(offset, self.crc)?;
+            bytes.write(crc_offset, self.crc)?;
             Ok(*offset)
         }
     }
