@@ -134,6 +134,131 @@ struct MetadataBlock {
     crc: u32,
 }
 
+mod bytes {
+    use byte::*;
+    use byte::ctx::*;
+
+    #[derive(Debug,PartialEq)]
+    struct MetadataBlock<'a> {
+        revision_count: u32,
+        continued: bool,
+        dir_size: u32,
+        tail_pointer: [u32; 2],
+        contents: &'a [u8],
+        crc: u32,
+    }
+
+    impl<'a> TryRead <'a, Endian> for MetadataBlock<'a> {
+        fn try_read(bytes: &'a [u8], endian: Endian) -> Result<(Self, usize)> {
+            let offset = &mut 0;
+
+            let revision_count = bytes.read_with(offset, endian)?;
+            let dir_size = bytes.read_with::<u32>(offset, endian)?;
+            let continued = dir_size & 0x80000000 > 0;
+            let dir_size = dir_size & 0x7FFFFFFF;
+            let tail_pointer = [
+                bytes.read_with::<u32>(offset, endian)?,
+                bytes.read_with::<u32>(offset, endian)?
+            ];
+            let contents = bytes.read_with::<&[u8]>(offset, Bytes::Len(dir_size as usize - 16))?;
+            let crc = bytes.read_with(offset, endian)?;
+            // TODO: Check crc
+            Ok((
+                MetadataBlock {
+                    revision_count: revision_count,
+                    dir_size: dir_size,
+                    continued: continued,
+                    tail_pointer: tail_pointer,
+                    contents: contents,
+                    crc: crc,
+                },
+                *offset
+            ))
+        }
+    }
+
+    #[derive(Debug,PartialEq)]
+    struct DirEntry<'a> {
+        entry_data: &'a [u8],
+
+        attributes: &'a [u8],
+
+        name: &'a str,
+    }
+    impl<'a> TryRead <'a, Endian> for DirEntry<'a> {
+        fn try_read(bytes: &'a [u8], endian: Endian) -> Result<(Self, usize)> {
+            let offset = &mut 0;
+
+            let entry_type: u8 = bytes.read_with(offset, endian)?;
+            let entry_length: u8 = bytes.read_with(offset, endian)?;
+            let attribute_length: u8 = bytes.read_with(offset, endian)?;
+            let name_length: u8 = bytes.read_with(offset, endian)?;
+            let entry_data = bytes.read_with(offset, Bytes::Len(entry_length as usize))?;
+            let attributes = bytes.read_with(offset, Bytes::Len(attribute_length as usize))?;
+            let name = bytes.read_with(offset, Str::Len(name_length as usize))?;
+            Ok((DirEntry{ entry_data, attributes, name }, *offset))
+        }
+    }
+
+    struct DirEntryIterator<'a> {
+        offset: usize,
+        contents: &'a [u8],
+    }
+
+    impl<'a> Iterator for DirEntryIterator<'a> {
+        type Item = Result<DirEntry<'a>>;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            if self.offset >= self.contents.len() {
+                None
+            } else {
+                let entry: Result<DirEntry> = self.contents.read_with(&mut self.offset, LE);
+                Some(entry)
+            }
+        }
+    }
+    impl<'a> IntoIterator for MetadataBlock<'a> {
+        type Item = Result<DirEntry<'a>>;
+        type IntoIter = DirEntryIterator<'a>;
+
+        fn into_iter(self) -> Self::IntoIter {
+            DirEntryIterator{
+                offset: 0,
+                contents: self.contents,
+            }
+        }
+    }
+
+    #[cfg(test)]
+    mod test {
+        use alloc::vec::Vec;
+        use byte::{BytesExt, LE};
+
+        fn superblock() {
+            let bytes: &[u8] = &[
+                0x03, 0x00, 0x00, 0x00, 0x34, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x02, 0x00,
+                0x00, 0x00, 0x2e, 0x14, 0x00, 0x08, 0x03, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00,
+                0x00, 0x02, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x6c, 0x69,
+                0x74, 0x74, 0x6c, 0x65, 0x66, 0x73, 0xfa, 0x74, 0x0b, 0xc5,
+            ];
+            let block: super::MetadataBlock = bytes.read_with(&mut 0, LE).unwrap();
+            assert_eq!(block.revision_count, 3);
+            assert_eq!(block.continued, false);
+            assert_eq!(block.dir_size, 52);
+            assert_eq!(block.tail_pointer, [3, 2]);
+            assert_eq!(block.crc, 0xc50b74fa);
+            let iter = block.into_iter();
+            let dir_entries: Result<Vec<_>, _> = iter.collect();
+            let dir_entries = dir_entries.unwrap();
+            assert_eq!(dir_entries.len(), 1);
+            let entry = &dir_entries[0];
+            // assert_eq!(entry.entry_type(), crate::DirEntryType::Superblock);
+            assert_eq!(entry.attributes.len(), 0);
+            assert_eq!(entry.name, "littlefs");
+        }
+    }
+}
+
 #[cfg(test)]
 #[macro_use]
 extern crate std;

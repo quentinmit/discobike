@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 binrw = { version = "0.9.2", default-features = false }
+byte = "0.2.6"
