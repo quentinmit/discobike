@@ -30,7 +30,8 @@ mod bytes {
                 bytes.read_with::<u32>(offset, endian)?,
                 bytes.read_with::<u32>(offset, endian)?,
             ];
-            let contents = bytes.read_with::<&[u8]>(offset, Bytes::Len(dir_size as usize - *offset - 4))?;
+            let contents =
+                bytes.read_with::<&[u8]>(offset, Bytes::Len(dir_size as usize - *offset - 4))?;
             let crc = bytes.read_with(offset, endian)?;
             // TODO: Check crc
             Ok((
@@ -72,7 +73,7 @@ mod bytes {
         }
     }
 
-    #[derive(Debug, EnumKind)]
+    #[derive(Debug, PartialEq, EnumKind)]
     #[enum_kind(DirEntryType, repr(u8), derive(IntoPrimitive, TryFromPrimitive))]
     enum DirEntryData {
         #[enum_kind_value(0x11)]
@@ -101,13 +102,48 @@ mod bytes {
         }
     }
 
+    impl TryRead<'_, DirEntryType> for DirEntryData {
+        fn try_read(bytes: &[u8], ty: DirEntryType) -> Result<(Self, usize)> {
+            let offset = &mut 0;
+            let endian = LE;
+            match ty {
+                DirEntryType::File => {
+                    let f = DirEntryData::File {
+                        file_head: bytes.read_with(offset, endian)?,
+                        file_size: bytes.read_with(offset, endian)?,
+                    };
+                    Ok((f, *offset))
+                }
+                DirEntryType::Directory => {
+                    let d = DirEntryData::Directory {
+                        directory_ptr: [
+                            bytes.read_with(offset, endian)?,
+                            bytes.read_with(offset, endian)?,
+                        ],
+                    };
+                    Ok((d, *offset))
+                }
+                DirEntryType::Superblock => {
+                    let s = DirEntryData::Superblock {
+                        root_directory: [
+                            bytes.read_with(offset, endian)?,
+                            bytes.read_with(offset, endian)?,
+                        ],
+                        block_size: bytes.read_with(offset, endian)?,
+                        block_count: bytes.read_with(offset, endian)?,
+                        version: bytes.read_with(offset, endian)?,
+                    };
+                    Ok((s, *offset))
+                }
+            }
+        }
+    }
+
     #[derive(Debug, PartialEq)]
     struct DirEntry<'a> {
-        entry_data: &'a [u8],
-
-        attributes: &'a [u8],
-
         name: &'a str,
+        data: DirEntryData,
+        attributes: &'a [u8],
     }
     impl<'a> TryRead<'a, ()> for DirEntry<'a> {
         fn try_read(bytes: &'a [u8], _ctx: ()) -> Result<(Self, usize)> {
@@ -118,12 +154,18 @@ mod bytes {
             let entry_length: u8 = bytes.read_with(offset, endian)?;
             let attribute_length: u8 = bytes.read_with(offset, endian)?;
             let name_length: u8 = bytes.read_with(offset, endian)?;
-            let entry_data = bytes.read_with(offset, Bytes::Len(entry_length as usize))?;
+            let data_offset = *offset;
+            let data = bytes.read_with(offset, entry_type)?;
+            if *offset != data_offset + (entry_length as usize) {
+                return Err(Error::BadInput {
+                    err: "invalid entry length",
+                });
+            }
             let attributes = bytes.read_with(offset, Bytes::Len(attribute_length as usize))?;
             let name = bytes.read_with(offset, Str::Len(name_length as usize))?;
             Ok((
                 DirEntry {
-                    entry_data,
+                    data,
                     attributes,
                     name,
                 },
@@ -165,8 +207,9 @@ mod bytes {
     mod tests {
         extern crate alloc;
         use alloc::vec::Vec;
-        use byte::{BytesExt, LE};
+        use byte::BytesExt;
 
+        #[test]
         fn superblock() {
             let bytes: &[u8] = &[
                 0x03, 0x00, 0x00, 0x00, 0x34, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x02, 0x00,
