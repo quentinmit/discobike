@@ -22,24 +22,24 @@ enum DirEntryType {
 #[derive(Debug)]
 enum DirEntryData {
     #[br(pre_assert(ty == DirEntryType::File))]
-    File{ file_head: u32, file_size: u32 },
+    File { file_head: u32, file_size: u32 },
     #[br(pre_assert(ty == DirEntryType::Directory))]
-    Directory{ directory_ptr: [u32; 2] },
+    Directory { directory_ptr: [u32; 2] },
     #[br(pre_assert(ty == DirEntryType::Superblock))]
-    Superblock{
+    Superblock {
         root_directory: [u32; 2],
         block_size: u32,
         block_count: u32,
         version: u32,
-    }
+    },
 }
 
 impl From<&DirEntryData> for DirEntryType {
     fn from(data: &DirEntryData) -> Self {
         match data {
-            DirEntryData::File{..} => DirEntryType::File,
-            DirEntryData::Directory{..} => DirEntryType::Directory,
-            DirEntryData::Superblock{..} => DirEntryType::Superblock
+            DirEntryData::File { .. } => DirEntryType::File,
+            DirEntryData::Directory { .. } => DirEntryType::Directory,
+            DirEntryData::Superblock { .. } => DirEntryType::Superblock,
         }
     }
 }
@@ -135,10 +135,13 @@ struct MetadataBlock {
 }
 
 mod bytes {
-    use byte::*;
     use byte::ctx::*;
+    use byte::*;
 
-    #[derive(Debug,PartialEq)]
+    use enum_kinds::EnumKind;
+    use num_enum::{IntoPrimitive, TryFromPrimitive};
+
+    #[derive(Debug, PartialEq)]
     struct MetadataBlock<'a> {
         revision_count: u32,
         continued: bool,
@@ -148,7 +151,7 @@ mod bytes {
         crc: u32,
     }
 
-    impl<'a> TryRead <'a, ()> for MetadataBlock<'a> {
+    impl<'a> TryRead<'a, ()> for MetadataBlock<'a> {
         fn try_read(bytes: &'a [u8], _ctx: ()) -> Result<(Self, usize)> {
             let offset = &mut 0;
             let endian = LE;
@@ -159,7 +162,7 @@ mod bytes {
             let dir_size = dir_size & 0x7FFFFFFF;
             let tail_pointer = [
                 bytes.read_with::<u32>(offset, endian)?,
-                bytes.read_with::<u32>(offset, endian)?
+                bytes.read_with::<u32>(offset, endian)?,
             ];
             let contents = bytes.read_with::<&[u8]>(offset, Bytes::Len(dir_size as usize - 16))?;
             let crc = bytes.read_with(offset, endian)?;
@@ -173,7 +176,7 @@ mod bytes {
                     contents: contents,
                     crc: crc,
                 },
-                *offset
+                *offset,
             ))
         }
     }
@@ -184,7 +187,8 @@ mod bytes {
             let endian = LE;
 
             bytes.write_with(offset, self.revision_count, endian)?;
-            let dir_size = (self.contents.len() + 16) as u32 | if self.continued { 0x80000000 } else { 0 };
+            let dir_size =
+                (self.contents.len() + 16) as u32 | if self.continued { 0x80000000 } else { 0 };
             bytes.write_with(offset, dir_size, endian)?;
             bytes.write_with(offset, self.tail_pointer[0], endian)?;
             bytes.write_with(offset, self.tail_pointer[1], endian)?;
@@ -195,7 +199,36 @@ mod bytes {
         }
     }
 
-    #[derive(Debug,PartialEq)]
+    #[derive(Debug, EnumKind)]
+    #[enum_kind(DirEntryType, repr(u8), derive(IntoPrimitive, TryFromPrimitive))]
+    enum DirEntryData {
+        #[enum_kind_value(0x11)]
+        File { file_head: u32, file_size: u32 },
+        #[enum_kind_value(0x22)]
+        Directory { directory_ptr: [u32; 2] },
+        #[enum_kind_value(0x2E)]
+        Superblock {
+            root_directory: [u32; 2],
+            block_size: u32,
+            block_count: u32,
+            version: u32,
+        },
+    }
+
+    impl TryRead<'_, ()> for DirEntryType {
+        fn try_read(bytes: &[u8], _ctx: ()) -> Result<(Self, usize)> {
+            let offset = &mut 0;
+            let v: u8 = bytes.read(offset)?;
+            Ok((
+                Self::try_from(v).map_err(|_| Error::BadInput {
+                    err: "invalid entry type",
+                })?,
+                *offset,
+            ))
+        }
+    }
+
+    #[derive(Debug, PartialEq)]
     struct DirEntry<'a> {
         entry_data: &'a [u8],
 
@@ -203,18 +236,26 @@ mod bytes {
 
         name: &'a str,
     }
-    impl<'a> TryRead <'a, Endian> for DirEntry<'a> {
-        fn try_read(bytes: &'a [u8], endian: Endian) -> Result<(Self, usize)> {
+    impl<'a> TryRead<'a, ()> for DirEntry<'a> {
+        fn try_read(bytes: &'a [u8], _ctx: ()) -> Result<(Self, usize)> {
             let offset = &mut 0;
+            let endian = LE;
 
-            let entry_type: u8 = bytes.read_with(offset, endian)?;
+            let entry_type: DirEntryType = bytes.read(offset)?;
             let entry_length: u8 = bytes.read_with(offset, endian)?;
             let attribute_length: u8 = bytes.read_with(offset, endian)?;
             let name_length: u8 = bytes.read_with(offset, endian)?;
             let entry_data = bytes.read_with(offset, Bytes::Len(entry_length as usize))?;
             let attributes = bytes.read_with(offset, Bytes::Len(attribute_length as usize))?;
             let name = bytes.read_with(offset, Str::Len(name_length as usize))?;
-            Ok((DirEntry{ entry_data, attributes, name }, *offset))
+            Ok((
+                DirEntry {
+                    entry_data,
+                    attributes,
+                    name,
+                },
+                *offset,
+            ))
         }
     }
 
@@ -230,7 +271,7 @@ mod bytes {
             if self.offset >= self.contents.len() {
                 None
             } else {
-                let entry: Result<DirEntry> = self.contents.read_with(&mut self.offset, LE);
+                let entry: Result<DirEntry> = self.contents.read(&mut self.offset);
                 Some(entry)
             }
         }
@@ -240,7 +281,7 @@ mod bytes {
         type IntoIter = DirEntryIterator<'a>;
 
         fn into_iter(self) -> Self::IntoIter {
-            DirEntryIterator{
+            DirEntryIterator {
                 offset: 0,
                 contents: self.contents,
             }
@@ -329,9 +370,14 @@ mod test {
         assert_eq!(block.tail_pointer, [37, 36]);
         assert_eq!(block.crc, 0xc86e3106);
         assert_eq!(block.dir_entries.len(), 8);
-        assert_eq!(block.dir_entries.iter().map(
-            |entry| std::str::from_utf8(&entry.name).unwrap()
-        ).collect::<Vec<&str>>(), ["tea", "coffee", "soda", "milk1", "milk2", "milk3", "milk4", "milk5"]);
+        assert_eq!(
+            block
+                .dir_entries
+                .iter()
+                .map(|entry| std::str::from_utf8(&entry.name).unwrap())
+                .collect::<Vec<&str>>(),
+            ["tea", "coffee", "soda", "milk1", "milk2", "milk3", "milk4", "milk5"]
+        );
     }
 }
 
