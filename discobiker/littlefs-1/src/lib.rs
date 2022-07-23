@@ -148,9 +148,10 @@ mod bytes {
         crc: u32,
     }
 
-    impl<'a> TryRead <'a, Endian> for MetadataBlock<'a> {
-        fn try_read(bytes: &'a [u8], endian: Endian) -> Result<(Self, usize)> {
+    impl<'a> TryRead <'a, ()> for MetadataBlock<'a> {
+        fn try_read(bytes: &'a [u8], _ctx: ()) -> Result<(Self, usize)> {
             let offset = &mut 0;
+            let endian = LE;
 
             let revision_count = bytes.read_with(offset, endian)?;
             let dir_size = bytes.read_with::<u32>(offset, endian)?;
@@ -174,6 +175,23 @@ mod bytes {
                 },
                 *offset
             ))
+        }
+    }
+
+    impl<'a> TryWrite<()> for MetadataBlock<'a> {
+        fn try_write(self, bytes: &mut [u8], _ctx: ()) -> Result<usize> {
+            let offset = &mut 0;
+            let endian = LE;
+
+            bytes.write_with(offset, self.revision_count, endian)?;
+            let dir_size = (self.contents.len() + 16) as u32 | if self.continued { 0x80000000 } else { 0 };
+            bytes.write_with(offset, dir_size, endian)?;
+            bytes.write_with(offset, self.tail_pointer[0], endian)?;
+            bytes.write_with(offset, self.tail_pointer[1], endian)?;
+            bytes.write(offset, self.contents)?;
+            // TODO: Calculate crc
+            bytes.write(offset, self.crc)?;
+            Ok(*offset)
         }
     }
 
@@ -241,7 +259,7 @@ mod bytes {
                 0x00, 0x02, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x6c, 0x69,
                 0x74, 0x74, 0x6c, 0x65, 0x66, 0x73, 0xfa, 0x74, 0x0b, 0xc5,
             ];
-            let block: super::MetadataBlock = bytes.read_with(&mut 0, LE).unwrap();
+            let block: super::MetadataBlock = bytes.read(&mut 0).unwrap();
             assert_eq!(block.revision_count, 3);
             assert_eq!(block.continued, false);
             assert_eq!(block.dir_size, 52);
