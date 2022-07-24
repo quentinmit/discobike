@@ -5,6 +5,8 @@
 mod storage;
 mod structs;
 
+use structs::{AsOffset, BlockPointer, BlockPointerPair};
+
 use arrayvec::ArrayString;
 use bitflags::bitflags;
 use byte::{BytesExt, LE};
@@ -49,8 +51,6 @@ impl<S, const BLOCK_SIZE: usize> LittleFs<S, BLOCK_SIZE> {
     }
 }
 
-use structs::{AsOffset, BlockPointerPair};
-
 #[derive(Copy, Clone, Debug)]
 pub struct Dir {
     ptr: BlockPointerPair,
@@ -67,7 +67,7 @@ impl Default for Dir {
 }
 
 impl Dir {
-    pub fn new(ptr: BlockPointerPair) -> Self {
+    fn new(ptr: BlockPointerPair) -> Self {
         Dir { ptr, pos: 0 }
     }
 }
@@ -92,8 +92,28 @@ pub struct Info {
 
 #[derive(Debug, PartialEq)]
 pub struct File {
-    file_head: u32,
-    file_size: u32,
+    /// Pointer to the first block of the file.
+    head: BlockPointer,
+    /// Total size of file, in bytes.
+    size: u32,
+    /// Current position within file, in bytes.
+    pos: u32,
+    /// Block pointer containing pos.
+    block: BlockPointer,
+    /// Offset of pos within block.
+    off: u32,
+}
+
+impl Default for File {
+    fn default() -> Self {
+        File {
+            head: 0,
+            size: 0,
+            pos: 0,
+            off: 0,
+            block: 0,
+        }
+    }
 }
 
 /// Definition of file open flags which can be mixed and matched as appropriate. These definitions
@@ -179,7 +199,7 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> LittleFs<S, BLOCK_SIZE> {
             _ => Err(FsError::Corrupt),
         }
     }
-    async fn dir_find(&mut self, path: &str) -> Result<structs::DirEntry, FsError> {
+    async fn dir_find<'a>(&mut self, path: &'a str) -> Result<structs::DirEntry, FsError> {
         // TODO: Support a different starting directory.
         let mut dir = Dir::new(self.root_directory_ptr);
         let mut names = path.split("/");
@@ -206,7 +226,7 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> LittleFs<S, BLOCK_SIZE> {
                 // Skipped by a future ..
                 continue;
             }
-            trace!("Looking for directory {:?}", name);
+            trace!("Looking for component {:?}", name);
             let dirmeta = self.read_newer_block(dir.ptr).await?;
             for entry in dirmeta {
                 match entry {
@@ -263,7 +283,7 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> LittleFs<S, BLOCK_SIZE> {
             match dirmeta.into_iter().enumerate().skip(dir.pos).next() {
                 Some((pos, Ok(entry))) => {
                     let (entry_type, size) = match entry.data {
-                        structs::DirEntryData::File { file_size, .. } => (EntryType::RegularFile, file_size),
+                        structs::DirEntryData::File { size, .. } => (EntryType::RegularFile, size),
                         structs::DirEntryData::Directory { .. } => (EntryType::Directory, 0),
                         _ => continue,
                     };
@@ -297,18 +317,39 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> LittleFs<S, BLOCK_SIZE> {
         }
         let entry = self.dir_find(path).await?;
         match entry.data {
-            _ => Err(FsError::NotDir),
             structs::DirEntryData::File {
-                file_head,
-                file_size,
+                head,
+                size,
             } => {
                 *file = File {
-                file_head,
-                file_size,
+                    head,
+                    size,
+                    .. Default::default()
                 };
                 Ok(())
             },
+            _ => Err(FsError::NotDir),
         }
+    }
+
+    pub async fn file_read(&mut self, file: &mut File, buf: &mut [u8]) -> Result<usize, FsError> {
+        let size = min(buf.len(), file.size.saturating_sub(file.pos) as usize);
+        let mut nsize = size;
+        let mut data_off = 0;
+
+        while nsize > 0 {
+            let (head, pos) = self.ctz_find(file.head, file.size, file.pos).await?;
+            file.block = head;
+            file.off = pos;
+            let diff = min(nsize as u32, self.block_size - file.off) as usize;
+            self.storage.read(
+                file.block.as_offset(BLOCK_SIZE) + file.off,
+                &mut buf[data_off..data_off+diff]
+            ).await.map_err(|_| FsError::Io)?;
+            data_off += diff;
+            nsize -= diff;
+        }
+        Ok(data_off)
     }
 
     fn ctz_index(&self, off: u32) -> (u32, u32) {
@@ -324,12 +365,12 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> LittleFs<S, BLOCK_SIZE> {
 
     async fn ctz_find(
         &mut self,
-        head: u32, size: u32,
+        head: BlockPointer, size: u32,
         pos: u32,
-        ) -> Result<(u32, u32), FsError> {
+        ) -> Result<(BlockPointer, u32), FsError> {
         let mut head = head;
         let (mut current, _) = self.ctz_index(size - 1);
-        let (mut target, pos) = self.ctz_index(pos);
+        let (target, pos) = self.ctz_index(pos);
 
         while current > target {
             let skip = min(
@@ -391,8 +432,15 @@ mod tests {
             while let Some(info) = fs.dir_read(&mut dir).await.unwrap() {
                 println!("entry: {:?}", info);
                 names.push(info.name.as_ref().into());
+                assert_eq!(info.size, 512);
             }
             assert_eq!(names, &["static0", "static1", "static2"]);
+            let mut file = Default::default();
+            fs.file_open(&mut file, "/static0", FileOpenFlags::RDONLY).await.unwrap();
+            println!("static0 file: {:?}", file);
+            let mut data = [0u8;1024];
+            assert_eq!(fs.file_read(&mut file, &mut data).await.unwrap(), 512);
+            println!("static0 data: {:?}", &data[..512])
         });
     }
 

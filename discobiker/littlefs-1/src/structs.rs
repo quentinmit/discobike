@@ -11,7 +11,7 @@ pub const VERSION: u32 = 0x00010001;
 
 const CRC32: Crc<u32> = Crc::<u32>::new(&CRC_32_JAMCRC);
 
-type BlockPointer = u32;
+pub type BlockPointer = u32;
 
 pub trait AsOffset {
     fn as_offset(self, block_size: usize) -> u32;
@@ -127,7 +127,7 @@ impl<'a> TryWrite<()> for MetadataBlock<'a> {
 #[enum_kind(DirEntryType, repr(u8), derive(IntoPrimitive, TryFromPrimitive))]
 pub enum DirEntryData {
     #[enum_kind_value(0x11)]
-    File { file_head: u32, file_size: u32 },
+    File { head: BlockPointer, size: u32 },
     #[enum_kind_value(0x22)]
     Directory { directory_ptr: BlockPointerPair },
     #[enum_kind_value(0x2E)]
@@ -159,8 +159,8 @@ impl TryRead<'_, DirEntryType> for DirEntryData {
         match ty {
             DirEntryType::File => {
                 let f = DirEntryData::File {
-                    file_head: bytes.read_with(offset, endian)?,
-                    file_size: bytes.read_with(offset, endian)?,
+                    head: bytes.read_with(offset, endian)?,
+                    size: bytes.read_with(offset, endian)?,
                 };
                 Ok((f, *offset))
             }
