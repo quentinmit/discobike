@@ -69,6 +69,7 @@ version = "0.1.0"
 dependencies = [
  "byte",
  "crc",
+ "embedded-storage",
  "embedded-storage-async",
  "enum-kinds",
  "itertools",
