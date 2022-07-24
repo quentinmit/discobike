@@ -6,8 +6,14 @@
 mod structs;
 mod storage;
 
+use arrayvec::ArrayString;
 use itertools::Itertools;
 use byte::BytesExt;
+
+#[cfg(not(test))]
+use defmt::{info, warn, trace};
+#[cfg(test)]
+use log::{info, warn, trace};
 
 use embedded_storage_async::nor_flash::AsyncReadNorFlash;
 
@@ -15,6 +21,8 @@ use embedded_storage_async::nor_flash::AsyncReadNorFlash;
 pub enum FsError {
     Io,
     Corrupt,
+    Noent,
+    NotDir,
     Inval,
 }
 
@@ -42,6 +50,45 @@ impl<S, const BLOCK_SIZE: usize> LittleFs<S, BLOCK_SIZE> {
 
 use structs::{BlockPointerPair, AsOffset};
 
+#[derive(Copy, Clone, Debug)]
+pub struct Dir {
+    ptr: BlockPointerPair,
+    pos: usize,
+}
+
+impl Default for Dir {
+    fn default() -> Self {
+        Dir{
+            ptr: BlockPointerPair{a: 0, b: 0},
+            pos: 0,
+        }
+    }
+}
+
+impl Dir {
+    pub fn new(ptr: BlockPointerPair) -> Self {
+        Dir{ ptr, pos: 0 }
+    }
+}
+
+const NAME_MAX_LEN: usize = 256;
+
+/// Wrapper around an array of u8 representing a filename in ASCII encoding.
+type Filename = ArrayString<NAME_MAX_LEN>;
+
+#[derive(Debug, PartialEq)]
+pub enum EntryType {
+    RegularFile,
+    Directory,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Info {
+    entry_type: EntryType,
+    size: usize,
+    name: Filename,
+}
+
 impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> LittleFs<S, BLOCK_SIZE> {
     async fn read_newer_block(&mut self, ptr: BlockPointerPair) -> Result<structs::MetadataBlock, FsError> {
         self.storage.read(ptr.a.as_offset(BLOCK_SIZE), &mut self.buf1).await.map_err(|_| FsError::Io)?;
@@ -68,10 +115,93 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> LittleFs<S, BLOCK_SIZE> {
             _ => Err(FsError::Corrupt)
         }
     }
+    async fn dir_find(&mut self, path: &str) -> Result<Dir, FsError> {
+        // TODO: Support a different starting directory.
+        let mut dir = Dir::new(self.root_directory_ptr);
+        let mut names = path.split("/");
+        while let Some(name) = names.next() {
+            match name {
+                ""|"."|".." => continue,
+                _ => (),
+            }
+            let lookahead = names.clone();
+            if lookahead.scan(0, |state, n| {
+                *state = *state + match n { "."|"" => 0, ".." => -1, _ => 1 };
+                Some(*state)
+            }).min().unwrap_or(1) <= 0 {
+                // Skipped by a future ..
+                continue
+            }
+            trace!("Looking for directory {:?}", name);
+            let dirmeta = self.read_newer_block(dir.ptr).await?;
+            for entry in dirmeta {
+                match entry {
+                    Err(_) => return Err(FsError::Corrupt),
+                    Ok(entry) => if entry.name == name {
+                        match entry.data {
+                            structs::DirEntryData::Directory{directory_ptr} => {
+                                dir.ptr = directory_ptr;
+                                break;
+                            },
+                            structs::DirEntryData::File{..} => {
+                                return Err(FsError::NotDir);
+                            }
+                            _ => {
+                                return Err(FsError::Corrupt);
+                            }
+                        }
+                    },
+                }
+            }
+            return Err(FsError::Noent);
+        }
+        Ok(dir)
+    }
+    pub async fn dir_open(&mut self, dir: &mut Dir, path: &str) -> Result<(), FsError> {
+        let found = self.dir_find(path).await?;
+        *dir = found;
+        Ok(())
+    }
+    pub async fn dir_read(&mut self, dir: &mut Dir) -> Result<Option<Info>, FsError> {
+        // TODO: Cache the state in dir somehow?
+        let mut dirmeta;
+        loop {
+            dirmeta = self.read_newer_block(dir.ptr).await?;
+            match dirmeta.into_iter().enumerate().skip(dir.pos).next() {
+                Some((pos, Ok(entry))) => {
+                    let entry_type = match entry.data {
+                        structs::DirEntryData::File{ .. } => EntryType::RegularFile,
+                        structs::DirEntryData::Directory { .. } => EntryType::Directory,
+                        _ => return Err(FsError::Corrupt),
+                    };
+                    dir.pos = pos+1;
+                    return Ok(Some(Info{
+                        name: Filename::from(entry.name).map_err(|_| FsError::Corrupt)?,
+                        entry_type,
+                        size: 0,
+                    }));
+                },
+                Some((_, Err(_))) => return Err(FsError::Corrupt),
+                None => (),
+            }
+            if dirmeta.continued {
+                dir.ptr = dirmeta.tail_ptr;
+                dir.pos = 0;
+                continue
+            }
+            return Ok(None);
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use simplelog::*;
+    #[ctor::ctor]
+    fn init() {
+        TermLogger::init(LevelFilter::Trace, Config::default(), TerminalMode::Mixed, ColorChoice::Auto).unwrap();
+    }
+
     use super::*;
     use super::storage::SliceStorage;
 
@@ -92,6 +222,13 @@ mod tests {
         block_on(async {
             let mut fs: LittleFs<_, 512> = LittleFs::new(SliceStorage::new(THREE_FILES));
             fs.mount().await.unwrap();
+
+            let mut dir = Dir::default();
+            fs.dir_open(&mut dir, "/").await.unwrap();
+            println!("open dir: {:?}", dir);
+            while let Some(info) = fs.dir_read(&mut dir).await.unwrap() {
+                println!("entry: {:?}", info);
+            }
         });
     }
 

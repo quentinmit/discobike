@@ -1,5 +1,6 @@
 use byte::ctx::*;
 use byte::{BytesExt, LE, TryRead, TryWrite, Error, Result as ByteResult};
+use defmt::Format;
 
 use crc::{Crc, CRC_32_JAMCRC};
 
@@ -22,7 +23,7 @@ impl AsOffset for BlockPointer {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Format, PartialEq)]
 pub struct BlockPointerPair {
     pub a: BlockPointer,
     pub b: BlockPointer,
@@ -54,12 +55,12 @@ impl TryWrite<Endian> for BlockPointerPair {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Format, PartialEq)]
 pub struct MetadataBlock<'a> {
     pub revision_count: u32,
     pub continued: bool,
     pub dir_size: u32,
-    pub tail_pointer: BlockPointerPair,
+    pub tail_ptr: BlockPointerPair,
     pub contents: &'a [u8],
 }
 
@@ -72,7 +73,7 @@ impl<'a> TryRead<'a, ()> for MetadataBlock<'a> {
         let dir_size = bytes.read_with::<u32>(offset, endian)?;
         let continued = dir_size & 0x80000000 > 0;
         let dir_size = dir_size & 0x7FFFFFFF;
-        let tail_pointer = bytes.read_with(offset, endian)?;
+        let tail_ptr = bytes.read_with(offset, endian)?;
         let contents =
             bytes.read_with::<&[u8]>(offset, Bytes::Len((dir_size as usize).saturating_sub(*offset + 4)))?;
         let calc_crc = CRC32.checksum(&bytes[..*offset]);
@@ -87,7 +88,7 @@ impl<'a> TryRead<'a, ()> for MetadataBlock<'a> {
                 revision_count: revision_count,
                 dir_size: dir_size,
                 continued: continued,
-                tail_pointer: tail_pointer,
+                tail_ptr: tail_ptr,
                 contents: contents,
             },
             *offset,
@@ -104,7 +105,7 @@ impl<'a> TryWrite<()> for MetadataBlock<'a> {
         let dir_size_offset = &mut offset.clone();
         // Fill in dir size later
         bytes.write_with::<u32>(offset, 0, endian)?;
-        bytes.write_with(offset, self.tail_pointer, endian)?;
+        bytes.write_with(offset, self.tail_ptr, endian)?;
         bytes.write(offset, self.contents)?;
         let crc_offset = &mut offset.clone();
         bytes.write_with::<u32>(offset, 0, endian)?;
@@ -120,7 +121,7 @@ impl<'a> TryWrite<()> for MetadataBlock<'a> {
     }
 }
 
-#[derive(Debug, PartialEq, EnumKind)]
+#[derive(Debug, Format, PartialEq, EnumKind)]
 #[enum_kind(DirEntryType, repr(u8), derive(IntoPrimitive, TryFromPrimitive))]
 pub enum DirEntryData {
     #[enum_kind_value(0x11)]
@@ -187,7 +188,7 @@ impl TryRead<'_, DirEntryType> for DirEntryData {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Format, PartialEq)]
 pub struct DirEntry<'a> {
     pub name: &'a str,
     pub data: DirEntryData,
@@ -275,7 +276,7 @@ mod tests {
         assert_eq!(block.revision_count, 3);
         assert_eq!(block.continued, false);
         assert_eq!(block.dir_size, 52);
-        assert_eq!(block.tail_pointer, BlockPointerPair{a: 3, b: 2});
+        assert_eq!(block.tail_ptr, BlockPointerPair{a: 3, b: 2});
         let iter = block.into_iter();
         let dir_entries: Result<Vec<_>, _> = iter.collect();
         let dir_entries = dir_entries.unwrap();
@@ -336,7 +337,7 @@ mod tests {
         assert_eq!(length, DIRECTORY.len());
         assert_eq!(block.revision_count, 10);
         assert_eq!(block.dir_size, 154);
-        assert_eq!(block.tail_pointer, BlockPointerPair{a: 37, b: 36});
+        assert_eq!(block.tail_ptr, BlockPointerPair{a: 37, b: 36});
         let iter = block.into_iter();
         let dir_entries: Result<Vec<_>, _> = iter.collect();
         let dir_entries = dir_entries.unwrap();
