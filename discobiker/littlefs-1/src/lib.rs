@@ -7,6 +7,8 @@ mod bytes {
     use enum_kinds::EnumKind;
     use num_enum::{IntoPrimitive, TryFromPrimitive};
 
+    const VERSION: u32 = 0x00010001;
+
     #[derive(Debug, PartialEq)]
     struct MetadataBlock<'a> {
         revision_count: u32,
@@ -228,7 +230,25 @@ mod bytes {
             let dir_entries = dir_entries.unwrap();
             assert_eq!(dir_entries.len(), 1);
             let entry = &dir_entries[0];
-            // assert_eq!(entry.entry_type(), crate::DirEntryType::Superblock);
+            match entry.data {
+                super::DirEntryData::Superblock {
+                    root_directory,
+                    block_size,
+                    block_count,
+                    version,
+                } => {
+                    assert_eq!(root_directory, [3, 2]);
+                    assert_eq!(block_size, 512);
+                    assert_eq!(block_count, 1024);
+                    assert_eq!(version, super::VERSION);
+                }
+                _ => {
+                    assert_eq!(
+                        super::DirEntryType::from(&entry.data),
+                        super::DirEntryType::Superblock
+                    );
+                }
+            };
             assert_eq!(entry.attributes.len(), 0);
             assert_eq!(entry.name, "littlefs");
         }
