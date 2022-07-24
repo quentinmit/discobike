@@ -284,6 +284,17 @@ mod tests {
     ];
 
     #[test]
+    fn superblock_rewrite() {
+        let mut read_length = 0;
+        let block: super::MetadataBlock = SUPERBLOCK.read(&mut read_length).unwrap();
+        let mut out: [u8; 512] = [0; 512];
+        let mut write_length = 0;
+        out.write(&mut write_length, block).unwrap();
+        assert_eq!(read_length, write_length);
+        assert_eq!(SUPERBLOCK, &out[..write_length]);
+    }
+
+    #[test]
     fn directory() {
         let mut length = 0;
         let block: super::MetadataBlock = DIRECTORY.read(&mut length).unwrap();
