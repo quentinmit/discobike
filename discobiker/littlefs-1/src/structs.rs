@@ -11,7 +11,7 @@ const VERSION: u32 = 0x00010001;
 const CRC32: Crc<u32> = Crc::<u32>::new(&CRC_32_JAMCRC);
 
 #[derive(Debug, PartialEq)]
-struct MetadataBlock<'a> {
+pub struct MetadataBlock<'a> {
     revision_count: u32,
     continued: bool,
     dir_size: u32,
@@ -82,7 +82,7 @@ impl<'a> TryWrite<()> for MetadataBlock<'a> {
 
 #[derive(Debug, PartialEq, EnumKind)]
 #[enum_kind(DirEntryType, repr(u8), derive(IntoPrimitive, TryFromPrimitive))]
-enum DirEntryData {
+pub enum DirEntryData {
     #[enum_kind_value(0x11)]
     File { file_head: u32, file_size: u32 },
     #[enum_kind_value(0x22)]
@@ -154,10 +154,10 @@ impl TryRead<'_, DirEntryType> for DirEntryData {
 }
 
 #[derive(Debug, PartialEq)]
-struct DirEntry<'a> {
-    name: &'a str,
-    data: DirEntryData,
-    attributes: &'a [u8],
+pub struct DirEntry<'a> {
+    pub name: &'a str,
+    pub data: DirEntryData,
+    pub attributes: &'a [u8],
 }
 impl<'a> TryRead<'a, ()> for DirEntry<'a> {
     fn try_read(bytes: &'a [u8], _ctx: ()) -> Result<(Self, usize)> {
@@ -188,7 +188,7 @@ impl<'a> TryRead<'a, ()> for DirEntry<'a> {
     }
 }
 
-struct DirEntryIterator<'a> {
+pub struct DirEntryIterator<'a> {
     offset: usize,
     contents: &'a [u8],
 }
