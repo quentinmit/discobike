@@ -10,6 +10,7 @@ byte = "0.2.6"
 crc = "3.0.0"
 embedded-storage-async = "0.3.0"
 enum-kinds = { version = "0.5.1", features = ["no-stdlib"] }
+itertools = { version = "0.10.3", default-features = false }
 num_enum = { version = "0.5.7", default-features = false }
 
 [patch.crates-io]

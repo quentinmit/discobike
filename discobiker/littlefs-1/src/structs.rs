@@ -12,11 +12,11 @@ const CRC32: Crc<u32> = Crc::<u32>::new(&CRC_32_JAMCRC);
 
 #[derive(Debug, PartialEq)]
 pub struct MetadataBlock<'a> {
-    revision_count: u32,
-    continued: bool,
-    dir_size: u32,
-    tail_pointer: [u32; 2],
-    contents: &'a [u8],
+    pub revision_count: u32,
+    pub continued: bool,
+    pub dir_size: u32,
+    pub tail_pointer: [u32; 2],
+    pub contents: &'a [u8],
 }
 
 impl<'a> TryRead<'a, ()> for MetadataBlock<'a> {

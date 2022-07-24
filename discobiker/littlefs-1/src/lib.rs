@@ -2,44 +2,72 @@
 
 mod structs;
 
-use byte::{BytesExt};
+use itertools::Itertools;
+use byte::BytesExt;
 
-use embedded_storage_async::nor_flash::AsyncNorFlash;
+use embedded_storage_async::nor_flash::AsyncReadNorFlash;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum FsError {
+    Io,
     Corrupt,
+    Inval,
 }
 
-struct LittleFs<S, const MAX_BLOCK_SIZE: usize> {
+struct LittleFs<S, const BLOCK_SIZE: usize> {
     storage: S,
-    buf: [u8; MAX_BLOCK_SIZE],
+    buf1: [u8; BLOCK_SIZE],
+    buf2: [u8; BLOCK_SIZE],
     block_size: u32,
     block_count: u32,
 }
 
-impl<S: AsyncNorFlash, const MAX_BLOCK_SIZE: usize> LittleFs<S, MAX_BLOCK_SIZE> {
+impl<S, const BLOCK_SIZE: usize> LittleFs<S, BLOCK_SIZE> {
     pub fn new(storage: S) -> Self {
         LittleFs {
             storage,
-            buf: [0; MAX_BLOCK_SIZE],
+            buf1: [0; BLOCK_SIZE],
+            buf2: [0; BLOCK_SIZE],
             block_size: 0,
             block_count: 0,
         }
     }
 }
-    fn parse_superblock(bytes: &[u8]) -> Result<structs::DirEntry, FsError> {
-        let block: structs::MetadataBlock = bytes.read(&mut 0).map_err(|_| FsError::Corrupt)?;
-        let mut iter = block.into_iter();
-        let entry = iter.next().map(|e| e.ok()).flatten().ok_or(FsError::Corrupt)?;
-        if iter.next() != None {
-            return Err(FsError::Corrupt);
-        }
-        if entry.name != "littlefs" {
-            return Err(FsError::Corrupt);
-        }
-        Ok(entry)
+
+type BlockPointer = u32;
+
+impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> LittleFs<S, BLOCK_SIZE> {
+    async fn read_newer_block(&mut self, a: BlockPointer, b: BlockPointer) -> Result<structs::MetadataBlock, FsError> {
+        self.storage.read(a * (BLOCK_SIZE as u32), &mut self.buf1).await.map_err(|_| FsError::Io)?;
+        let block1: Option<structs::MetadataBlock> = self.buf1.read(&mut 0).ok();
+        self.storage.read(b * (BLOCK_SIZE as u32), &mut self.buf2).await.map_err(|_| FsError::Io)?;
+        let block2: Option<structs::MetadataBlock> = self.buf2.read(&mut 0).ok();
+
+        [block1, block2].into_iter().filter_map(|x| x).reduce(|a, b| if a.revision_count > b.revision_count { a } else { b }).ok_or(FsError::Corrupt)
     }
+    pub async fn mount(&mut self) -> Result<(), FsError> {
+        let sbmeta = self.read_newer_block(0, 1).await?;
+        let entry = sbmeta.into_iter().exactly_one().map_err(|_| FsError::Corrupt)?;
+        Ok(())
+    }
+}
+
+fn parse_superblock(bytes: &[u8]) -> Result<structs::DirEntry, FsError> {
+    let block: structs::MetadataBlock = bytes.read(&mut 0).map_err(|_| FsError::Corrupt)?;
+    let mut iter = block.into_iter();
+    let entry = iter
+        .next()
+        .map(|e| e.ok())
+        .flatten()
+        .ok_or(FsError::Corrupt)?;
+    if iter.next() != None {
+        return Err(FsError::Corrupt);
+    }
+    if entry.name != "littlefs" {
+        return Err(FsError::Corrupt);
+    }
+    Ok(entry)
+}
 
 #[cfg(test)]
 mod tests {
