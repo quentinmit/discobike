@@ -24,6 +24,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2d0165d2900ae6778e36e80bbc4da3b5eefccee9ba939761f9c2882a5d9af3ff"
 
 [[package]]
+name = "embedded-storage"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "156d7a2fdd98ebbf9ae579cbceca3058cff946e13f8e17b90e3511db0508c723"
+
+[[package]]
+name = "embedded-storage-async"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5ff04af74e47e9bb4315bd7aa2b01f3d1b05f33c03a6c4e9c3b20e9ce9cd8d79"
+dependencies = [
+ "embedded-storage",
+]
+
+[[package]]
 name = "enum-kinds"
 version = "0.5.1"
 source = "git+https://github.com/quentinmit/enum-kinds?branch=custom-values#5980699fc72a54f310138a265be0041bd8dd67bd"
@@ -39,6 +54,7 @@ version = "0.1.0"
 dependencies = [
  "byte",
  "crc",
+ "embedded-storage-async",
  "enum-kinds",
  "num_enum",
 ]
