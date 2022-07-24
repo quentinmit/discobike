@@ -209,6 +209,7 @@ mod tests {
     use std::println;
     extern crate alloc;
     use alloc::vec::Vec;
+    use alloc::string::String;
 
     use itertools::repeat_n;
     use tokio_test::block_on;
@@ -226,9 +227,12 @@ mod tests {
             let mut dir = Dir::default();
             fs.dir_open(&mut dir, "/").await.unwrap();
             println!("open dir: {:?}", dir);
+            let mut names = Vec::<String>::new();
             while let Some(info) = fs.dir_read(&mut dir).await.unwrap() {
                 println!("entry: {:?}", info);
+                names.push(info.name.as_ref().into());
             }
+            assert_eq!(names, &["static0", "static1", "static2"]);
         });
     }
 
