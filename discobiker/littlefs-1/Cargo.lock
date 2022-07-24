@@ -9,6 +9,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7cfd4a5b862cb6bfcaf4b9803e887a22393dd5c1ac9e2d1e131d516047eabd01"
 
 [[package]]
+name = "crc"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "53757d12b596c16c78b83458d732a5d1a17ab3f53f2f7412f6fb57cc8a140ab3"
+dependencies = [
+ "crc-catalog",
+]
+
+[[package]]
+name = "crc-catalog"
+version = "2.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d0165d2900ae6778e36e80bbc4da3b5eefccee9ba939761f9c2882a5d9af3ff"
+
+[[package]]
 name = "enum-kinds"
 version = "0.5.1"
 source = "git+https://github.com/quentinmit/enum-kinds?branch=custom-values#5980699fc72a54f310138a265be0041bd8dd67bd"
@@ -23,6 +38,7 @@ name = "littlefs-1"
 version = "0.1.0"
 dependencies = [
  "byte",
+ "crc",
  "enum-kinds",
  "num_enum",
 ]

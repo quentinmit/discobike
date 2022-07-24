@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 byte = "0.2.6"
+crc = "3.0.0"
 enum-kinds = { version = "0.5.1", features = ["no-stdlib"] }
 num_enum = { version = "0.5.7", default-features = false }
 
