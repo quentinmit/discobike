@@ -9,6 +9,7 @@ mod storage;
 use arrayvec::ArrayString;
 use itertools::Itertools;
 use byte::BytesExt;
+use bitflags::bitflags;
 
 #[cfg(not(test))]
 use defmt::{info, warn, trace};
@@ -89,6 +90,31 @@ pub struct Info {
     name: Filename,
 }
 
+#[derive(Debug, PartialEq)]
+pub struct File {
+}
+
+/// Definition of file open flags which can be mixed and matched as appropriate. These definitions
+/// are reminiscent of the ones defined by POSIX.
+bitflags! {
+    pub struct FileOpenFlags: u32 {
+        /// Open file in read only mode.
+        const RDONLY = 0x1;
+        /// Open file in write only mode.
+        const WRONLY = 0x2;
+        /// Open file for reading and writing.
+        const RDWR = Self::RDONLY.bits | Self::WRONLY.bits;
+        /// Create the file if it does not exist.
+        const CREAT = 0x0100;
+        /// Fail if creating a file that already exists.
+        const EXCL = 0x0200;
+        /// Truncate the file if it already exists.
+        const TRUNC = 0x0400;
+        /// Open the file in append only mode.
+        const APPEND = 0x0800;
+    }
+}
+
 impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> LittleFs<S, BLOCK_SIZE> {
     async fn read_newer_block(&mut self, ptr: BlockPointerPair) -> Result<structs::MetadataBlock, FsError> {
         self.storage.read(ptr.a.as_offset(BLOCK_SIZE), &mut self.buf1).await.map_err(|_| FsError::Io)?;
@@ -115,7 +141,7 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> LittleFs<S, BLOCK_SIZE> {
             _ => Err(FsError::Corrupt)
         }
     }
-    async fn dir_find(&mut self, path: &str) -> Result<Dir, FsError> {
+    async fn dir_find(&mut self, path: &str) -> Result<structs::DirEntry, FsError> {
         // TODO: Support a different starting directory.
         let mut dir = Dir::new(self.root_directory_ptr);
         let mut names = path.split("/");
@@ -128,7 +154,7 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> LittleFs<S, BLOCK_SIZE> {
             if lookahead.scan(0, |state, n| {
                 *state = *state + match n { "."|"" => 0, ".." => -1, _ => 1 };
                 Some(*state)
-            }).min().unwrap_or(1) <= 0 {
+            }).min().unwrap_or(1) < 0 {
                 // Skipped by a future ..
                 continue
             }
@@ -138,16 +164,15 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> LittleFs<S, BLOCK_SIZE> {
                 match entry {
                     Err(_) => return Err(FsError::Corrupt),
                     Ok(entry) => if entry.name == name {
-                        match entry.data {
-                            structs::DirEntryData::Directory{directory_ptr} => {
-                                dir.ptr = directory_ptr;
-                                break;
-                            },
-                            structs::DirEntryData::File{..} => {
-                                return Err(FsError::NotDir);
-                            }
-                            _ => {
-                                return Err(FsError::Corrupt);
+                        if let None = names.clone().next() {
+                            return Ok(entry);
+                        } else {
+                            match entry.data {
+                                structs::DirEntryData::Directory{directory_ptr} => {
+                                    dir.ptr = directory_ptr;
+                                },
+                                structs::DirEntryData::File{..} => return Err(FsError::NotDir),
+                                _ => return Err(FsError::Corrupt),
                             }
                         }
                     },
@@ -155,15 +180,32 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> LittleFs<S, BLOCK_SIZE> {
             }
             return Err(FsError::Noent);
         }
-        Ok(dir)
+        // Fake directory for /
+        Ok(structs::DirEntry{
+            name: "",
+            data: structs::DirEntryData::Directory{
+                directory_ptr: self.root_directory_ptr,
+            },
+            attributes: &[],
+        })
     }
     pub async fn dir_open(&mut self, dir: &mut Dir, path: &str) -> Result<(), FsError> {
-        let found = self.dir_find(path).await?;
-        *dir = found;
-        Ok(())
+        let entry = self.dir_find(path).await?;
+        match entry.data {
+            structs::DirEntryData::Directory{directory_ptr} => {
+                dir.ptr = directory_ptr;
+                dir.pos = 0;
+                Ok(())
+            },
+            structs::DirEntryData::File{..} => {
+                Err(FsError::NotDir)
+            }
+            _ => Err(FsError::Corrupt),
+        }
     }
     pub async fn dir_read(&mut self, dir: &mut Dir) -> Result<Option<Info>, FsError> {
         // TODO: Cache the state in dir somehow?
+        // TODO: Synthesize "." and ".." entries.
         let mut dirmeta;
         loop {
             dirmeta = self.read_newer_block(dir.ptr).await?;
@@ -172,7 +214,7 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> LittleFs<S, BLOCK_SIZE> {
                     let entry_type = match entry.data {
                         structs::DirEntryData::File{ .. } => EntryType::RegularFile,
                         structs::DirEntryData::Directory { .. } => EntryType::Directory,
-                        _ => return Err(FsError::Corrupt),
+                        _ => continue,
                     };
                     dir.pos = pos+1;
                     return Ok(Some(Info{
@@ -191,6 +233,10 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> LittleFs<S, BLOCK_SIZE> {
             }
             return Ok(None);
         }
+    }
+    pub async fn file_open(&mut self, file: &mut File, path: &str, flags: FileOpenFlags) -> Result<(), FsError> {
+        // TODO: deorphan once after mount
+        Err(FsError::Inval)
     }
 }
 

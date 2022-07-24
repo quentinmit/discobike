@@ -1,5 +1,5 @@
 use byte::ctx::*;
-use byte::{BytesExt, LE, TryRead, TryWrite, Error, Result as ByteResult};
+use byte::{BytesExt, Error, Result as ByteResult, TryRead, TryWrite, LE};
 use defmt::Format;
 
 use crc::{Crc, CRC_32_JAMCRC};
@@ -7,7 +7,7 @@ use crc::{Crc, CRC_32_JAMCRC};
 use enum_kinds::EnumKind;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
-const VERSION: u32 = 0x00010001;
+pub const VERSION: u32 = 0x00010001;
 
 const CRC32: Crc<u32> = Crc::<u32>::new(&CRC_32_JAMCRC);
 
@@ -31,7 +31,7 @@ pub struct BlockPointerPair {
 
 impl Default for BlockPointerPair {
     fn default() -> Self {
-        BlockPointerPair{a: 0, b: 0}
+        BlockPointerPair { a: 0, b: 0 }
     }
 }
 
@@ -74,8 +74,10 @@ impl<'a> TryRead<'a, ()> for MetadataBlock<'a> {
         let continued = dir_size & 0x80000000 > 0;
         let dir_size = dir_size & 0x7FFFFFFF;
         let tail_ptr = bytes.read_with(offset, endian)?;
-        let contents =
-            bytes.read_with::<&[u8]>(offset, Bytes::Len((dir_size as usize).saturating_sub(*offset + 4)))?;
+        let contents = bytes.read_with::<&[u8]>(
+            offset,
+            Bytes::Len((dir_size as usize).saturating_sub(*offset + 4)),
+        )?;
         let calc_crc = CRC32.checksum(&bytes[..*offset]);
         let crc = bytes.read_with(offset, endian)?;
         if calc_crc != crc {
@@ -164,13 +166,13 @@ impl TryRead<'_, DirEntryType> for DirEntryData {
             }
             DirEntryType::Directory => {
                 let d = DirEntryData::Directory {
-                    directory_ptr:                        bytes.read_with(offset, endian)?,
+                    directory_ptr: bytes.read_with(offset, endian)?,
                 };
                 Ok((d, *offset))
             }
             DirEntryType::Superblock => {
                 let s = DirEntryData::Superblock {
-                    root_directory_ptr:                         bytes.read_with(offset, endian)?,
+                    root_directory_ptr: bytes.read_with(offset, endian)?,
                     block_size: bytes.read_with(offset, endian)?,
                     block_count: bytes.read_with(offset, endian)?,
                     version: bytes.read_with(offset, endian)?,
@@ -255,9 +257,9 @@ impl<'a> IntoIterator for MetadataBlock<'a> {
 #[cfg(test)]
 mod tests {
     extern crate alloc;
+    use super::*;
     use alloc::vec::Vec;
     use byte::BytesExt;
-    use super::*;
 
     const SUPERBLOCK: &[u8] = &[
         0x03, 0x00, 0x00, 0x00, 0x34, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00,
@@ -276,7 +278,7 @@ mod tests {
         assert_eq!(block.revision_count, 3);
         assert_eq!(block.continued, false);
         assert_eq!(block.dir_size, 52);
-        assert_eq!(block.tail_ptr, BlockPointerPair{a: 3, b: 2});
+        assert_eq!(block.tail_ptr, BlockPointerPair { a: 3, b: 2 });
         let iter = block.into_iter();
         let dir_entries: Result<Vec<_>, _> = iter.collect();
         let dir_entries = dir_entries.unwrap();
@@ -289,16 +291,13 @@ mod tests {
                 block_count,
                 version,
             } => {
-                assert_eq!(root_directory_ptr, BlockPointerPair{a: 3, b: 2});
+                assert_eq!(root_directory_ptr, BlockPointerPair { a: 3, b: 2 });
                 assert_eq!(block_size, 512);
                 assert_eq!(block_count, 1024);
                 assert_eq!(version, VERSION);
             }
             _ => {
-                assert_eq!(
-                    DirEntryType::from(&entry.data),
-                    DirEntryType::Superblock
-                );
+                assert_eq!(DirEntryType::from(&entry.data), DirEntryType::Superblock);
             }
         };
         assert_eq!(entry.attributes.len(), 0);
@@ -337,7 +336,7 @@ mod tests {
         assert_eq!(length, DIRECTORY.len());
         assert_eq!(block.revision_count, 10);
         assert_eq!(block.dir_size, 154);
-        assert_eq!(block.tail_ptr, BlockPointerPair{a: 37, b: 36});
+        assert_eq!(block.tail_ptr, BlockPointerPair { a: 37, b: 36 });
         let iter = block.into_iter();
         let dir_entries: Result<Vec<_>, _> = iter.collect();
         let dir_entries = dir_entries.unwrap();
