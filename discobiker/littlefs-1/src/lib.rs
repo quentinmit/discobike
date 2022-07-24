@@ -98,10 +98,11 @@ pub struct File {
     size: u32,
     /// Current position within file, in bytes.
     pos: u32,
-    /// Block pointer containing pos.
-    block: BlockPointer,
-    /// Offset of pos within block.
-    off: u32,
+    // TODO: Track position within a block to save CTZ lookups.
+    // /// Block pointer containing pos.
+    // block: BlockPointer,
+    // /// Offset of pos within block.
+    // off: u32,
 }
 
 impl Default for File {
@@ -110,8 +111,8 @@ impl Default for File {
             head: 0,
             size: 0,
             pos: 0,
-            off: 0,
-            block: 0,
+            //off: 0,
+            //block: 0,
         }
     }
 }
@@ -333,23 +334,24 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> LittleFs<S, BLOCK_SIZE> {
     }
 
     pub async fn file_read(&mut self, file: &mut File, buf: &mut [u8]) -> Result<usize, FsError> {
-        let size = min(buf.len(), file.size.saturating_sub(file.pos) as usize);
-        let mut nsize = size;
-        let mut data_off = 0;
+        let size = min(buf.len() as u32, file.size.saturating_sub(file.pos));
+        let mut buf = &mut buf[..size as usize];
 
-        while nsize > 0 {
-            let (head, pos) = self.ctz_find(file.head, file.size, file.pos).await?;
-            file.block = head;
-            file.off = pos;
-            let diff = min(nsize as u32, self.block_size - file.off) as usize;
+        // TODO: Cache a whole block at a time for performance (requires saving
+        // block and off in file).
+
+        while buf.len() > 0 {
+            let (block, off) = self.ctz_find(file.head, file.size, file.pos).await?;
+            let diff = min(buf.len() as u32, self.block_size - off) as usize;
             self.storage.read(
-                file.block.as_offset(BLOCK_SIZE) + file.off,
-                &mut buf[data_off..data_off+diff]
+                block.as_offset(BLOCK_SIZE) + off,
+                &mut buf[..diff]
             ).await.map_err(|_| FsError::Io)?;
-            data_off += diff;
-            nsize -= diff;
+            buf = &mut buf[diff..];
         }
-        Ok(data_off)
+        // We only update file here so that the position is not updated on a failed read.
+        file.pos = file.pos.saturating_add(size);
+        Ok(size as usize)
     }
 
     fn ctz_index(&self, off: u32) -> (u32, u32) {
