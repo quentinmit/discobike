@@ -22,6 +22,7 @@ struct LittleFs<S, const BLOCK_SIZE: usize> {
     storage: S,
     buf1: [u8; BLOCK_SIZE],
     buf2: [u8; BLOCK_SIZE],
+    root_directory_ptr: BlockPointerPair,
     block_size: u32,
     block_count: u32,
 }
@@ -34,6 +35,7 @@ impl<S, const BLOCK_SIZE: usize> LittleFs<S, BLOCK_SIZE> {
             buf2: [0; BLOCK_SIZE],
             block_size: 0,
             block_count: 0,
+            root_directory_ptr: Default::default(),
         }
     }
 }
@@ -59,29 +61,13 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> LittleFs<S, BLOCK_SIZE> {
                 if block_size != BLOCK_SIZE as u32 {
                     return Err(FsError::Inval);
                 }
+                self.root_directory_ptr = root_directory_ptr;
                 self.block_count = block_count;
                 Ok(())
             }
             _ => Err(FsError::Corrupt)
         }
     }
-}
-
-fn parse_superblock(bytes: &[u8]) -> Result<structs::DirEntry, FsError> {
-    let block: structs::MetadataBlock = bytes.read(&mut 0).map_err(|_| FsError::Corrupt)?;
-    let mut iter = block.into_iter();
-    let entry = iter
-        .next()
-        .map(|e| e.ok())
-        .flatten()
-        .ok_or(FsError::Corrupt)?;
-    if iter.next() != None {
-        return Err(FsError::Corrupt);
-    }
-    if entry.name != "littlefs" {
-        return Err(FsError::Corrupt);
-    }
-    Ok(entry)
 }
 
 #[cfg(test)]
@@ -94,6 +80,7 @@ mod tests {
     extern crate alloc;
     use alloc::vec::Vec;
 
+    use itertools::repeat_n;
     use tokio_test::block_on;
 
     use byte::{BytesExt, Result};
@@ -103,14 +90,17 @@ mod tests {
     #[test]
     fn three_files() {
         block_on(async {
-            let offset = &mut 0;
-
             let mut fs: LittleFs<_, 512> = LittleFs::new(SliceStorage::new(THREE_FILES));
             fs.mount().await.unwrap();
+        });
+    }
 
-            let entry = parse_superblock(THREE_FILES).unwrap();
-
-            println!("superblock entry: {:?}", entry);
+    #[test]
+    fn three_files_corrupt() {
+        block_on(async {
+            let data: Vec<u8> = repeat_n(0u8, 512).chain(THREE_FILES[512..].iter().cloned()).collect();
+            let mut fs: LittleFs<_, 512> = LittleFs::new(SliceStorage::new(&data[..]));
+            fs.mount().await.unwrap();
         });
     }
 }

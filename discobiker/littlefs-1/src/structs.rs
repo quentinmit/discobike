@@ -28,6 +28,12 @@ pub struct BlockPointerPair {
     pub b: BlockPointer,
 }
 
+impl Default for BlockPointerPair {
+    fn default() -> Self {
+        BlockPointerPair{a: 0, b: 0}
+    }
+}
+
 impl TryRead<'_, Endian> for BlockPointerPair {
     fn try_read(bytes: &[u8], endian: Endian) -> ByteResult<(Self, usize)> {
         let offset = &mut 0;
@@ -68,7 +74,7 @@ impl<'a> TryRead<'a, ()> for MetadataBlock<'a> {
         let dir_size = dir_size & 0x7FFFFFFF;
         let tail_pointer = bytes.read_with(offset, endian)?;
         let contents =
-            bytes.read_with::<&[u8]>(offset, Bytes::Len(dir_size as usize - *offset - 4))?;
+            bytes.read_with::<&[u8]>(offset, Bytes::Len((dir_size as usize).saturating_sub(*offset + 4)))?;
         let calc_crc = CRC32.checksum(&bytes[..*offset]);
         let crc = bytes.read_with(offset, endian)?;
         if calc_crc != crc {
