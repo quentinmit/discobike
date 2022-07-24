@@ -10,7 +10,7 @@ pub struct SliceStorage<S: Deref<Target = [u8]>> {
 
 impl<S: Deref<Target = [u8]>> SliceStorage<S> {
     pub fn new(slice: S) -> Self {
-        SliceStorage{ buf: slice }
+        SliceStorage { buf: slice }
     }
 }
 
@@ -30,7 +30,9 @@ impl<S: Deref<Target = [u8]>> AsyncReadNorFlash for SliceStorage<S> {
             // TODO check addr/len is in bounds.
 
             let start = address as usize;
-            let end = start.checked_add(data.len()).ok_or(NorFlashErrorKind::OutOfBounds)?;
+            let end = start
+                .checked_add(data.len())
+                .ok_or(NorFlashErrorKind::OutOfBounds)?;
 
             if end > self.buf.len() {
                 Err(NorFlashErrorKind::OutOfBounds)

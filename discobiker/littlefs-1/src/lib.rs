@@ -7,8 +7,9 @@ mod structs;
 
 use arrayvec::ArrayString;
 use bitflags::bitflags;
-use byte::BytesExt;
+use byte::{BytesExt, LE};
 use itertools::Itertools;
+use core::cmp::min;
 
 #[cfg(not(test))]
 use defmt::{info, trace, warn};
@@ -114,6 +115,10 @@ bitflags! {
         /// Open the file in append only mode.
         const APPEND = 0x0800;
     }
+}
+
+fn npw2(a: u32) -> u32 {
+    32 - (a-1).leading_zeros()
 }
 
 impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> LittleFs<S, BLOCK_SIZE> {
@@ -304,6 +309,42 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> LittleFs<S, BLOCK_SIZE> {
                 Ok(())
             },
         }
+    }
+
+    fn ctz_index(&self, off: u32) -> (u32, u32) {
+        let size = off;
+        let b = self.block_size - 2*4;
+        let i = size / b;
+        if i == 0 {
+            return (0, off);
+        }
+        let i = (size - 4*((i-1).count_ones()+2)) / b;
+        (i, size - b*i - 4*i.count_ones())
+    }
+
+    async fn ctz_find(
+        &mut self,
+        head: u32, size: u32,
+        pos: u32,
+        ) -> Result<(u32, u32), FsError> {
+        let mut head = head;
+        let (mut current, _) = self.ctz_index(size - 1);
+        let (mut target, pos) = self.ctz_index(pos);
+
+        while current > target {
+            let skip = min(
+                npw2(current-target+1)-1,
+                current.trailing_zeros(),
+            );
+            let mut buf = [0u8; 4];
+            self.storage.read(head.as_offset(BLOCK_SIZE), &mut buf[..]).await.map_err(|_| FsError::Io)?;
+            head = buf.read_with(&mut 0, LE).map_err(|_| FsError::Corrupt)?;
+            if !(head >= 2 && head <= self.block_count) {
+                return Err(FsError::Corrupt);
+            }
+            current -= 1 << skip;
+        }
+        Ok((head, pos))
     }
 }
 
