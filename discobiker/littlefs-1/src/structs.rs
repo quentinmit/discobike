@@ -12,6 +12,16 @@ const CRC32: Crc<u32> = Crc::<u32>::new(&CRC_32_JAMCRC);
 
 type BlockPointer = u32;
 
+pub trait AsOffset {
+    fn as_offset(self, block_size: usize) -> u32;
+}
+
+impl AsOffset for BlockPointer {
+    fn as_offset(self, block_size: usize) -> u32 {
+        self * block_size as u32
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct BlockPointerPair {
     pub a: BlockPointer,

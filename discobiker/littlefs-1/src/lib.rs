@@ -38,19 +38,19 @@ impl<S, const BLOCK_SIZE: usize> LittleFs<S, BLOCK_SIZE> {
     }
 }
 
-type BlockPointer = u32;
+use structs::{BlockPointerPair, AsOffset};
 
 impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> LittleFs<S, BLOCK_SIZE> {
-    async fn read_newer_block(&mut self, a: BlockPointer, b: BlockPointer) -> Result<structs::MetadataBlock, FsError> {
-        self.storage.read(a * (BLOCK_SIZE as u32), &mut self.buf1).await.map_err(|_| FsError::Io)?;
+    async fn read_newer_block(&mut self, ptr: BlockPointerPair) -> Result<structs::MetadataBlock, FsError> {
+        self.storage.read(ptr.a.as_offset(BLOCK_SIZE), &mut self.buf1).await.map_err(|_| FsError::Io)?;
         let block1: Option<structs::MetadataBlock> = self.buf1.read(&mut 0).ok();
-        self.storage.read(b * (BLOCK_SIZE as u32), &mut self.buf2).await.map_err(|_| FsError::Io)?;
+        self.storage.read(ptr.b.as_offset(BLOCK_SIZE), &mut self.buf2).await.map_err(|_| FsError::Io)?;
         let block2: Option<structs::MetadataBlock> = self.buf2.read(&mut 0).ok();
 
         [block1, block2].into_iter().filter_map(|x| x).reduce(|a, b| if a.revision_count > b.revision_count { a } else { b }).ok_or(FsError::Corrupt)
     }
     pub async fn mount(&mut self) -> Result<(), FsError> {
-        let sbmeta = self.read_newer_block(0, 1).await?;
+        let sbmeta = self.read_newer_block(BlockPointerPair{a: 0, b: 1}).await?;
         let entry = sbmeta.into_iter().exactly_one().map_err(|_| FsError::Corrupt)?.map_err(|_| FsError::Corrupt)?;
         if entry.name != "littlefs" { return Err(FsError::Corrupt) }
         match entry.data {
