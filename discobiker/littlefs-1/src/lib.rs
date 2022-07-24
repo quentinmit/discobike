@@ -51,8 +51,19 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> LittleFs<S, BLOCK_SIZE> {
     }
     pub async fn mount(&mut self) -> Result<(), FsError> {
         let sbmeta = self.read_newer_block(0, 1).await?;
-        let entry = sbmeta.into_iter().exactly_one().map_err(|_| FsError::Corrupt)?;
-        Ok(())
+        let entry = sbmeta.into_iter().exactly_one().map_err(|_| FsError::Corrupt)?.map_err(|_| FsError::Corrupt)?;
+        if entry.name != "littlefs" { return Err(FsError::Corrupt) }
+        match entry.data {
+            structs::DirEntryData::Superblock { root_directory_ptr, block_size, block_count, .. } => {
+                self.block_size = block_size;
+                if block_size != BLOCK_SIZE as u32 {
+                    return Err(FsError::Inval);
+                }
+                self.block_count = block_count;
+                Ok(())
+            }
+            _ => Err(FsError::Corrupt)
+        }
     }
 }
 
@@ -76,11 +87,14 @@ fn parse_superblock(bytes: &[u8]) -> Result<structs::DirEntry, FsError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::storage::SliceStorage;
 
     extern crate std;
     use std::println;
     extern crate alloc;
     use alloc::vec::Vec;
+
+    use tokio_test::block_on;
 
     use byte::{BytesExt, Result};
 
@@ -88,10 +102,15 @@ mod tests {
 
     #[test]
     fn three_files() {
-        let offset = &mut 0;
+        block_on(async {
+            let offset = &mut 0;
 
-        let entry = parse_superblock(THREE_FILES).unwrap();
+            let mut fs: LittleFs<_, 512> = LittleFs::new(SliceStorage::new(THREE_FILES));
+            fs.mount().await.unwrap();
 
-        println!("superblock entry: {:?}", entry);
+            let entry = parse_superblock(THREE_FILES).unwrap();
+
+            println!("superblock entry: {:?}", entry);
+        });
     }
 }

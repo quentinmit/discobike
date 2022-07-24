@@ -4,7 +4,7 @@ use core::ops::{Deref, DerefMut};
 use embedded_storage::nor_flash::{ErrorType, NorFlashErrorKind};
 use embedded_storage_async::nor_flash::{AsyncNorFlash, AsyncReadNorFlash};
 
-struct SliceStorage<S: Deref<Target = [u8]>> {
+pub struct SliceStorage<S: Deref<Target = [u8]>> {
     buf: S,
 }
 

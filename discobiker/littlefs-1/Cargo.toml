@@ -16,3 +16,6 @@ num_enum = { version = "0.5.7", default-features = false }
 
 [patch.crates-io]
 enum-kinds = { git = "https://github.com/quentinmit/enum-kinds", branch = "custom-values" }
+
+[dev-dependencies]
+tokio-test = "0.4.2"

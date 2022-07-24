@@ -1,5 +1,5 @@
 use byte::ctx::*;
-use byte::*;
+use byte::{BytesExt, LE, TryRead, TryWrite, Error, Result as ByteResult};
 
 use crc::{Crc, CRC_32_JAMCRC};
 
@@ -10,17 +10,45 @@ const VERSION: u32 = 0x00010001;
 
 const CRC32: Crc<u32> = Crc::<u32>::new(&CRC_32_JAMCRC);
 
+type BlockPointer = u32;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct BlockPointerPair {
+    pub a: BlockPointer,
+    pub b: BlockPointer,
+}
+
+impl TryRead<'_, Endian> for BlockPointerPair {
+    fn try_read(bytes: &[u8], endian: Endian) -> ByteResult<(Self, usize)> {
+        let offset = &mut 0;
+
+        let ptr = BlockPointerPair {
+            a: bytes.read_with(offset, endian)?,
+            b: bytes.read_with(offset, endian)?,
+        };
+        Ok((ptr, *offset))
+    }
+}
+impl TryWrite<Endian> for BlockPointerPair {
+    fn try_write(self, bytes: &mut [u8], endian: Endian) -> ByteResult<usize> {
+        let offset = &mut 0;
+        bytes.write_with(offset, self.a, endian)?;
+        bytes.write_with(offset, self.b, endian)?;
+        Ok(*offset)
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub struct MetadataBlock<'a> {
     pub revision_count: u32,
     pub continued: bool,
     pub dir_size: u32,
-    pub tail_pointer: [u32; 2],
+    pub tail_pointer: BlockPointerPair,
     pub contents: &'a [u8],
 }
 
 impl<'a> TryRead<'a, ()> for MetadataBlock<'a> {
-    fn try_read(bytes: &'a [u8], _ctx: ()) -> Result<(Self, usize)> {
+    fn try_read(bytes: &'a [u8], _ctx: ()) -> ByteResult<(Self, usize)> {
         let offset = &mut 0;
         let endian = LE;
 
@@ -28,10 +56,7 @@ impl<'a> TryRead<'a, ()> for MetadataBlock<'a> {
         let dir_size = bytes.read_with::<u32>(offset, endian)?;
         let continued = dir_size & 0x80000000 > 0;
         let dir_size = dir_size & 0x7FFFFFFF;
-        let tail_pointer = [
-            bytes.read_with::<u32>(offset, endian)?,
-            bytes.read_with::<u32>(offset, endian)?,
-        ];
+        let tail_pointer = bytes.read_with(offset, endian)?;
         let contents =
             bytes.read_with::<&[u8]>(offset, Bytes::Len(dir_size as usize - *offset - 4))?;
         let calc_crc = CRC32.checksum(&bytes[..*offset]);
@@ -55,7 +80,7 @@ impl<'a> TryRead<'a, ()> for MetadataBlock<'a> {
 }
 
 impl<'a> TryWrite<()> for MetadataBlock<'a> {
-    fn try_write(self, bytes: &mut [u8], _ctx: ()) -> Result<usize> {
+    fn try_write(self, bytes: &mut [u8], _ctx: ()) -> ByteResult<usize> {
         let offset = &mut 0;
         let endian = LE;
 
@@ -63,8 +88,7 @@ impl<'a> TryWrite<()> for MetadataBlock<'a> {
         let dir_size_offset = &mut offset.clone();
         // Fill in dir size later
         bytes.write_with::<u32>(offset, 0, endian)?;
-        bytes.write_with(offset, self.tail_pointer[0], endian)?;
-        bytes.write_with(offset, self.tail_pointer[1], endian)?;
+        bytes.write_with(offset, self.tail_pointer, endian)?;
         bytes.write(offset, self.contents)?;
         let crc_offset = &mut offset.clone();
         bytes.write_with::<u32>(offset, 0, endian)?;
@@ -86,10 +110,10 @@ pub enum DirEntryData {
     #[enum_kind_value(0x11)]
     File { file_head: u32, file_size: u32 },
     #[enum_kind_value(0x22)]
-    Directory { directory_ptr: [u32; 2] },
+    Directory { directory_ptr: BlockPointerPair },
     #[enum_kind_value(0x2E)]
     Superblock {
-        root_directory: [u32; 2],
+        root_directory_ptr: BlockPointerPair,
         block_size: u32,
         block_count: u32,
         version: u32,
@@ -97,7 +121,7 @@ pub enum DirEntryData {
 }
 
 impl TryRead<'_, ()> for DirEntryType {
-    fn try_read(bytes: &[u8], _ctx: ()) -> Result<(Self, usize)> {
+    fn try_read(bytes: &[u8], _ctx: ()) -> ByteResult<(Self, usize)> {
         let offset = &mut 0;
         let v: u8 = bytes.read(offset)?;
         Ok((
@@ -110,7 +134,7 @@ impl TryRead<'_, ()> for DirEntryType {
 }
 
 impl TryRead<'_, DirEntryType> for DirEntryData {
-    fn try_read(bytes: &[u8], ty: DirEntryType) -> Result<(Self, usize)> {
+    fn try_read(bytes: &[u8], ty: DirEntryType) -> ByteResult<(Self, usize)> {
         let offset = &mut 0;
         let endian = LE;
         match ty {
@@ -123,19 +147,13 @@ impl TryRead<'_, DirEntryType> for DirEntryData {
             }
             DirEntryType::Directory => {
                 let d = DirEntryData::Directory {
-                    directory_ptr: [
-                        bytes.read_with(offset, endian)?,
-                        bytes.read_with(offset, endian)?,
-                    ],
+                    directory_ptr:                        bytes.read_with(offset, endian)?,
                 };
                 Ok((d, *offset))
             }
             DirEntryType::Superblock => {
                 let s = DirEntryData::Superblock {
-                    root_directory: [
-                        bytes.read_with(offset, endian)?,
-                        bytes.read_with(offset, endian)?,
-                    ],
+                    root_directory_ptr:                         bytes.read_with(offset, endian)?,
                     block_size: bytes.read_with(offset, endian)?,
                     block_count: bytes.read_with(offset, endian)?,
                     version: bytes.read_with(offset, endian)?,
@@ -160,7 +178,7 @@ pub struct DirEntry<'a> {
     pub attributes: &'a [u8],
 }
 impl<'a> TryRead<'a, ()> for DirEntry<'a> {
-    fn try_read(bytes: &'a [u8], _ctx: ()) -> Result<(Self, usize)> {
+    fn try_read(bytes: &'a [u8], _ctx: ()) -> ByteResult<(Self, usize)> {
         let offset = &mut 0;
         let endian = LE;
 
@@ -194,19 +212,19 @@ pub struct DirEntryIterator<'a> {
 }
 
 impl<'a> Iterator for DirEntryIterator<'a> {
-    type Item = Result<DirEntry<'a>>;
+    type Item = ByteResult<DirEntry<'a>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.offset >= self.contents.len() {
             None
         } else {
-            let entry: Result<DirEntry> = self.contents.read(&mut self.offset);
+            let entry: ByteResult<DirEntry> = self.contents.read(&mut self.offset);
             Some(entry)
         }
     }
 }
 impl<'a> IntoIterator for MetadataBlock<'a> {
-    type Item = Result<DirEntry<'a>>;
+    type Item = ByteResult<DirEntry<'a>>;
     type IntoIter = DirEntryIterator<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -222,6 +240,7 @@ mod tests {
     extern crate alloc;
     use alloc::vec::Vec;
     use byte::BytesExt;
+    use super::*;
 
     const SUPERBLOCK: &[u8] = &[
         0x03, 0x00, 0x00, 0x00, 0x34, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00,
@@ -235,33 +254,33 @@ mod tests {
     #[test]
     fn superblock() {
         let mut length = 0;
-        let block: super::MetadataBlock = SUPERBLOCK.read(&mut length).unwrap();
+        let block: MetadataBlock = SUPERBLOCK.read(&mut length).unwrap();
         assert_eq!(length, SUPERBLOCK.len());
         assert_eq!(block.revision_count, 3);
         assert_eq!(block.continued, false);
         assert_eq!(block.dir_size, 52);
-        assert_eq!(block.tail_pointer, [3, 2]);
+        assert_eq!(block.tail_pointer, BlockPointerPair{a: 3, b: 2});
         let iter = block.into_iter();
         let dir_entries: Result<Vec<_>, _> = iter.collect();
         let dir_entries = dir_entries.unwrap();
         assert_eq!(dir_entries.len(), 1);
         let entry = &dir_entries[0];
         match entry.data {
-            super::DirEntryData::Superblock {
-                root_directory,
+            DirEntryData::Superblock {
+                root_directory_ptr,
                 block_size,
                 block_count,
                 version,
             } => {
-                assert_eq!(root_directory, [3, 2]);
+                assert_eq!(root_directory_ptr, BlockPointerPair{a: 3, b: 2});
                 assert_eq!(block_size, 512);
                 assert_eq!(block_count, 1024);
-                assert_eq!(version, super::VERSION);
+                assert_eq!(version, VERSION);
             }
             _ => {
                 assert_eq!(
-                    super::DirEntryType::from(&entry.data),
-                    super::DirEntryType::Superblock
+                    DirEntryType::from(&entry.data),
+                    DirEntryType::Superblock
                 );
             }
         };
@@ -286,7 +305,7 @@ mod tests {
     #[test]
     fn superblock_rewrite() {
         let mut read_length = 0;
-        let block: super::MetadataBlock = SUPERBLOCK.read(&mut read_length).unwrap();
+        let block: MetadataBlock = SUPERBLOCK.read(&mut read_length).unwrap();
         let mut out: [u8; 512] = [0; 512];
         let mut write_length = 0;
         out.write(&mut write_length, block).unwrap();
@@ -297,11 +316,11 @@ mod tests {
     #[test]
     fn directory() {
         let mut length = 0;
-        let block: super::MetadataBlock = DIRECTORY.read(&mut length).unwrap();
+        let block: MetadataBlock = DIRECTORY.read(&mut length).unwrap();
         assert_eq!(length, DIRECTORY.len());
         assert_eq!(block.revision_count, 10);
         assert_eq!(block.dir_size, 154);
-        assert_eq!(block.tail_pointer, [37, 36]);
+        assert_eq!(block.tail_pointer, BlockPointerPair{a: 37, b: 36});
         let iter = block.into_iter();
         let dir_entries: Result<Vec<_>, _> = iter.collect();
         let dir_entries = dir_entries.unwrap();
