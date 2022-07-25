@@ -228,19 +228,7 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> LittleFs<S, BLOCK_SIZE> {
                 continue;
             }
             trace!("Looking for component {:?}", name);
-            let entry = self.read_newer_block(dir.ptr).await?.into_iter().find_map(|entry| {
-                match entry {
-                    Err(_) => Some(Err(FsError::Corrupt)),
-                    Ok(entry) => {
-                    // TODO: "check that entry has not been moved"
-                        if entry.name == name {
-                            Some(Ok(entry))
-                        } else {
-                            None
-                        }
-                    },
-                }
-            }).transpose()?.ok_or(FsError::Noent)?;
+            let entry = self.read_newer_block(dir.ptr).await?.find_entry(name).map_err(|_| FsError::Corrupt)?.ok_or(FsError::Noent)?;
 
             if let None = names.clone().next() {
                 return Ok(entry.data);

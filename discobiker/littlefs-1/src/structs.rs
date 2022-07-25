@@ -254,6 +254,24 @@ impl<'a> IntoIterator for MetadataBlock<'a> {
     }
 }
 
+impl<'a> MetadataBlock<'a> {
+    pub fn find_entry(self, name: &str) -> ByteResult<Option<DirEntry<'a>>> {
+        self.into_iter().find_map(|entry| {
+            match entry {
+                Err(e) => Some(Err(e)),
+                Ok(entry) => {
+                    // TODO: "check that entry has not been moved"
+                    if entry.name == name {
+                        Some(Ok(entry))
+                    } else {
+                        None
+                    }
+                },
+            }
+        }).transpose()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     extern crate alloc;
