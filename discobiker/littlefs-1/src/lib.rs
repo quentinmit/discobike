@@ -228,21 +228,32 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> LittleFs<S, BLOCK_SIZE> {
                 continue;
             }
             trace!("Looking for component {:?}", name);
-            // TODO: Handle continued directories
-            let entry = self.read_newer_block(dir.ptr).await?.find_entry(name).map_err(|_| FsError::Corrupt)?.ok_or(FsError::Noent)?;
-
-            if let None = names.clone().next() {
-                return Ok(entry.data);
-            } else {
-                match entry.data {
-                    structs::DirEntryData::Directory { directory_ptr } => {
-                        dir.ptr = directory_ptr;
+            // TODO: Share implementation with dir_read
+            let mut continued = true;
+            let mut found = false;
+            while continued {
+                let block = self.read_newer_block(dir.ptr).await?;
+                continued = block.continued;
+                dir.ptr = block.tail_ptr;
+                if let Some(entry) = block.find_entry(name).map_err(|_| FsError::Corrupt)? {
+                    if let None = names.clone().next() {
+                        return Ok(entry.data);
+                    } else {
+                        match entry.data {
+                            structs::DirEntryData::Directory { directory_ptr } => {
+                                dir.ptr = directory_ptr;
+                                found = true;
+                            }
+                            structs::DirEntryData::File { .. } => {
+                                return Err(FsError::NotDir)
+                            }
+                            _ => return Err(FsError::Corrupt),
+                        }
                     }
-                    structs::DirEntryData::File { .. } => {
-                        return Err(FsError::NotDir)
-                    }
-                    _ => return Err(FsError::Corrupt),
                 }
+            }
+            if !found {
+                return Err(FsError::Noent);
             }
         }
         // Fake directory for /
@@ -398,6 +409,7 @@ mod tests {
     extern crate std;
     use core::iter::repeat;
     use std::println;
+    use alloc::format;
     extern crate alloc;
     use alloc::string::String;
     use alloc::vec::Vec;
@@ -408,6 +420,7 @@ mod tests {
     use byte::{BytesExt, Result};
 
     const THREE_FILES: &[u8] = include_bytes!("../testdata/three-files.img");
+    const LARGE_DIR: &[u8] = include_bytes!("../testdata/large-dir.img");
 
     #[test]
     fn three_files() {
@@ -448,6 +461,37 @@ mod tests {
                 .collect();
             let mut fs: LittleFs<_, 512> = LittleFs::new(SliceStorage::new(&data[..]));
             fs.mount().await.unwrap();
+        });
+    }
+
+    #[test]
+    fn large_dir() {
+        block_on(async {
+            let mut fs: LittleFs<_, 512> = LittleFs::new(SliceStorage::new(LARGE_DIR));
+            fs.mount().await.unwrap();
+
+            let mut dir = Dir::default();
+            fs.dir_open(&mut dir, "/").await.unwrap();
+            println!("open dir: {:?}", dir);
+            let mut names = Vec::<String>::new();
+            while let Some(info) = fs.dir_read(&mut dir).await.unwrap() {
+                println!("entry: {:?}", info);
+                if info.entry_type == EntryType::RegularFile {
+                    names.push(info.name.as_ref().into());
+                    assert_eq!(info.size, if info.name.as_ref() == "zzz" { 512 } else { 0 });
+                }
+            }
+            let expected_names: Vec<String> = (0..=99).into_iter().map(|n| format!("static{}", n)).chain([String::from("zzz")]).collect();
+            assert_eq!(names, expected_names);
+            let expected_data: Vec<u8> = b"0123456789abcdef".into_iter().cycle().take(512).cloned().collect();
+            let mut file = Default::default();
+            let path = "zzz";
+            fs.file_open(&mut file, path, FileOpenFlags::RDONLY).await.unwrap();
+            println!("{} file: {:?}", path, file);
+            let mut data = [0u8;1024];
+            assert_eq!(fs.file_read(&mut file, &mut data).await.unwrap(), 512);
+            println!("{} data: {:?}", path, &data[..512]);
+            assert_eq!(&data[..512], &expected_data);
         });
     }
 }
