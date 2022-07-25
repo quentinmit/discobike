@@ -247,16 +247,19 @@ impl<'a> IntoIterator for MetadataBlock<'a> {
     type IntoIter = DirEntryIterator<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
+impl<'a> MetadataBlock<'a> {
+    pub fn iter(&self) -> DirEntryIterator<'a> {
         DirEntryIterator {
             offset: 0,
             contents: self.contents,
         }
     }
-}
-
-impl<'a> MetadataBlock<'a> {
-    pub fn find_entry(self, name: &str) -> ByteResult<Option<DirEntry<'a>>> {
-        self.into_iter().find_map(|entry| {
+    pub fn find_entry(&self, name: &str) -> ByteResult<Option<DirEntry<'a>>> {
+        self.iter().find_map(|entry| {
             match entry {
                 Err(e) => Some(Err(e)),
                 Ok(entry) => {
