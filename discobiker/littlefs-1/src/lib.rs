@@ -228,6 +228,7 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> LittleFs<S, BLOCK_SIZE> {
                 continue;
             }
             trace!("Looking for component {:?}", name);
+            // TODO: Handle continued directories
             let entry = self.read_newer_block(dir.ptr).await?.find_entry(name).map_err(|_| FsError::Corrupt)?.ok_or(FsError::Noent)?;
 
             if let None = names.clone().next() {
