@@ -492,6 +492,9 @@ mod tests {
             assert_eq!(fs.file_read(&mut file, &mut data).await.unwrap(), 512);
             println!("{} data: {:?}", path, &data[..512]);
             assert_eq!(&data[..512], &expected_data);
+            let path = "static0";
+            fs.file_open(&mut file, path, FileOpenFlags::RDONLY).await.unwrap();
+            assert_eq!(fs.file_read(&mut file, &mut data).await.unwrap(), 0);
         });
     }
 }
