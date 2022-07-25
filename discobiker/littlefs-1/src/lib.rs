@@ -29,7 +29,7 @@ pub enum FsError {
     Inval,
 }
 
-struct LittleFs<S, const BLOCK_SIZE: usize> {
+pub struct LittleFs<S, const BLOCK_SIZE: usize> {
     storage: S,
     buf1: [u8; BLOCK_SIZE],
     buf2: [u8; BLOCK_SIZE],
@@ -200,7 +200,7 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> LittleFs<S, BLOCK_SIZE> {
             _ => Err(FsError::Corrupt),
         }
     }
-    async fn dir_find<'a>(&mut self, path: &'a str) -> Result<structs::DirEntry, FsError> {
+    async fn dir_find<'a>(&mut self, path: &'a str) -> Result<structs::DirEntryData, FsError> {
         // TODO: Support a different starting directory.
         let mut dir = Dir::new(self.root_directory_ptr);
         let mut names = path.split("/");
@@ -228,44 +228,42 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> LittleFs<S, BLOCK_SIZE> {
                 continue;
             }
             trace!("Looking for component {:?}", name);
-            let dirmeta = self.read_newer_block(dir.ptr).await?;
-            for entry in dirmeta {
+            let entry = self.read_newer_block(dir.ptr).await?.into_iter().find_map(|entry| {
                 match entry {
-                    Err(_) => return Err(FsError::Corrupt),
+                    Err(_) => Some(Err(FsError::Corrupt)),
                     Ok(entry) => {
+                    // TODO: "check that entry has not been moved"
                         if entry.name == name {
-                            // TODO: "check that entry has not been moved"
-                            if let None = names.clone().next() {
-                                return Ok(entry);
-                            } else {
-                                match entry.data {
-                                    structs::DirEntryData::Directory { directory_ptr } => {
-                                        dir.ptr = directory_ptr;
-                                    }
-                                    structs::DirEntryData::File { .. } => {
-                                        return Err(FsError::NotDir)
-                                    }
-                                    _ => return Err(FsError::Corrupt),
-                                }
-                            }
+                            Some(Ok(entry))
+                        } else {
+                            None
                         }
+                    },
+                }
+            }).transpose()?.ok_or(FsError::Noent)?;
+
+            if let None = names.clone().next() {
+                return Ok(entry.data);
+            } else {
+                match entry.data {
+                    structs::DirEntryData::Directory { directory_ptr } => {
+                        dir.ptr = directory_ptr;
                     }
+                    structs::DirEntryData::File { .. } => {
+                        return Err(FsError::NotDir)
+                    }
+                    _ => return Err(FsError::Corrupt),
                 }
             }
-            return Err(FsError::Noent);
         }
         // Fake directory for /
-        Ok(structs::DirEntry {
-            name: "",
-            data: structs::DirEntryData::Directory {
-                directory_ptr: dir.ptr,
-            },
-            attributes: &[],
+        Ok(structs::DirEntryData::Directory {
+            directory_ptr: dir.ptr,
         })
     }
     pub async fn dir_open(&mut self, dir: &mut Dir, path: &str) -> Result<(), FsError> {
-        let entry = self.dir_find(path).await?;
-        match entry.data {
+        let entry_data = self.dir_find(path).await?;
+        match entry_data {
             structs::DirEntryData::Directory { directory_ptr } => {
                 dir.ptr = directory_ptr;
                 dir.pos = 0;
@@ -316,8 +314,8 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> LittleFs<S, BLOCK_SIZE> {
         if flags != FileOpenFlags::RDONLY {
             return Err(FsError::Inval);
         }
-        let entry = self.dir_find(path).await?;
-        match entry.data {
+        let entry_data = self.dir_find(path).await?;
+        match entry_data {
             structs::DirEntryData::File {
                 head,
                 size,
@@ -409,6 +407,7 @@ mod tests {
     use super::*;
 
     extern crate std;
+    use core::iter::repeat;
     use std::println;
     extern crate alloc;
     use alloc::string::String;
@@ -433,16 +432,22 @@ mod tests {
             let mut names = Vec::<String>::new();
             while let Some(info) = fs.dir_read(&mut dir).await.unwrap() {
                 println!("entry: {:?}", info);
-                names.push(info.name.as_ref().into());
-                assert_eq!(info.size, 512);
+                if info.entry_type == EntryType::RegularFile {
+                    names.push(info.name.as_ref().into());
+                    assert_eq!(info.size, 512);
+                }
             }
+            let expected_data: Vec<u8> = b"0123456789abcdef".into_iter().cycle().take(512).cloned().collect();
             assert_eq!(names, &["static0", "static1", "static2"]);
-            let mut file = Default::default();
-            fs.file_open(&mut file, "/static0", FileOpenFlags::RDONLY).await.unwrap();
-            println!("static0 file: {:?}", file);
-            let mut data = [0u8;1024];
-            assert_eq!(fs.file_read(&mut file, &mut data).await.unwrap(), 512);
-            println!("static0 data: {:?}", &data[..512])
+            for path in &["static0", "static1", "static2", "subdir/file"] {
+                let mut file = Default::default();
+                fs.file_open(&mut file, path, FileOpenFlags::RDONLY).await.unwrap();
+                println!("{} file: {:?}", path, file);
+                let mut data = [0u8;1024];
+                assert_eq!(fs.file_read(&mut file, &mut data).await.unwrap(), 512);
+                println!("{} data: {:?}", path, &data[..512]);
+                assert_eq!(&data[..512], &expected_data);
+            }
         });
     }
 

@@ -123,7 +123,7 @@ impl<'a> TryWrite<()> for MetadataBlock<'a> {
     }
 }
 
-#[derive(Debug, Format, PartialEq, EnumKind)]
+#[derive(Clone, Copy, Debug, Format, PartialEq, EnumKind)]
 #[enum_kind(DirEntryType, repr(u8), derive(IntoPrimitive, TryFromPrimitive))]
 pub enum DirEntryData {
     #[enum_kind_value(0x11)]
@@ -190,7 +190,7 @@ impl TryRead<'_, DirEntryType> for DirEntryData {
     }
 }
 
-#[derive(Debug, Format, PartialEq)]
+#[derive(Clone, Copy, Debug, Format, PartialEq)]
 pub struct DirEntry<'a> {
     pub name: &'a str,
     pub data: DirEntryData,
