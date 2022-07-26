@@ -5,6 +5,7 @@
     feature(type_alias_impl_trait)
 )]
 
+mod fmt;
 mod storage;
 mod structs;
 
@@ -17,11 +18,7 @@ use core::cmp::min;
 use itertools::Itertools;
 use maybe_async_cfg;
 
-#[cfg(not(test))]
-use defmt::{info, trace, warn, Format};
-#[cfg(test)]
-use log::{info, trace, warn};
-#[cfg(test)]
+#[cfg(not(defmt))]
 trait Format {}
 
 #[cfg(feature = "sync")]
@@ -158,7 +155,7 @@ fn npw2(a: u32) -> u32 {
 #[derive(Debug, PartialEq)]
 struct Block<const BLOCK_SIZE: usize>(ArrayVec<u8, BLOCK_SIZE>);
 
-#[cfg(not(test))]
+#[cfg(defmt)]
 impl<const BLOCK_SIZE: usize> Format for Block<BLOCK_SIZE> {
     fn format(&self, f: defmt::Formatter) {
         defmt::write!(f, "{:?}", self.0.as_slice(),)
@@ -441,7 +438,7 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE>
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature="log"))]
 mod test_log {
     use simplelog::*;
     #[ctor::ctor]

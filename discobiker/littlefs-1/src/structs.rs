@@ -1,6 +1,5 @@
 use byte::ctx::*;
 use byte::{BytesExt, Error, Result as ByteResult, TryRead, TryWrite, LE};
-use defmt::Format;
 
 use crc::{Crc, CRC_32_JAMCRC};
 
@@ -23,7 +22,8 @@ impl AsOffset for BlockPointer {
     }
 }
 
-#[derive(Clone, Copy, Debug, Format, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct BlockPointerPair {
     pub a: BlockPointer,
     pub b: BlockPointer,
@@ -55,7 +55,8 @@ impl TryWrite<Endian> for BlockPointerPair {
     }
 }
 
-#[derive(Clone, Copy, Debug, Format, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct MetadataBlock<'a> {
     pub revision_count: u32,
     pub continued: bool,
@@ -123,8 +124,9 @@ impl<'a> TryWrite<()> for MetadataBlock<'a> {
     }
 }
 
-#[derive(Clone, Copy, Debug, Format, PartialEq, EnumKind)]
-#[enum_kind(DirEntryType, repr(u8), derive(IntoPrimitive, TryFromPrimitive))]
+#[derive(Clone, Copy, Debug, PartialEq, EnumKind)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[enum_kind(DirEntryType, repr(u8), derive(IntoPrimitive, TryFromPrimitive), cfg_attr(feature = "defmt", derive(defmt::Format)))]
 pub enum DirEntryData {
     #[enum_kind_value(0x11)]
     File { head: BlockPointer, size: u32 },
@@ -190,7 +192,8 @@ impl TryRead<'_, DirEntryType> for DirEntryData {
     }
 }
 
-#[derive(Clone, Copy, Debug, Format, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct DirEntry<'a> {
     pub name: &'a str,
     pub data: DirEntryData,
