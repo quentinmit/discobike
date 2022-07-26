@@ -52,7 +52,7 @@ impl<S: DerefMut<Target = [u8]>> SliceStorage<S> {
             Err(NorFlashErrorKind::OutOfBounds)
         } else if (end - start) < min_size {
             Err(NorFlashErrorKind::NotAligned)
-        } else if start % min_size != 0 {
+        } else if start % min_size != 0 || end % min_size != 0 {
             Err(NorFlashErrorKind::NotAligned)
         } else {
             self.buf[start..end].copy_from_slice(data);
@@ -143,5 +143,68 @@ impl<S: DerefMut<Target = [u8]>> NorFlash for SliceStorage<S> {
 
     fn erase(&mut self, from: u32, to: u32) -> Result<(), NorFlashErrorKind> {
         self.do_erase(<Self as NorFlash>::ERASE_SIZE, from, to)
+    }
+}
+
+#[cfg(test)]
+mod tests_async {
+    use super::*;
+    use tokio_test::block_on;
+
+    #[test]
+    fn read() {
+        block_on(async {
+            const BUF: &[u8] = &[0,1,2,3,4,5,6,7,8,9];
+            let mut ss = SliceStorage::new(BUF);
+            let mut out = [0u8; 3];
+            AsyncReadNorFlash::read(&mut ss, 0, &mut out).await.unwrap();
+            assert_eq!(&BUF[0..3], &out);
+
+            AsyncReadNorFlash::read(&mut ss, 3, &mut out).await.unwrap();
+            assert_eq!(&BUF[3..6], &out);
+
+            assert_eq!(
+                AsyncReadNorFlash::read(&mut ss, 9, &mut out).await,
+                Err(NorFlashErrorKind::OutOfBounds)
+            );
+        })
+    }
+
+    #[test]
+    fn write() {
+        block_on(async {
+            let mut buf = [0u8; 8192];
+            let mut ss = SliceStorage::new(&mut buf[..]);
+
+            const TESTDATA: &[u8] = &[0,1,2,3,4,5,6,7];
+
+            AsyncNorFlash::write(&mut ss, 0, &TESTDATA).await.unwrap();
+            let mut readback = [0u8; 8];
+            AsyncReadNorFlash::read(&mut ss, 0, &mut readback).await.unwrap();
+            assert_eq!(&readback, TESTDATA);
+
+            assert_eq!(
+                AsyncNorFlash::write(&mut ss, 0, &TESTDATA[0..5]).await,
+                Err(NorFlashErrorKind::NotAligned)
+            );
+        })
+    }
+
+    #[test]
+    fn erase() {
+        block_on(async {
+            let mut buf = [0u8; 8192];
+            let mut ss = SliceStorage::new(&mut buf[..]);
+
+            AsyncNorFlash::erase(&mut ss, 4096, 8192).await.unwrap();
+            let mut readback = [0u8; 8];
+            AsyncReadNorFlash::read(&mut ss, 4092, &mut readback).await.unwrap();
+            assert_eq!(&readback, &[0, 0, 0, 0, 0xFF, 0xFF, 0xFF, 0xFF]);
+
+            assert_eq!(
+                AsyncNorFlash::erase(&mut ss, 4, 8).await,
+                Err(NorFlashErrorKind::NotAligned)
+            );
+        })
     }
 }
