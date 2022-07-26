@@ -449,6 +449,9 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE>
         }
         Ok((head, pos))
     }
+
+    /// Traverse the entire filesystem, calling `f` with a pointer to every
+    /// allocated block.
     async fn traverse<F>(&mut self, mut f: F) -> Result<(), FsError>
     where
         F: FnMut(BlockPointer) -> Result<(), FsError>,
@@ -475,6 +478,8 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE>
         }
         Ok(())
     }
+    /// Traverse a file of length `size` beginning at `head`, calling `f` for
+    /// every block that is allocated to the file.
     async fn ctz_traverse<F>(
         &mut self,
         head: BlockPointer,
