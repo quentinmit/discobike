@@ -1,17 +1,21 @@
 #![no_std]
-#![feature(generic_associated_types)]
-#![feature(type_alias_impl_trait)]
+#![cfg_attr(
+    feature = "async",
+    feature(generic_associated_types),
+    feature(type_alias_impl_trait)
+)]
 
 mod storage;
 mod structs;
 
 use structs::{AsOffset, BlockPointer, BlockPointerPair};
 
-use arrayvec::{ArrayVec, ArrayString};
+use arrayvec::{ArrayString, ArrayVec};
 use bitflags::bitflags;
 use byte::{BytesExt, LE};
-use itertools::Itertools;
 use core::cmp::min;
+use itertools::Itertools;
+use maybe_async_cfg;
 
 #[cfg(not(test))]
 use defmt::{info, trace, warn, Format};
@@ -20,6 +24,9 @@ use log::{info, trace, warn};
 #[cfg(test)]
 trait Format {}
 
+#[cfg(feature = "sync")]
+use embedded_storage::nor_flash::ReadNorFlash;
+#[cfg(feature = "async")]
 use embedded_storage_async::nor_flash::AsyncReadNorFlash;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -31,16 +38,24 @@ pub enum FsError {
     Inval,
 }
 
-pub struct LittleFs<S, const BLOCK_SIZE: usize> {
+#[maybe_async_cfg::maybe(
+    sync(self = "LittleFs", feature = "sync"),
+    async(keep_self, feature = "async")
+)]
+pub struct AsyncLittleFs<S, const BLOCK_SIZE: usize> {
     storage: S,
     root_directory_ptr: BlockPointerPair,
     block_size: u32,
     block_count: u32,
 }
 
-impl<S, const BLOCK_SIZE: usize> LittleFs<S, BLOCK_SIZE> {
+#[maybe_async_cfg::maybe(
+    sync(self = "LittleFs", feature = "sync"),
+    async(keep_self, feature = "async")
+)]
+impl<S, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE> {
     pub fn new(storage: S) -> Self {
-        LittleFs {
+        AsyncLittleFs {
             storage,
             block_size: 0,
             block_count: 0,
@@ -137,7 +152,7 @@ bitflags! {
 }
 
 fn npw2(a: u32) -> u32 {
-    32 - (a-1).leading_zeros()
+    32 - (a - 1).leading_zeros()
 }
 
 #[derive(Debug, PartialEq)]
@@ -146,11 +161,7 @@ struct Block<const BLOCK_SIZE: usize>(ArrayVec<u8, BLOCK_SIZE>);
 #[cfg(not(test))]
 impl<const BLOCK_SIZE: usize> Format for Block<BLOCK_SIZE> {
     fn format(&self, f: defmt::Formatter) {
-        defmt::write!(
-            f,
-            "{:?}",
-            self.0.as_slice(),
-        )
+        defmt::write!(f, "{:?}", self.0.as_slice(),)
     }
 }
 
@@ -176,14 +187,21 @@ impl<const BLOCK_SIZE: usize> Block<BLOCK_SIZE> {
     }
 }
 
-impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> LittleFs<S, BLOCK_SIZE> {
-    async fn read_block(
-        &mut self,
-        ptr: BlockPointer,
-    ) -> Result<Block<BLOCK_SIZE>, FsError> {
-        let block_size = if self.block_size > 0 { self.block_size as usize } else {BLOCK_SIZE};
+#[maybe_async_cfg::maybe(
+    idents(AsyncReadNorFlash(async, sync = "ReadNorFlash"),),
+    sync(self = "LittleFs", feature = "sync"),
+    async(keep_self, feature = "async")
+)]
+impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE> {
+    async fn read_block(&mut self, ptr: BlockPointer) -> Result<Block<BLOCK_SIZE>, FsError> {
+        let block_size = if self.block_size > 0 {
+            self.block_size as usize
+        } else {
+            BLOCK_SIZE
+        };
         let mut buf = Block::<BLOCK_SIZE>::zero(block_size);
-        self.storage.read(ptr.as_offset(BLOCK_SIZE), buf.as_mut_slice())
+        self.storage
+            .read(ptr.as_offset(BLOCK_SIZE), buf.as_mut_slice())
             .await
             .map_err(|_| FsError::Io)?;
         Ok(buf)
@@ -200,19 +218,17 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> LittleFs<S, BLOCK_SIZE> {
             .filter_map(|buf| {
                 let revision = buf.as_metadata().ok().map(|block| block.revision_count);
                 revision.map(|revision| (buf, revision))
-            }).reduce(|(a, arev), (b, brev)|
-                if arev > brev {
-                    (a, arev)
-                } else {
-                    (b, brev)
-                }
-            ).map(|(buf, _)| buf).ok_or(FsError::Corrupt)
+            })
+            .reduce(|(a, arev), (b, brev)| if arev > brev { (a, arev) } else { (b, brev) })
+            .map(|(buf, _)| buf)
+            .ok_or(FsError::Corrupt)
     }
     pub async fn mount(&mut self) -> Result<(), FsError> {
         let sb = self
             .read_newer_block(BlockPointerPair { a: 0, b: 1 })
             .await?;
-        let entry = sb.as_metadata()?
+        let entry = sb
+            .as_metadata()?
             .into_iter()
             .exactly_one()
             .map_err(|_| FsError::Corrupt)?
@@ -283,9 +299,7 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> LittleFs<S, BLOCK_SIZE> {
                                 dir.ptr = directory_ptr;
                                 found = true;
                             }
-                            structs::DirEntryData::File { .. } => {
-                                return Err(FsError::NotDir)
-                            }
+                            structs::DirEntryData::File { .. } => return Err(FsError::NotDir),
                             _ => return Err(FsError::Corrupt),
                         }
                     }
@@ -356,17 +370,14 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> LittleFs<S, BLOCK_SIZE> {
         }
         let entry_data = self.dir_find(path).await?;
         match entry_data {
-            structs::DirEntryData::File {
-                head,
-                size,
-            } => {
+            structs::DirEntryData::File { head, size } => {
                 *file = File {
                     head,
                     size,
-                    .. Default::default()
+                    ..Default::default()
                 };
                 Ok(())
-            },
+            }
             _ => Err(FsError::NotDir),
         }
     }
@@ -381,10 +392,10 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> LittleFs<S, BLOCK_SIZE> {
         while buf.len() > 0 {
             let (block, off) = self.ctz_find(file.head, file.size, file.pos).await?;
             let diff = min(buf.len() as u32, self.block_size - off) as usize;
-            self.storage.read(
-                block.as_offset(BLOCK_SIZE) + off,
-                &mut buf[..diff]
-            ).await.map_err(|_| FsError::Io)?;
+            self.storage
+                .read(block.as_offset(BLOCK_SIZE) + off, &mut buf[..diff])
+                .await
+                .map_err(|_| FsError::Io)?;
             buf = &mut buf[diff..];
         }
         // We only update file here so that the position is not updated on a failed read.
@@ -394,31 +405,32 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> LittleFs<S, BLOCK_SIZE> {
 
     fn ctz_index(&self, off: u32) -> (u32, u32) {
         let size = off;
-        let b = self.block_size - 2*4;
+        let b = self.block_size - 2 * 4;
         let i = size / b;
         if i == 0 {
             return (0, off);
         }
-        let i = (size - 4*((i-1).count_ones()+2)) / b;
-        (i, size - b*i - 4*i.count_ones())
+        let i = (size - 4 * ((i - 1).count_ones() + 2)) / b;
+        (i, size - b * i - 4 * i.count_ones())
     }
 
     async fn ctz_find(
         &mut self,
-        head: BlockPointer, size: u32,
+        head: BlockPointer,
+        size: u32,
         pos: u32,
-        ) -> Result<(BlockPointer, u32), FsError> {
+    ) -> Result<(BlockPointer, u32), FsError> {
         let mut head = head;
         let (mut current, _) = self.ctz_index(size - 1);
         let (target, pos) = self.ctz_index(pos);
 
         while current > target {
-            let skip = min(
-                npw2(current-target+1)-1,
-                current.trailing_zeros(),
-            );
+            let skip = min(npw2(current - target + 1) - 1, current.trailing_zeros());
             let mut buf = [0u8; 4];
-            self.storage.read(head.as_offset(BLOCK_SIZE), &mut buf[..]).await.map_err(|_| FsError::Io)?;
+            self.storage
+                .read(head.as_offset(BLOCK_SIZE), &mut buf[..])
+                .await
+                .map_err(|_| FsError::Io)?;
             head = buf.read_with(&mut 0, LE).map_err(|_| FsError::Corrupt)?;
             if !(head >= 2 && head <= self.block_count) {
                 return Err(FsError::Corrupt);
@@ -447,9 +459,9 @@ mod tests {
     use super::*;
 
     extern crate std;
+    use alloc::format;
     use core::iter::repeat;
     use std::println;
-    use alloc::format;
     extern crate alloc;
     use alloc::string::String;
     use alloc::vec::Vec;
@@ -465,7 +477,7 @@ mod tests {
     #[test]
     fn three_files() {
         block_on(async {
-            let mut fs: LittleFs<_, 512> = LittleFs::new(SliceStorage::new(THREE_FILES));
+            let mut fs: AsyncLittleFs<_, 512> = AsyncLittleFs::new(SliceStorage::new(THREE_FILES));
             fs.mount().await.unwrap();
 
             let mut dir = Dir::default();
@@ -479,13 +491,20 @@ mod tests {
                     assert_eq!(info.size, 512);
                 }
             }
-            let expected_data: Vec<u8> = b"0123456789abcdef".into_iter().cycle().take(512).cloned().collect();
+            let expected_data: Vec<u8> = b"0123456789abcdef"
+                .into_iter()
+                .cycle()
+                .take(512)
+                .cloned()
+                .collect();
             assert_eq!(names, &["static0", "static1", "static2"]);
             for path in &["static0", "static1", "static2", "subdir/file"] {
                 let mut file = Default::default();
-                fs.file_open(&mut file, path, FileOpenFlags::RDONLY).await.unwrap();
+                fs.file_open(&mut file, path, FileOpenFlags::RDONLY)
+                    .await
+                    .unwrap();
                 println!("{} file: {:?}", path, file);
-                let mut data = [0u8;1024];
+                let mut data = [0u8; 1024];
                 assert_eq!(fs.file_read(&mut file, &mut data).await.unwrap(), 512);
                 println!("{} data: {:?}", path, &data[..512]);
                 assert_eq!(&data[..512], &expected_data);
@@ -499,7 +518,7 @@ mod tests {
             let data: Vec<u8> = repeat_n(0u8, 512)
                 .chain(THREE_FILES[512..].iter().cloned())
                 .collect();
-            let mut fs: LittleFs<_, 512> = LittleFs::new(SliceStorage::new(&data[..]));
+            let mut fs: AsyncLittleFs<_, 512> = AsyncLittleFs::new(SliceStorage::new(&data[..]));
             fs.mount().await.unwrap();
         });
     }
@@ -507,7 +526,7 @@ mod tests {
     #[test]
     fn large_dir() {
         block_on(async {
-            let mut fs: LittleFs<_, 512> = LittleFs::new(SliceStorage::new(LARGE_DIR));
+            let mut fs: AsyncLittleFs<_, 512> = AsyncLittleFs::new(SliceStorage::new(LARGE_DIR));
             fs.mount().await.unwrap();
 
             let mut dir = Dir::default();
@@ -521,19 +540,32 @@ mod tests {
                     assert_eq!(info.size, if info.name.as_ref() == "zzz" { 512 } else { 0 });
                 }
             }
-            let expected_names: Vec<String> = (0..=99).into_iter().map(|n| format!("static{}", n)).chain([String::from("zzz")]).collect();
+            let expected_names: Vec<String> = (0..=99)
+                .into_iter()
+                .map(|n| format!("static{}", n))
+                .chain([String::from("zzz")])
+                .collect();
             assert_eq!(names, expected_names);
-            let expected_data: Vec<u8> = b"0123456789abcdef".into_iter().cycle().take(512).cloned().collect();
+            let expected_data: Vec<u8> = b"0123456789abcdef"
+                .into_iter()
+                .cycle()
+                .take(512)
+                .cloned()
+                .collect();
             let mut file = Default::default();
             let path = "zzz";
-            fs.file_open(&mut file, path, FileOpenFlags::RDONLY).await.unwrap();
+            fs.file_open(&mut file, path, FileOpenFlags::RDONLY)
+                .await
+                .unwrap();
             println!("{} file: {:?}", path, file);
-            let mut data = [0u8;1024];
+            let mut data = [0u8; 1024];
             assert_eq!(fs.file_read(&mut file, &mut data).await.unwrap(), 512);
             println!("{} data: {:?}", path, &data[..512]);
             assert_eq!(&data[..512], &expected_data);
             let path = "static0";
-            fs.file_open(&mut file, path, FileOpenFlags::RDONLY).await.unwrap();
+            fs.file_open(&mut file, path, FileOpenFlags::RDONLY)
+                .await
+                .unwrap();
             assert_eq!(fs.file_read(&mut file, &mut data).await.unwrap(), 0);
         });
     }
