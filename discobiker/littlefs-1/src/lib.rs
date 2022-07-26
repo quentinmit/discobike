@@ -446,7 +446,7 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE>
         }
         Ok((head, pos))
     }
-    async fn traverse<F>(&mut self, mut f: &mut F) -> Result<(), FsError>
+    async fn traverse<F>(&mut self, mut f: F) -> Result<(), FsError>
     where
         F: FnMut(BlockPointer) -> Result<(), FsError>,
     {
@@ -465,7 +465,7 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE>
                 if let structs::DirEntryData::File { head, size } =
                     entry.map_err(|_| FsError::Corrupt)?.data
                 {
-                    self.ctz_traverse(head, size, f).await?;
+                    self.ctz_traverse(head, size, &mut f).await?;
                 }
             }
             cwd = block.tail_ptr;
@@ -476,7 +476,7 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE>
         &mut self,
         head: BlockPointer,
         size: u32,
-        mut f: &mut F,
+        mut f: F,
     ) -> Result<(), FsError>
     where
         F: FnMut(BlockPointer) -> Result<(), FsError>,
@@ -717,7 +717,7 @@ mod tests_async {
             let mut fs: AsyncLittleFs<_, 512> = AsyncLittleFs::new(SliceStorage::new(THREE_FILES));
             fs.mount().await.unwrap();
             let mut count = 0;
-            fs.traverse(&mut |ptr| {
+            fs.traverse(|ptr| {
                 trace!("found {:?}", ptr);
                 count += 1;
                 Ok(())
