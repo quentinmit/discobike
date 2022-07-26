@@ -6,9 +6,10 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["sync", "async"]
+default = ["sync"]
 sync = []
 async = ["dep:embedded-storage-async"]
+nightly = ["async"]
 
 [dependencies]
 arrayvec = { version = "0.7.2", default-features = false }
