@@ -40,7 +40,7 @@ impl<S: Deref<Target = [u8]>> ErrorType for SliceStorage<S> {
     type Error = NorFlashErrorKind;
 }
 
-#[cfg(feature="async")]
+#[cfg(feature = "async")]
 impl<S: Deref<Target = [u8]>> AsyncReadNorFlash for SliceStorage<S> {
     const READ_SIZE: usize = 1;
 
@@ -56,10 +56,9 @@ impl<S: Deref<Target = [u8]>> AsyncReadNorFlash for SliceStorage<S> {
     }
 }
 
-#[cfg(feature="sync")]
+#[cfg(feature = "sync")]
 impl<S: Deref<Target = [u8]>> ReadNorFlash for SliceStorage<S> {
     const READ_SIZE: usize = 1;
-
 
     fn read(&mut self, address: u32, data: &mut [u8]) -> Result<(), NorFlashErrorKind> {
         self.do_read(address, data)

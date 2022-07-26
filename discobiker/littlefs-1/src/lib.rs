@@ -438,7 +438,7 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE>
     }
 }
 
-#[cfg(all(test, feature="log"))]
+#[cfg(all(test, feature = "log"))]
 mod test_log {
     use simplelog::*;
     #[ctor::ctor]

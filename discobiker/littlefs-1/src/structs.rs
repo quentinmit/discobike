@@ -126,7 +126,12 @@ impl<'a> TryWrite<()> for MetadataBlock<'a> {
 
 #[derive(Clone, Copy, Debug, PartialEq, EnumKind)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[enum_kind(DirEntryType, repr(u8), derive(IntoPrimitive, TryFromPrimitive), cfg_attr(feature = "defmt", derive(defmt::Format)))]
+#[enum_kind(
+    DirEntryType,
+    repr(u8),
+    derive(IntoPrimitive, TryFromPrimitive),
+    cfg_attr(feature = "defmt", derive(defmt::Format))
+)]
 pub enum DirEntryData {
     #[enum_kind_value(0x11)]
     File { head: BlockPointer, size: u32 },
@@ -262,19 +267,21 @@ impl<'a> MetadataBlock<'a> {
         }
     }
     pub fn find_entry(&self, name: &str) -> ByteResult<Option<DirEntry<'a>>> {
-        self.iter().find_map(|entry| {
-            match entry {
-                Err(e) => Some(Err(e)),
-                Ok(entry) => {
-                    // TODO: "check that entry has not been moved"
-                    if entry.name == name {
-                        Some(Ok(entry))
-                    } else {
-                        None
+        self.iter()
+            .find_map(|entry| {
+                match entry {
+                    Err(e) => Some(Err(e)),
+                    Ok(entry) => {
+                        // TODO: "check that entry has not been moved"
+                        if entry.name == name {
+                            Some(Ok(entry))
+                        } else {
+                            None
+                        }
                     }
-                },
-            }
-        }).transpose()
+                }
+            })
+            .transpose()
     }
 }
 
