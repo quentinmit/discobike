@@ -442,7 +442,7 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE>
 }
 
 #[cfg(test)]
-mod tests {
+mod test_log {
     use simplelog::*;
     #[ctor::ctor]
     fn init() {
@@ -454,7 +454,18 @@ mod tests {
         )
         .unwrap();
     }
+}
 
+#[cfg(test)]
+#[maybe_async_cfg::maybe(
+    idents(
+        AsyncLittleFs(async, sync = "LittleFs"),
+        do_test(async = "block_on", sync = "block_on_sync"),
+    ),
+    sync(self = "tests_sync", feature = "sync"),
+    async(keep_self, feature = "async")
+)]
+mod tests_async {
     use super::storage::SliceStorage;
     use super::*;
 
@@ -469,6 +480,8 @@ mod tests {
     use itertools::repeat_n;
     use tokio_test::block_on;
 
+    fn block_on_sync(_: ()) {}
+
     use byte::{BytesExt, Result};
 
     const THREE_FILES: &[u8] = include_bytes!("../testdata/three-files.img");
@@ -476,7 +489,7 @@ mod tests {
 
     #[test]
     fn three_files() {
-        block_on(async {
+        do_test(async {
             let mut fs: AsyncLittleFs<_, 512> = AsyncLittleFs::new(SliceStorage::new(THREE_FILES));
             fs.mount().await.unwrap();
 
@@ -514,7 +527,7 @@ mod tests {
 
     #[test]
     fn three_files_corrupt() {
-        block_on(async {
+        do_test(async {
             let data: Vec<u8> = repeat_n(0u8, 512)
                 .chain(THREE_FILES[512..].iter().cloned())
                 .collect();
@@ -525,7 +538,7 @@ mod tests {
 
     #[test]
     fn large_dir() {
-        block_on(async {
+        do_test(async {
             let mut fs: AsyncLittleFs<_, 512> = AsyncLittleFs::new(SliceStorage::new(LARGE_DIR));
             fs.mount().await.unwrap();
 
