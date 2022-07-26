@@ -7,16 +7,18 @@ mod structs;
 
 use structs::{AsOffset, BlockPointer, BlockPointerPair};
 
-use arrayvec::ArrayString;
+use arrayvec::{ArrayVec, ArrayString};
 use bitflags::bitflags;
 use byte::{BytesExt, LE};
 use itertools::Itertools;
 use core::cmp::min;
 
 #[cfg(not(test))]
-use defmt::{info, trace, warn};
+use defmt::{info, trace, warn, Format};
 #[cfg(test)]
 use log::{info, trace, warn};
+#[cfg(test)]
+trait Format {}
 
 use embedded_storage_async::nor_flash::AsyncReadNorFlash;
 
@@ -142,39 +144,79 @@ fn npw2(a: u32) -> u32 {
     32 - (a-1).leading_zeros()
 }
 
+#[derive(Debug, PartialEq)]
+struct Block<const BLOCK_SIZE: usize>(ArrayVec<u8, BLOCK_SIZE>);
+
+#[cfg(not(test))]
+impl<const BLOCK_SIZE: usize> Format for Block<BLOCK_SIZE> {
+    fn format(&self, f: defmt::Formatter) {
+        defmt::write!(
+            f,
+            "{:?}",
+            self.0.as_slice(),
+        )
+    }
+}
+
+impl<const BLOCK_SIZE: usize> From<[u8; BLOCK_SIZE]> for Block<BLOCK_SIZE> {
+    fn from(array: [u8; BLOCK_SIZE]) -> Self {
+        Block(ArrayVec::from(array))
+    }
+}
+impl<const BLOCK_SIZE: usize> Block<BLOCK_SIZE> {
+    fn zero(block_size: usize) -> Self {
+        let mut b: Self = [0u8; BLOCK_SIZE].into();
+        b.0.truncate(block_size);
+        b
+    }
+    fn as_slice(&self) -> &[u8] {
+        self.0.as_slice()
+    }
+    fn as_mut_slice(&mut self) -> &mut [u8] {
+        self.0.as_mut_slice()
+    }
+    fn as_metadata(&self) -> Result<structs::MetadataBlock, FsError> {
+        self.as_slice().read(&mut 0).map_err(|_| FsError::Corrupt)
+    }
+}
+
 impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> LittleFs<S, BLOCK_SIZE> {
+    async fn read_block(
+        &mut self,
+        ptr: BlockPointer,
+    ) -> Result<Block<BLOCK_SIZE>, FsError> {
+        let block_size = if self.block_size > 0 { self.block_size as usize } else {BLOCK_SIZE};
+        let mut buf = Block::<BLOCK_SIZE>::zero(block_size);
+        self.storage.read(ptr.as_offset(BLOCK_SIZE), buf.as_mut_slice())
+            .await
+            .map_err(|_| FsError::Io)?;
+        Ok(buf)
+    }
     async fn read_newer_block(
         &mut self,
         ptr: BlockPointerPair,
-    ) -> Result<structs::MetadataBlock, FsError> {
-        self.storage
-            .read(ptr.a.as_offset(BLOCK_SIZE), &mut self.buf1)
-            .await
-            .map_err(|_| FsError::Io)?;
-        let block1: Option<structs::MetadataBlock> = self.buf1.read(&mut 0).ok();
-        self.storage
-            .read(ptr.b.as_offset(BLOCK_SIZE), &mut self.buf2)
-            .await
-            .map_err(|_| FsError::Io)?;
-        let block2: Option<structs::MetadataBlock> = self.buf2.read(&mut 0).ok();
+    ) -> Result<Block<BLOCK_SIZE>, FsError> {
+        let buf1 = self.read_block(ptr.a).await?;
+        let buf2 = self.read_block(ptr.b).await?;
 
-        [block1, block2]
+        [buf1, buf2]
             .into_iter()
-            .filter_map(|x| x)
-            .reduce(|a, b| {
-                if a.revision_count > b.revision_count {
-                    a
+            .filter_map(|buf| {
+                let revision = buf.as_metadata().ok().map(|block| block.revision_count);
+                revision.map(|revision| (buf, revision))
+            }).reduce(|(a, arev), (b, brev)|
+                if arev > brev {
+                    (a, arev)
                 } else {
-                    b
+                    (b, brev)
                 }
-            })
-            .ok_or(FsError::Corrupt)
+            ).map(|(buf, _)| buf).ok_or(FsError::Corrupt)
     }
     pub async fn mount(&mut self) -> Result<(), FsError> {
-        let sbmeta = self
+        let sb = self
             .read_newer_block(BlockPointerPair { a: 0, b: 1 })
             .await?;
-        let entry = sbmeta
+        let entry = sb.as_metadata()?
             .into_iter()
             .exactly_one()
             .map_err(|_| FsError::Corrupt)?
@@ -232,7 +274,8 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> LittleFs<S, BLOCK_SIZE> {
             let mut continued = true;
             let mut found = false;
             while continued {
-                let block = self.read_newer_block(dir.ptr).await?;
+                let buf = self.read_newer_block(dir.ptr).await?;
+                let block = buf.as_metadata()?;
                 continued = block.continued;
                 dir.ptr = block.tail_ptr;
                 if let Some(entry) = block.find_entry(name).map_err(|_| FsError::Corrupt)? {
@@ -278,7 +321,8 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> LittleFs<S, BLOCK_SIZE> {
         // TODO: Synthesize "." and ".." entries.
         let mut dirmeta;
         loop {
-            dirmeta = self.read_newer_block(dir.ptr).await?;
+            let buf = self.read_newer_block(dir.ptr).await?;
+            dirmeta = buf.as_metadata()?;
             match dirmeta.into_iter().enumerate().skip(dir.pos).next() {
                 Some((pos, Ok(entry))) => {
                     let (entry_type, size) = match entry.data {
