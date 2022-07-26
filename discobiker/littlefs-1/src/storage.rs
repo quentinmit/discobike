@@ -147,13 +147,24 @@ impl<S: DerefMut<Target = [u8]>> NorFlash for SliceStorage<S> {
 }
 
 #[cfg(test)]
+#[maybe_async_cfg::maybe(
+    idents(
+        do_test(async = "block_on", sync = "block_on_sync"),
+        AsyncNorFlash(async, sync = "NorFlash"),
+        AsyncReadNorFlash(async, sync = "ReadNorFlash"),
+    ),
+    sync(self = "tests_sync", feature = "sync"),
+    async(keep_self, feature = "async")
+)]
 mod tests_async {
     use super::*;
     use tokio_test::block_on;
 
+    fn block_on_sync(_: ()) {}
+
     #[test]
     fn read() {
-        block_on(async {
+        do_test(async {
             const BUF: &[u8] = &[0,1,2,3,4,5,6,7,8,9];
             let mut ss = SliceStorage::new(BUF);
             let mut out = [0u8; 3];
@@ -172,7 +183,7 @@ mod tests_async {
 
     #[test]
     fn write() {
-        block_on(async {
+        do_test(async {
             let mut buf = [0u8; 8192];
             let mut ss = SliceStorage::new(&mut buf[..]);
 
@@ -192,7 +203,7 @@ mod tests_async {
 
     #[test]
     fn erase() {
-        block_on(async {
+        do_test(async {
             let mut buf = [0u8; 8192];
             let mut ss = SliceStorage::new(&mut buf[..]);
 
