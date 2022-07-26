@@ -29,9 +29,15 @@ pub struct BlockPointerPair {
     pub b: BlockPointer,
 }
 
+impl BlockPointerPair {
+    pub fn is_null(&self) -> bool {
+        self.a == 0xffffffff && self.b == 0xffffffff
+    }
+}
+
 impl Default for BlockPointerPair {
     fn default() -> Self {
-        BlockPointerPair { a: 0, b: 0 }
+        BlockPointerPair { a: 0xffffffff, b: 0xffffffff }
     }
 }
 

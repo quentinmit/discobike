@@ -22,17 +22,27 @@ use maybe_async_cfg;
 trait Format {}
 
 #[cfg(feature = "sync")]
-use embedded_storage::nor_flash::ReadNorFlash;
+use embedded_storage::nor_flash::{NorFlash, ReadNorFlash};
 #[cfg(feature = "async")]
-use embedded_storage_async::nor_flash::AsyncReadNorFlash;
+use embedded_storage_async::nor_flash::{AsyncNorFlash, AsyncReadNorFlash};
 
 #[derive(Copy, Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum FsError {
+    /// Input/output error occurred.
     Io,
+    /// File was corrupt.
     Corrupt,
+    /// No entry found with that name.
     Noent,
+    /// File or directory already exists.
+    Exist,
+    /// Path name is not a directory.
     NotDir,
+    /// Incorrect value specified to function.
     Inval,
+    /// No space left available for operation.
+    Nospc,
 }
 
 #[maybe_async_cfg::maybe(
@@ -436,6 +446,127 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE>
         }
         Ok((head, pos))
     }
+    async fn traverse<F>(&mut self, mut f: &mut F) -> Result<(), FsError>
+    where
+        F: FnMut(BlockPointer) -> Result<(), FsError>,
+    {
+        if self.root_directory_ptr.is_null() {
+            return Ok(());
+        }
+        let mut cwd = BlockPointerPair { a: 0, b: 1 };
+        while !cwd.is_null() {
+            f(cwd.a)?;
+            f(cwd.b)?;
+
+            let buf = self.read_newer_block(cwd).await?;
+            let block = buf.as_metadata()?;
+
+            for entry in block {
+                if let structs::DirEntryData::File { head, size } =
+                    entry.map_err(|_| FsError::Corrupt)?.data
+                {
+                    self.ctz_traverse(head, size, f).await?;
+                }
+            }
+            cwd = block.tail_ptr;
+        }
+        Ok(())
+    }
+    async fn ctz_traverse<F>(
+        &mut self,
+        head: BlockPointer,
+        size: u32,
+        mut f: &mut F,
+    ) -> Result<(), FsError>
+    where
+        F: FnMut(BlockPointer) -> Result<(), FsError>,
+    {
+        if size == 0 {
+            return Ok(());
+        }
+        let (mut index, _) = self.ctz_index(size - 1);
+        let mut head = head;
+        loop {
+            f(head)?;
+
+            if index == 0 {
+                return Ok(());
+            }
+
+            let mut buf = [0u8; 8];
+            let count = 2 - (index & 1);
+            self.storage
+                .read(
+                    head.as_offset(self.block_size as usize),
+                    &mut buf[..count as usize],
+                )
+                .await
+                .map_err(|_| FsError::Io)?;
+            let s = &buf[..count as usize];
+            let mut offset = 0;
+            while offset < s.len() {
+                let ptr: BlockPointer = s.read_with(&mut offset, LE).unwrap();
+                f(ptr)?;
+                head = ptr;
+            }
+            index -= count;
+        }
+    }
+}
+
+#[maybe_async_cfg::maybe(
+    idents(AsyncNorFlash(async, sync = "NorFlash"),),
+    sync(self = "LittleFs", feature = "sync"),
+    async(keep_self, feature = "async")
+)]
+impl<S: AsyncNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE> {
+    // async fn alloc() -> Result<BlockPointer, FsError> {
+    //     loop {
+    //         while lfs.free.i != lfs.free.size {
+    //             let off = lfs.free.i;
+    //             lfs.free.i += 1;
+    //             lfs.free.ack -= 1;
+    //             if lfs.free.buffer[off / 32] & (1 << (off % 32)) {
+    //                 // found a free block
+    //                 // TODO: discredit old lookahead blocks
+    //                 return Ok(BlockPointer((lfs.free.off + off) % lfs.block_count));
+    //             }
+    //         }
+    //         if lfs.free.ack == 0 {
+    //             return Err(FsError::Nospc);
+    //         }
+    //         lfs.free.off = (lfs.free.off + lfs.free.size) % lfs.block_count;
+    //         lfs.free.size = min(lfs.lookahead, lfs.free.ack);
+    //         lfs.free.i = 0;
+
+    //         self.traverse(|block| {
+    //             let off = ((block - lfs.free.off) + lfs.block_count) % lfs.block_count;
+    //             if off < lfs.free.size {
+    //                 lfs.free.buffer[off / 32] |= 1 << (off % 32);
+    //             }
+    //         }).await?;
+    // }
+    // async pub fn mkdir(&mut self, path: &str) {
+    //     // TODO: deorphan
+    //     let (cwd, entrydata) = self.dir_find(path).await?;
+    //     if entrydata != None {
+    //         return Err(FsError::Exist);
+    //     }
+
+    //     self.alloc_ack().await?;
+    //     let dir: Dir = Default::default();
+    //     self.dir_alloc(&mut dir).await?;
+    //     dir.tail = cwd.d.tail;
+    //     self.dir_commit(&mut dir).await?;
+
+    //     let entry = structs::DirEntry{
+    //         name: path.rsplit_once('/')[1],
+    //         attributes: [],
+    //         data: structs::DirEntryData::Directory { directory_ptr: dir.ptr },
+    //     };
+    //     self.dir_append(cwd, entry).await?;
+    //     self.alloc_ack().await?;
+    // }
 }
 
 #[cfg(all(test, feature = "log"))]
@@ -577,6 +708,23 @@ mod tests_async {
                 .await
                 .unwrap();
             assert_eq!(fs.file_read(&mut file, &mut data).await.unwrap(), 0);
+        });
+    }
+
+    #[test]
+    fn traverse() {
+        do_test(async {
+            let mut fs: AsyncLittleFs<_, 512> = AsyncLittleFs::new(SliceStorage::new(THREE_FILES));
+            fs.mount().await.unwrap();
+            let mut count = 0;
+            fs.traverse(&mut |ptr| {
+                trace!("found {:?}", ptr);
+                count += 1;
+                Ok(())
+            })
+            .await
+            .unwrap();
+            assert_eq!(count, 10);
         });
     }
 }
