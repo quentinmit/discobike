@@ -192,6 +192,9 @@ impl<const BLOCK_SIZE: usize> Block<BLOCK_SIZE> {
     fn as_metadata(&self) -> Result<structs::MetadataBlock, FsError> {
         self.as_slice().read(&mut 0).map_err(|_| FsError::Corrupt)
     }
+    fn len(&self) -> usize {
+        self.0.len()
+    }
 }
 
 #[maybe_async_cfg::maybe(
@@ -493,23 +496,21 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE>
                 return Ok(());
             }
 
-            let mut buf = [0u8; 8];
-            let count = 2 - (index & 1);
+            let mut buf = Block::<8>::zero(2 - (index & 1) as usize);
             self.storage
                 .read(
                     head.as_offset(self.block_size as usize),
-                    &mut buf[..count as usize],
+                    buf.as_mut_slice(),
                 )
                 .await
                 .map_err(|_| FsError::Io)?;
-            let s = &buf[..count as usize];
             let mut offset = 0;
-            while offset < s.len() {
-                let ptr: BlockPointer = s.read_with(&mut offset, LE).unwrap();
+            while offset < buf.len() {
+                let ptr: BlockPointer = buf.as_slice().read_with(&mut offset, LE).unwrap();
                 f(ptr)?;
                 head = ptr;
             }
-            index -= count;
+            index -= buf.len() as u32;
         }
     }
 }
