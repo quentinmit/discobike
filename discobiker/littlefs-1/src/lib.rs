@@ -6,6 +6,7 @@
 )]
 
 mod fmt;
+mod free;
 mod storage;
 mod structs;
 
@@ -54,6 +55,7 @@ pub struct AsyncLittleFs<S, const BLOCK_SIZE: usize> {
     root_directory_ptr: BlockPointerPair,
     block_size: u32,
     block_count: u32,
+    free: free::FreeBlockCache,
 }
 
 #[maybe_async_cfg::maybe(
@@ -67,6 +69,7 @@ impl<S, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE> {
             block_size: 0,
             block_count: 0,
             root_directory_ptr: Default::default(),
+            free: free::FreeBlockCache::new(),
         }
     }
 }
@@ -259,6 +262,7 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE>
                 }
                 self.root_directory_ptr = root_directory_ptr;
                 self.block_count = block_count;
+                self.free.set_block_count(block_count);
                 Ok(())
             }
             _ => Err(FsError::Corrupt),
@@ -526,32 +530,23 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE>
     async(keep_self, feature = "async")
 )]
 impl<S: AsyncNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE> {
-    // async fn alloc() -> Result<BlockPointer, FsError> {
-    //     loop {
-    //         while lfs.free.i != lfs.free.size {
-    //             let off = lfs.free.i;
-    //             lfs.free.i += 1;
-    //             lfs.free.ack -= 1;
-    //             if lfs.free.buffer[off / 32] & (1 << (off % 32)) {
-    //                 // found a free block
-    //                 // TODO: discredit old lookahead blocks
-    //                 return Ok(BlockPointer((lfs.free.off + off) % lfs.block_count));
-    //             }
-    //         }
-    //         if lfs.free.ack == 0 {
-    //             return Err(FsError::Nospc);
-    //         }
-    //         lfs.free.off = (lfs.free.off + lfs.free.size) % lfs.block_count;
-    //         lfs.free.size = min(lfs.lookahead, lfs.free.ack);
-    //         lfs.free.i = 0;
-
-    //         self.traverse(|block| {
-    //             let off = ((block - lfs.free.off) + lfs.block_count) % lfs.block_count;
-    //             if off < lfs.free.size {
-    //                 lfs.free.buffer[off / 32] |= 1 << (off % 32);
-    //             }
-    //         }).await?;
-    // }
+    /// Find the next free block and return its pointer.
+    async fn alloc(&mut self) -> Result<BlockPointer, FsError> {
+        loop {
+            trace!("alloc: current free = {:?}", self.free);
+            match self.free.next_free()? {
+                Some(ptr) => return Ok(ptr),
+                None => {
+                    let mut free = self.free.advance();
+                    self.traverse(|block| {
+                        free.mark_free(block);
+                        Ok(())
+                    }).await?;
+                    self.free = free;
+                }
+            }
+        }
+    }
     // async pub fn mkdir(&mut self, path: &str) {
     //     // TODO: deorphan
     //     let (cwd, entrydata) = self.dir_find(path).await?;
@@ -731,6 +726,17 @@ mod tests_async {
             .await
             .unwrap();
             assert_eq!(count, 10);
+        });
+    }
+
+    #[test]
+    fn alloc() {
+        do_test(async {
+            let mut buf: Vec<u8> = Vec::new();
+            buf.extend_from_slice(&THREE_FILES);
+            let mut fs: AsyncLittleFs<_, 512> = AsyncLittleFs::new(SliceStorage::new(buf.as_mut_slice()));
+            fs.mount().await.unwrap();
+            assert_eq!(fs.alloc().await, Ok(10));
         });
     }
 }
