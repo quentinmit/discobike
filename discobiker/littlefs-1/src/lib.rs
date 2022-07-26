@@ -33,8 +33,6 @@ pub enum FsError {
 
 pub struct LittleFs<S, const BLOCK_SIZE: usize> {
     storage: S,
-    buf1: [u8; BLOCK_SIZE],
-    buf2: [u8; BLOCK_SIZE],
     root_directory_ptr: BlockPointerPair,
     block_size: u32,
     block_count: u32,
@@ -44,8 +42,6 @@ impl<S, const BLOCK_SIZE: usize> LittleFs<S, BLOCK_SIZE> {
     pub fn new(storage: S) -> Self {
         LittleFs {
             storage,
-            buf1: [0; BLOCK_SIZE],
-            buf2: [0; BLOCK_SIZE],
             block_size: 0,
             block_count: 0,
             root_directory_ptr: Default::default(),
