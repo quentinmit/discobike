@@ -66,7 +66,6 @@ impl TryWrite<Endian> for BlockPointerPair {
 pub struct MetadataBlock<'a> {
     pub revision_count: u32,
     pub continued: bool,
-    pub dir_size: u32,
     pub tail_ptr: BlockPointerPair,
     pub contents: &'a [u8],
 }
@@ -95,7 +94,6 @@ impl<'a> TryRead<'a, ()> for MetadataBlock<'a> {
         Ok((
             MetadataBlock {
                 revision_count: revision_count,
-                dir_size: dir_size,
                 continued: continued,
                 tail_ptr: tail_ptr,
                 contents: contents,
@@ -164,6 +162,13 @@ impl TryRead<'_, ()> for DirEntryType {
         ))
     }
 }
+impl TryWrite<Endian> for DirEntryType {
+    fn try_write(self, bytes: &mut [u8], endian: Endian) -> ByteResult<usize> {
+        let offset = &mut 0;
+        bytes.write_with(offset, u8::from(self), endian)?;
+        Ok(*offset)
+    }
+}
 
 impl TryRead<'_, DirEntryType> for DirEntryData {
     fn try_read(bytes: &[u8], ty: DirEntryType) -> ByteResult<(Self, usize)> {
@@ -202,6 +207,28 @@ impl TryRead<'_, DirEntryType> for DirEntryData {
         }
     }
 }
+impl TryWrite<()> for DirEntryData {
+    fn try_write(self, bytes: &mut [u8], _ctx: ()) -> ByteResult<usize> {
+        let offset = &mut 0;
+        let endian = LE;
+        match self {
+            DirEntryData::File { head, size } => {
+                bytes.write_with(offset, head, endian)?;
+                bytes.write_with(offset, size, endian)?;
+            },
+            DirEntryData::Directory { directory_ptr } => {
+                bytes.write_with(offset, directory_ptr, endian)?;
+            },
+            DirEntryData::Superblock { root_directory_ptr, block_size, block_count, version } => {
+                bytes.write_with(offset, root_directory_ptr, endian)?;
+                bytes.write_with(offset, block_size, endian)?;
+                bytes.write_with(offset, block_count, endian)?;
+                bytes.write_with(offset, version, endian)?;
+            }
+        }
+        Ok(*offset)
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -236,6 +263,24 @@ impl<'a> TryRead<'a, ()> for DirEntry<'a> {
             },
             *offset,
         ))
+    }
+}
+impl<'a> TryWrite<()> for DirEntry<'a> {
+    fn try_write(self, bytes: &mut [u8], _ctx: ()) -> ByteResult<usize> {
+        let offset = &mut 0;
+        let endian = LE;
+        bytes.write_with(offset, DirEntryType::from(self.data), endian)?;
+        let mut length_offset = *offset;
+        bytes.write_with(offset, 0u8, endian)?;
+        bytes.write_with(offset, self.attributes.len() as u8, endian)?;
+        bytes.write_with(offset, self.name.len() as u8, endian)?;
+        let data_offset = *offset;
+        bytes.write(offset, self.data)?;
+        bytes.write_with(&mut length_offset, (*offset-data_offset) as u8, endian)?;
+        bytes.write(offset, self.attributes)?;
+        bytes.write(offset, self.name)?;
+
+        Ok(*offset)
     }
 }
 
@@ -314,13 +359,13 @@ mod tests {
         assert_eq!(length, SUPERBLOCK.len());
         assert_eq!(block.revision_count, 3);
         assert_eq!(block.continued, false);
-        assert_eq!(block.dir_size, 52);
+        assert_eq!(block.contents.len(), 52-20);
         assert_eq!(block.tail_ptr, BlockPointerPair { a: 3, b: 2 });
         let iter = block.into_iter();
         let dir_entries: Result<Vec<_>, _> = iter.collect();
         let dir_entries = dir_entries.unwrap();
         assert_eq!(dir_entries.len(), 1);
-        let entry = &dir_entries[0];
+        let entry = dir_entries[0];
         match entry.data {
             DirEntryData::Superblock {
                 root_directory_ptr,
@@ -339,6 +384,11 @@ mod tests {
         };
         assert_eq!(entry.attributes.len(), 0);
         assert_eq!(entry.name, "littlefs");
+        let mut out: [u8; 512] = [0; 512];
+        let mut write_length = 0;
+        out.write(&mut write_length, entry).unwrap();
+        assert_eq!(block.contents.len(), write_length);
+        assert_eq!(block.contents, &out[..write_length]);
     }
 
     const DIRECTORY: &[u8] = &[
@@ -372,7 +422,7 @@ mod tests {
         let block: MetadataBlock = DIRECTORY.read(&mut length).unwrap();
         assert_eq!(length, DIRECTORY.len());
         assert_eq!(block.revision_count, 10);
-        assert_eq!(block.dir_size, 154);
+        assert_eq!(block.contents.len(), 154-20);
         assert_eq!(block.tail_ptr, BlockPointerPair { a: 37, b: 36 });
         let iter = block.into_iter();
         let dir_entries: Result<Vec<_>, _> = iter.collect();
