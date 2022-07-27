@@ -63,14 +63,17 @@ impl TryWrite<Endian> for BlockPointerPair {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub struct MetadataBlock<'a> {
+pub struct MetadataBlock<T>
+{
     pub revision_count: u32,
     pub continued: bool,
     pub tail_ptr: BlockPointerPair,
-    pub contents: &'a [u8],
+    pub contents: T,
 }
 
-impl<'a> TryRead<'a, ()> for MetadataBlock<'a> {
+impl<'a, T> TryRead<'a, ()> for MetadataBlock<T>
+    where T: TryRead<'a, Bytes> + AsRef<[u8]> + 'a
+{
     fn try_read(bytes: &'a [u8], _ctx: ()) -> ByteResult<(Self, usize)> {
         let offset = &mut 0;
         let endian = LE;
@@ -80,7 +83,7 @@ impl<'a> TryRead<'a, ()> for MetadataBlock<'a> {
         let continued = dir_size & 0x80000000 > 0;
         let dir_size = dir_size & 0x7FFFFFFF;
         let tail_ptr = bytes.read_with(offset, endian)?;
-        let contents = bytes.read_with::<&[u8]>(
+        let contents = bytes.read_with::<T>(
             offset,
             Bytes::Len((dir_size as usize).saturating_sub(*offset + 4)),
         )?;
@@ -103,7 +106,9 @@ impl<'a> TryRead<'a, ()> for MetadataBlock<'a> {
     }
 }
 
-impl<'a> TryWrite<()> for MetadataBlock<'a> {
+impl<T> TryWrite<()> for MetadataBlock<T>
+where T: TryWrite
+{
     fn try_write(self, bytes: &mut [u8], _ctx: ()) -> ByteResult<usize> {
         let offset = &mut 0;
         let endian = LE;
@@ -301,7 +306,9 @@ impl<'a> Iterator for DirEntryIterator<'a> {
         }
     }
 }
-impl<'a> IntoIterator for MetadataBlock<'a> {
+impl<'a, T> IntoIterator for &'a MetadataBlock<T>
+where T: AsRef<[u8]> + 'a
+{
     type Item = ByteResult<DirEntry<'a>>;
     type IntoIter = DirEntryIterator<'a>;
 
@@ -310,14 +317,16 @@ impl<'a> IntoIterator for MetadataBlock<'a> {
     }
 }
 
-impl<'a> MetadataBlock<'a> {
-    pub fn iter(&self) -> DirEntryIterator<'a> {
+impl<'a, T> MetadataBlock<T>
+where T: AsRef<[u8]>
+{
+    pub fn iter(&'a self) -> DirEntryIterator<'a> {
         DirEntryIterator {
             offset: 0,
-            contents: self.contents,
+            contents: self.contents.as_ref(),
         }
     }
-    pub fn find_entry(&self, name: &str) -> ByteResult<Option<DirEntry<'a>>> {
+    pub fn find_entry(&'a self, name: &str) -> ByteResult<Option<DirEntry<'a>>> {
         self.iter()
             .find_map(|entry| {
                 match entry {
@@ -355,7 +364,7 @@ mod tests {
     #[test]
     fn superblock() {
         let mut length = 0;
-        let block: MetadataBlock = SUPERBLOCK.read(&mut length).unwrap();
+        let block: MetadataBlock<&[u8]> = SUPERBLOCK.read(&mut length).unwrap();
         assert_eq!(length, SUPERBLOCK.len());
         assert_eq!(block.revision_count, 3);
         assert_eq!(block.continued, false);
@@ -408,7 +417,7 @@ mod tests {
     #[test]
     fn superblock_rewrite() {
         let mut read_length = 0;
-        let block: MetadataBlock = SUPERBLOCK.read(&mut read_length).unwrap();
+        let block: MetadataBlock<&[u8]> = SUPERBLOCK.read(&mut read_length).unwrap();
         let mut out: [u8; 512] = [0; 512];
         let mut write_length = 0;
         out.write(&mut write_length, block).unwrap();
@@ -419,7 +428,7 @@ mod tests {
     #[test]
     fn directory() {
         let mut length = 0;
-        let block: MetadataBlock = DIRECTORY.read(&mut length).unwrap();
+        let block: MetadataBlock<&[u8]> = DIRECTORY.read(&mut length).unwrap();
         assert_eq!(length, DIRECTORY.len());
         assert_eq!(block.revision_count, 10);
         assert_eq!(block.contents.len(), 154-20);
