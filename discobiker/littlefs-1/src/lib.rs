@@ -632,7 +632,7 @@ impl<S: AsyncNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE> {
                 None => {
                     let mut free = self.free.advance();
                     self.traverse(|block| {
-                        free.mark_free(block);
+                        free.mark_used(block);
                         Ok(())
                     })
                     .await?;
@@ -658,6 +658,7 @@ impl<S: AsyncNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE> {
     }
     pub async fn format(&mut self) -> Result<(), FsError> {
         let block_count = (self.storage.capacity() / BLOCK_SIZE) as BlockPointer;
+        self.block_size = BLOCK_SIZE as u32;
         // Everything is free!
         self.free = free::FreeBlockCache::new();
         self.free.set_block_count(block_count);
@@ -665,7 +666,9 @@ impl<S: AsyncNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE> {
 
         let mut superdir = self.dir_alloc().await?;
         let mut root = self.dir_alloc().await?;
+        info!("superblock and root allocated: {:?}, {:?}", superdir, root);
         self.dir_commit(&mut root).await?;
+        info!("root dir committed");
 
         self.root_directory_ptr = root.ptr;
 
@@ -920,5 +923,14 @@ mod tests_async {
         let entry = block.find_entry("tea").unwrap().unwrap();
         assert_eq!(entry.name, "tea");
         trace!("found tea: {:?}", entry);
+    }
+
+    #[test]
+    fn format() {
+        let mut buf = [0u8; 8192];
+        let mut fs: AsyncLittleFs<_, 512> =
+            AsyncLittleFs::new(SliceStorage::new(buf.as_mut_slice()));
+        fs.format().await.unwrap();
+        info!("formatted fs: {:?}", buf);
     }
 }

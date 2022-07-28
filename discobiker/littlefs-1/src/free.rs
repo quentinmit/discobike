@@ -43,9 +43,9 @@ impl FreeBlockCache {
         trace!("next_free searching [{}+{}, {})", self.off, self.i, self.off as usize+self.size);
         let off = self.buf[self.i..self.size].first_zero();
         if let Some(off) = off {
-            self.i += off;
-            self.ack -= off;
-            return Ok(Some((self.off + self.i as BlockPointer) % self.block_count));
+            self.i += off + 1;
+            self.ack -= off + 1;
+            return Ok(Some((self.off + self.i as BlockPointer - 1) % self.block_count));
         }
         self.i += self.size;
         self.ack -= self.size;
@@ -65,7 +65,7 @@ impl FreeBlockCache {
             buf: <BitArr!(for LOOKAHEAD)>::ZERO,
         }
     }
-    pub fn mark_free(&mut self, ptr: BlockPointer) {
+    pub fn mark_used(&mut self, ptr: BlockPointer) {
         let off = (((ptr - self.off) + self.block_count) % self.block_count) as usize;
         if off < self.size {
             self.buf.set(off, true);

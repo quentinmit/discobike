@@ -70,10 +70,13 @@ impl<S: DerefMut<Target = [u8]>> SliceStorage<S> {
         let end = to as usize;
 
         if end > self.buf.len() {
+            warn!("attempt to erase paste end: {}-{}", start, end);
             Err(NorFlashErrorKind::OutOfBounds)
         } else if (end - start) < min_size {
+            warn!("attempt to erase <1 block: {}-{}", start, end);
             Err(NorFlashErrorKind::NotAligned)
         } else if start % min_size != 0 || end % min_size != 0 {
+            warn!("attempt to erase unaligned: {}-{}", start, end);
             Err(NorFlashErrorKind::NotAligned)
         } else {
             self.buf[start..end].fill(0xFF);
@@ -117,7 +120,7 @@ impl<S: Deref<Target = [u8]>> ReadNorFlash for SliceStorage<S> {
 #[cfg(feature = "async")]
 impl<S: DerefMut<Target = [u8]>> AsyncNorFlash for SliceStorage<S> {
     const WRITE_SIZE: usize = 4;
-    const ERASE_SIZE: usize = 4096;
+    const ERASE_SIZE: usize = 512; // TODO: 4096 or configurable
 
     type WriteFuture<'a> = impl Future<Output = Result<(), NorFlashErrorKind>> + 'a
         where S: 'a;
@@ -135,7 +138,7 @@ impl<S: DerefMut<Target = [u8]>> AsyncNorFlash for SliceStorage<S> {
 #[cfg(feature = "sync")]
 impl<S: DerefMut<Target = [u8]>> NorFlash for SliceStorage<S> {
     const WRITE_SIZE: usize = 4;
-    const ERASE_SIZE: usize = 4096;
+    const ERASE_SIZE: usize = 512;
 
     fn write(&mut self, offset: u32, data: &[u8]) -> Result<(), NorFlashErrorKind> {
         self.do_write(<Self as NorFlash>::WRITE_SIZE, offset, data)
