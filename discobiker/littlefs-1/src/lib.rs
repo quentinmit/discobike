@@ -691,8 +691,13 @@ impl<S: AsyncNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE> {
             contents: entry_data.as_slice(),
             tail_ptr: root.ptr,
         };
-        self.dir_commit(&mut superdir).await?;
-        // TODO: Write both copies
+        // write twice so both copies are written
+        if ![self.dir_commit(&mut superdir).await,
+        self.dir_commit(&mut superdir).await].into_iter().any(|r| r == Ok(())) {
+            return Err(FsError::Corrupt);
+        }
+        // sanity check that fetch works
+        self.read_newer_block(superdir.ptr)?;
         Ok(())
     }
     async fn write_block(&mut self, ptr: BlockPointer, buf: Block<BLOCK_SIZE>) -> Result<(), FsError> {
