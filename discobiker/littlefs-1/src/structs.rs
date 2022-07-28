@@ -70,7 +70,6 @@ pub struct MetadataBlock<T>
     pub tail_ptr: BlockPointerPair,
     pub contents: T,
 }
-
 impl<'a, T> TryRead<'a, ()> for MetadataBlock<T>
     where T: TryRead<'a, Bytes> + AsRef<[u8]> + 'a
 {
@@ -106,8 +105,18 @@ impl<'a, T> TryRead<'a, ()> for MetadataBlock<T>
     }
 }
 
-impl<T> TryWrite<()> for MetadataBlock<T>
-where T: TryWrite
+macro_rules! ref_impl {
+    (
+        $type:ty, $base:ty, $( $rest:tt )+
+    ) => {
+        impl<T> $type for $base $( $rest )+
+        impl<T> $type for &$base $( $rest )+
+    }
+}
+//impl<T> TryWrite<()> for MetadataBlock<T>
+//where T: TryWrite
+ref_impl!(TryWrite<()>, MetadataBlock<T>,
+    where T: TryWrite + AsRef<[u8]>
 {
     fn try_write(self, bytes: &mut [u8], _ctx: ()) -> ByteResult<usize> {
         let offset = &mut 0;
@@ -118,7 +127,7 @@ where T: TryWrite
         // Fill in dir size later
         bytes.write_with::<u32>(offset, 0, endian)?;
         bytes.write_with(offset, self.tail_ptr, endian)?;
-        bytes.write(offset, self.contents)?;
+        bytes.write(offset, self.contents.as_ref())?;
         let crc_offset = &mut offset.clone();
         bytes.write_with::<u32>(offset, 0, endian)?;
 
@@ -131,7 +140,7 @@ where T: TryWrite
         bytes.write(crc_offset, calc_crc)?;
         Ok(*offset)
     }
-}
+});
 
 #[derive(Clone, Copy, Debug, PartialEq, EnumKind)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]

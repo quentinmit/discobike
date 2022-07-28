@@ -99,7 +99,11 @@ impl<const BLOCK_SIZE: usize> Default for Dir<BLOCK_SIZE> {
 
 impl<const BLOCK_SIZE: usize> Dir<BLOCK_SIZE> {
     fn new(ptr: BlockPointerPair) -> Self {
-        Dir { ptr, head: ptr, ..Default::default() }
+        Dir {
+            ptr,
+            head: ptr,
+            ..Default::default()
+        }
     }
 }
 
@@ -174,12 +178,12 @@ fn npw2(a: u32) -> u32 {
 }
 
 mod block {
-    use arrayvec::ArrayVec;
-    use byte::{BytesExt, Result as ByteResult, TryRead, TryWrite, ctx::Bytes};
-    #[cfg(defmt)]
-    use defmt::*;
     use crate::structs::MetadataBlock;
     use crate::FsError;
+    use arrayvec::ArrayVec;
+    use byte::{ctx::Bytes, BytesExt, Result as ByteResult, TryRead, TryWrite};
+    #[cfg(defmt)]
+    use defmt::*;
 
     #[derive(Clone, Debug, PartialEq)]
     pub struct Block<const BLOCK_SIZE: usize>(ArrayVec<u8, BLOCK_SIZE>);
@@ -225,8 +229,7 @@ mod block {
         pub fn as_mut_slice(&mut self) -> &mut [u8] {
             self.0.as_mut_slice()
         }
-        pub fn as_metadata<'a>(&self) -> Result<MetadataBlock<&[u8]>, FsError>
-        {
+        pub fn as_metadata<'a>(&self) -> Result<MetadataBlock<&[u8]>, FsError> {
             self.as_slice().read(&mut 0).map_err(|_| FsError::Corrupt)
         }
         pub fn len(&self) -> usize {
@@ -238,7 +241,20 @@ mod block {
         fn try_read(bytes: &'a [u8], ctx: Bytes) -> ByteResult<(Self, usize)> {
             let offset = &mut 0;
             let s: &[u8] = bytes.read_with(offset, ctx)?;
-            Ok((Block(ArrayVec::try_from(s).map_err(|_| byte::Error::BadInput { err: "data larger than block" })?), *offset))
+            Ok((
+                Block(ArrayVec::try_from(s).map_err(|_| byte::Error::BadInput {
+                    err: "data larger than block",
+                })?),
+                *offset,
+            ))
+        }
+    }
+
+    impl<const BLOCK_SIZE: usize> TryWrite for Block<BLOCK_SIZE> {
+        fn try_write(self, bytes: &mut [u8], _ctx: ()) -> ByteResult<usize> {
+            let offset = &mut 0;
+            bytes.write(offset, self.as_slice())?;
+            Ok(*offset)
         }
     }
 
@@ -249,7 +265,11 @@ mod block {
         {
             self.as_slice().read_with(offset, ctx)
         }
-        fn read_iter<'a, 'i, T>(&'a self, offset: &'i mut usize, ctx: Ctx) -> byte::Iter<'a, 'i, T, Ctx>
+        fn read_iter<'a, 'i, T>(
+            &'a self,
+            offset: &'i mut usize,
+            ctx: Ctx,
+        ) -> byte::Iter<'a, 'i, T, Ctx>
         where
             T: TryRead<'a, Ctx>,
             Ctx: Clone,
@@ -397,13 +417,11 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE>
     pub async fn dir_open(&mut self, path: &str) -> Result<Dir<BLOCK_SIZE>, FsError> {
         let entry_data = self.dir_find(path).await?;
         match entry_data {
-            structs::DirEntryData::Directory { directory_ptr } => {
-                Ok(Dir{
-                    head: directory_ptr,
-                    ptr: directory_ptr,
-                    ..Default::default()
-                })
-            }
+            structs::DirEntryData::Directory { directory_ptr } => Ok(Dir {
+                head: directory_ptr,
+                ptr: directory_ptr,
+                ..Default::default()
+            }),
             structs::DirEntryData::File { .. } => Err(FsError::NotDir),
             _ => Err(FsError::Corrupt),
         }
@@ -413,7 +431,12 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE>
         // TODO: Synthesize "." and ".." entries.
         loop {
             if dir.block == None {
-                dir.block = Some(self.read_newer_block(dir.ptr).await?.read(&mut 0).map_err(|_| FsError::Corrupt)?);
+                dir.block = Some(
+                    self.read_newer_block(dir.ptr)
+                        .await?
+                        .read(&mut 0)
+                        .map_err(|_| FsError::Corrupt)?,
+                );
             }
             let dirmeta = dir.block.as_ref().unwrap();
             match dirmeta.into_iter().enumerate().skip(dir.pos).next() {
@@ -477,7 +500,10 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE>
             let (block, off) = self.ctz_find(file.head, file.size, file.pos).await?;
             let diff = min(buf.len() as u32, self.block_size - off) as usize;
             self.storage
-                .read(block.as_offset(self.block_size as usize) + off, &mut buf[..diff])
+                .read(
+                    block.as_offset(self.block_size as usize) + off,
+                    &mut buf[..diff],
+                )
                 .await
                 .map_err(|_| FsError::Io)?;
             buf = &mut buf[diff..];
@@ -577,10 +603,7 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE>
 
             let mut buf = Block::<8>::zero(2 - (index & 1) as usize);
             self.storage
-                .read(
-                    head.as_offset(self.block_size as usize),
-                    buf.as_mut_slice(),
-                )
+                .read(head.as_offset(self.block_size as usize), buf.as_mut_slice())
                 .await
                 .map_err(|_| FsError::Io)?;
             let mut offset = 0;
@@ -611,25 +634,26 @@ impl<S: AsyncNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE> {
                     self.traverse(|block| {
                         free.mark_free(block);
                         Ok(())
-                    }).await?;
+                    })
+                    .await?;
                     self.free = free;
                 }
             }
         }
     }
     async fn dir_alloc(&mut self) -> Result<Dir<BLOCK_SIZE>, FsError> {
-        let ptr = BlockPointerPair{
+        let ptr = BlockPointerPair {
             a: self.alloc().await?,
             b: self.alloc().await?,
         };
         let mut dir = Dir::<BLOCK_SIZE>::new(ptr);
-        dir.block = Some(structs::MetadataBlock{
+        dir.block = Some(structs::MetadataBlock {
+            // TODO: Read rev from disk if there's already a dir there?
             revision_count: 1,
             continued: false,
             tail_ptr: Default::default(),
             contents: Block::empty(),
         });
-        // TODO: Read rev from disk if there's already a dir there?
         Ok(dir)
     }
     pub async fn format(&mut self) -> Result<(), FsError> {
@@ -645,7 +669,7 @@ impl<S: AsyncNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE> {
 
         self.root_directory_ptr = root.ptr;
 
-        let superblock_entry = structs::DirEntry{
+        let superblock_entry = structs::DirEntry {
             name: "littlefs",
             data: structs::DirEntryData::Superblock {
                 root_directory_ptr: self.root_directory_ptr,
@@ -655,20 +679,44 @@ impl<S: AsyncNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE> {
             },
             attributes: b"",
         };
-        let entry_data = Block::<BLOCK_SIZE>::try_from(superblock_entry).map_err(|_| FsError::Corrupt)?;
+        let entry_data =
+            Block::<BLOCK_SIZE>::try_from(superblock_entry).map_err(|_| FsError::Corrupt)?;
 
-        let superblock = structs::MetadataBlock{
+        let superblock = structs::MetadataBlock {
             revision_count: 1,
             continued: false,
             contents: entry_data.as_slice(),
             tail_ptr: root.ptr,
         };
-        self.dir_commit(&mut superdir);
-        unimplemented!();
+        self.dir_commit(&mut superdir).await?;
+        // TODO: Write both copies
+        Ok(())
     }
     async fn dir_commit(&mut self, dir: &mut Dir<BLOCK_SIZE>) -> Result<(), FsError> {
-        //dir.rev += 1;
-        unimplemented!();
+        // TODO: "keep pairs in order such that pair[0] is most recent"
+        // lfs_pairswap(dir->pair)
+        dir.block = dir.block.take().map(|mut b| {
+            b.revision_count += 1;
+            b
+        });
+        match dir.block.as_ref() {
+            None => panic!("asked to commit block at {:?} without data", dir.ptr),
+            Some(block) => {
+                let buf = Block::<BLOCK_SIZE>::try_from(block).map_err(|_| FsError::Inval)?;
+                let start = dir.ptr.a.as_offset(self.block_size as usize);
+                self.storage
+                    .erase(start, start + self.block_size)
+                    .await
+                    .map_err(|_| FsError::Io)?;
+                self.storage
+                    .write(start, buf.as_slice())
+                    .await
+                    .map_err(|_| FsError::Io)?;
+                // TODO: if erase or write fails, try to relocate
+                // TODO: Reread block to verify write
+                Ok(())
+            }
+        }
     }
     // async pub fn mkdir(&mut self, path: &str) {
     //     // TODO: deorphan
@@ -855,7 +903,8 @@ mod tests_async {
         do_test(async {
             let mut buf: Vec<u8> = Vec::new();
             buf.extend_from_slice(&THREE_FILES);
-            let mut fs: AsyncLittleFs<_, 512> = AsyncLittleFs::new(SliceStorage::new(buf.as_mut_slice()));
+            let mut fs: AsyncLittleFs<_, 512> =
+                AsyncLittleFs::new(SliceStorage::new(buf.as_mut_slice()));
             fs.mount().await.unwrap();
             assert_eq!(fs.alloc().await, Ok(10));
         });
@@ -864,9 +913,10 @@ mod tests_async {
     #[test]
     fn owned_block() {
         let mut length = 0;
-        let block: crate::structs::MetadataBlock<Block<512>> = crate::structs::tests::DIRECTORY.read(&mut length).unwrap();
+        let block: crate::structs::MetadataBlock<Block<512>> =
+            crate::structs::tests::DIRECTORY.read(&mut length).unwrap();
         assert_eq!(block.revision_count, 10);
-        assert_eq!(block.contents.len(), 154-20);
+        assert_eq!(block.contents.len(), 154 - 20);
         let entry = block.find_entry("tea").unwrap().unwrap();
         assert_eq!(entry.name, "tea");
         trace!("found tea: {:?}", entry);
