@@ -685,11 +685,9 @@ impl<S: AsyncNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE> {
         let entry_data =
             Block::<BLOCK_SIZE>::try_from(superblock_entry).map_err(|_| FsError::Corrupt)?;
 
-        superdir.block = Some(structs::MetadataBlock {
-            revision_count: 1,
-            continued: false,
-            contents: entry_data,
-            tail_ptr: root.ptr,
+        superdir.block.as_mut().map(|b| {
+            b.contents = entry_data;
+            b.tail_ptr = root.ptr;
         });
         // write twice so both copies are written
         if ![self.dir_commit(&mut superdir).await,
