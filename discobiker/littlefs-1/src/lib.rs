@@ -708,7 +708,7 @@ mod test_log {
     async(keep_self, feature = "async")
 )]
 mod tests_async {
-    use super::storage::SliceStorage;
+    use super::storage::slice::SliceStorage;
     use super::*;
 
     extern crate std;
