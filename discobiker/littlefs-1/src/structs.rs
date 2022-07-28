@@ -22,7 +22,7 @@ impl AsOffset for BlockPointer {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct BlockPointerPair {
     pub a: BlockPointer,
@@ -39,8 +39,17 @@ impl BlockPointerPair {
     pub fn is_null(&self) -> bool {
         self.a == 0xffffffff && self.b == 0xffffffff
     }
+    pub fn sync(&self, other: &Self) -> bool {
+        (self.a == other.a && self.b == other.b) || (self.a == other.b && self.b == other.a)
+    }
     pub fn swap(&mut self) {
         (self.a, self.b) = (self.b, self.a);
+    }
+}
+
+impl PartialEq for BlockPointerPair {
+    fn eq(&self, other: &Self) -> bool {
+        self.a == other.a || self.b == other.b || self.a == other.b || self.b == other.a
     }
 }
 
