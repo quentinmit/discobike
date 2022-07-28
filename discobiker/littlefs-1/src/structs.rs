@@ -31,10 +31,7 @@ pub struct BlockPointerPair {
 
 impl BlockPointerPair {
     pub fn new(a: BlockPointer, b: BlockPointer) -> Self {
-        Self {
-            a: a,
-            b: b,
-        }
+        Self { a: a, b: b }
     }
     pub fn is_null(&self) -> bool {
         self.a == 0xffffffff && self.b == 0xffffffff
@@ -55,7 +52,10 @@ impl PartialEq for BlockPointerPair {
 
 impl Default for BlockPointerPair {
     fn default() -> Self {
-        BlockPointerPair { a: 0xffffffff, b: 0xffffffff }
+        BlockPointerPair {
+            a: 0xffffffff,
+            b: 0xffffffff,
+        }
     }
 }
 
@@ -81,15 +81,15 @@ impl TryWrite<Endian> for BlockPointerPair {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub struct MetadataBlock<T>
-{
+pub struct MetadataBlock<T> {
     pub revision_count: u32,
     pub continued: bool,
     pub tail_ptr: BlockPointerPair,
     pub contents: T,
 }
 impl<'a, T> TryRead<'a, ()> for MetadataBlock<T>
-    where T: TryRead<'a, Bytes> + AsRef<[u8]> + 'a
+where
+    T: TryRead<'a, Bytes> + AsRef<[u8]> + 'a,
 {
     fn try_read(bytes: &'a [u8], _ctx: ()) -> ByteResult<(Self, usize)> {
         let offset = &mut 0;
@@ -247,11 +247,16 @@ impl TryWrite<()> for DirEntryData {
             DirEntryData::File { head, size } => {
                 bytes.write_with(offset, head, endian)?;
                 bytes.write_with(offset, size, endian)?;
-            },
+            }
             DirEntryData::Directory { directory_ptr } => {
                 bytes.write_with(offset, directory_ptr, endian)?;
-            },
-            DirEntryData::Superblock { root_directory_ptr, block_size, block_count, version } => {
+            }
+            DirEntryData::Superblock {
+                root_directory_ptr,
+                block_size,
+                block_count,
+                version,
+            } => {
                 bytes.write_with(offset, root_directory_ptr, endian)?;
                 bytes.write_with(offset, block_size, endian)?;
                 bytes.write_with(offset, block_count, endian)?;
@@ -308,7 +313,7 @@ impl<'a> TryWrite<()> for DirEntry<'a> {
         bytes.write_with(offset, self.name.len() as u8, endian)?;
         let data_offset = *offset;
         bytes.write(offset, self.data)?;
-        bytes.write_with(&mut length_offset, (*offset-data_offset) as u8, endian)?;
+        bytes.write_with(&mut length_offset, (*offset - data_offset) as u8, endian)?;
         bytes.write(offset, self.attributes)?;
         bytes.write(offset, self.name)?;
 
@@ -334,7 +339,8 @@ impl<'a> Iterator for DirEntryIterator<'a> {
     }
 }
 impl<'a, T> IntoIterator for &'a MetadataBlock<T>
-where T: AsRef<[u8]> + 'a
+where
+    T: AsRef<[u8]> + 'a,
 {
     type Item = ByteResult<DirEntry<'a>>;
     type IntoIter = DirEntryIterator<'a>;
@@ -345,7 +351,8 @@ where T: AsRef<[u8]> + 'a
 }
 
 impl<'a, T> MetadataBlock<T>
-where T: AsRef<[u8]>
+where
+    T: AsRef<[u8]>,
 {
     pub fn iter(&'a self) -> DirEntryIterator<'a> {
         DirEntryIterator {
@@ -395,7 +402,7 @@ pub(crate) mod tests {
         assert_eq!(length, SUPERBLOCK.len());
         assert_eq!(block.revision_count, 3);
         assert_eq!(block.continued, false);
-        assert_eq!(block.contents.len(), 52-20);
+        assert_eq!(block.contents.len(), 52 - 20);
         assert_eq!(block.tail_ptr, BlockPointerPair { a: 3, b: 2 });
         let iter = block.into_iter();
         let dir_entries: Result<Vec<_>, _> = iter.collect();
@@ -458,7 +465,7 @@ pub(crate) mod tests {
         let block: MetadataBlock<&[u8]> = DIRECTORY.read(&mut length).unwrap();
         assert_eq!(length, DIRECTORY.len());
         assert_eq!(block.revision_count, 10);
-        assert_eq!(block.contents.len(), 154-20);
+        assert_eq!(block.contents.len(), 154 - 20);
         assert_eq!(block.tail_ptr, BlockPointerPair { a: 37, b: 36 });
         let iter = block.into_iter();
         let dir_entries: Result<Vec<_>, _> = iter.collect();

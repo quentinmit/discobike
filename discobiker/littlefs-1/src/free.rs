@@ -1,7 +1,7 @@
 use bitvec::prelude::*;
 
-use core::cmp::min;
 use crate::{BlockPointer, FsError};
+use core::cmp::min;
 
 const LOOKAHEAD: usize = 128;
 
@@ -24,7 +24,7 @@ pub struct FreeBlockCache {
 
 impl FreeBlockCache {
     pub fn new() -> Self {
-        FreeBlockCache{
+        FreeBlockCache {
             off: 0,
             size: 0,
             i: 0,
@@ -40,12 +40,19 @@ impl FreeBlockCache {
         self.size = 0;
     }
     pub fn next_free(&mut self) -> Result<Option<BlockPointer>, FsError> {
-        trace!("next_free searching [{}+{}, {})", self.off, self.i, self.off as usize+self.size);
+        trace!(
+            "next_free searching [{}+{}, {})",
+            self.off,
+            self.i,
+            self.off as usize + self.size
+        );
         let off = self.buf[self.i..self.size].first_zero();
         if let Some(off) = off {
             self.i += off + 1;
             self.ack -= off + 1;
-            return Ok(Some((self.off + self.i as BlockPointer - 1) % self.block_count));
+            return Ok(Some(
+                (self.off + self.i as BlockPointer - 1) % self.block_count,
+            ));
         }
         self.i += self.size;
         self.ack -= self.size;
@@ -56,7 +63,7 @@ impl FreeBlockCache {
         }
     }
     pub fn advance(&self) -> Self {
-        Self{
+        Self {
             off: (self.off + self.size as BlockPointer) % self.block_count,
             size: min(self.buf.len(), self.ack),
             i: 0,

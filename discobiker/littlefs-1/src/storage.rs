@@ -168,7 +168,7 @@ mod tests_async {
     #[test]
     fn read() {
         do_test(async {
-            const BUF: &[u8] = &[0,1,2,3,4,5,6,7,8,9];
+            const BUF: &[u8] = &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
             let mut ss = SliceStorage::new(BUF);
             let mut out = [0u8; 3];
             AsyncReadNorFlash::read(&mut ss, 0, &mut out).await.unwrap();
@@ -190,11 +190,13 @@ mod tests_async {
             let mut buf = [0u8; 8192];
             let mut ss = SliceStorage::new(&mut buf[..]);
 
-            const TESTDATA: &[u8] = &[0,1,2,3,4,5,6,7];
+            const TESTDATA: &[u8] = &[0, 1, 2, 3, 4, 5, 6, 7];
 
             AsyncNorFlash::write(&mut ss, 0, &TESTDATA).await.unwrap();
             let mut readback = [0u8; 8];
-            AsyncReadNorFlash::read(&mut ss, 0, &mut readback).await.unwrap();
+            AsyncReadNorFlash::read(&mut ss, 0, &mut readback)
+                .await
+                .unwrap();
             assert_eq!(&readback, TESTDATA);
 
             assert_eq!(
@@ -212,7 +214,9 @@ mod tests_async {
 
             AsyncNorFlash::erase(&mut ss, 4096, 8192).await.unwrap();
             let mut readback = [0u8; 8];
-            AsyncReadNorFlash::read(&mut ss, 4092, &mut readback).await.unwrap();
+            AsyncReadNorFlash::read(&mut ss, 4092, &mut readback)
+                .await
+                .unwrap();
             assert_eq!(&readback, &[0, 0, 0, 0, 0xFF, 0xFF, 0xFF, 0xFF]);
 
             assert_eq!(
