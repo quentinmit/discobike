@@ -685,12 +685,12 @@ impl<S: AsyncNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE> {
         let entry_data =
             Block::<BLOCK_SIZE>::try_from(superblock_entry).map_err(|_| FsError::Corrupt)?;
 
-        let superblock = structs::MetadataBlock {
+        superdir.block = Some(structs::MetadataBlock {
             revision_count: 1,
             continued: false,
-            contents: entry_data.as_slice(),
+            contents: entry_data,
             tail_ptr: root.ptr,
-        };
+        });
         // write twice so both copies are written
         if ![self.dir_commit(&mut superdir).await,
         self.dir_commit(&mut superdir).await].into_iter().any(|r| r == Ok(())) {
@@ -970,6 +970,8 @@ mod tests_async {
         let mut fs: AsyncLittleFs<_, 512> =
             AsyncLittleFs::new(SliceStorage::new(buf.as_mut_slice()));
         fs.format().await.unwrap();
+        let mount_err = fs.mount().await;
         info!("formatted fs: {:?}", buf);
+        mount_err.unwrap();
     }
 }
