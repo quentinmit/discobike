@@ -695,31 +695,65 @@ impl<S: AsyncNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE> {
         // TODO: Write both copies
         Ok(())
     }
+    async fn write_block(&mut self, ptr: BlockPointer, buf: Block<BLOCK_SIZE>) -> Result<(), FsError> {
+        let start = ptr.as_offset(self.block_size as usize);
+        self.storage
+            .erase(start, start + self.block_size)
+            .await
+            .map_err(|_| FsError::Io)?;
+        self.storage
+            .write(start, buf.as_slice())
+            .await
+            .map_err(|_| FsError::Io)?;
+        let mut readback: Block<BLOCK_SIZE> = Block::zero(buf.len());
+        self.storage
+            .read(start, readback.as_mut_slice())
+            .await
+            .map_err(|_| FsError::Io)?;
+        if buf != readback {
+            Err(FsError::Corrupt)
+        } else {
+            Ok(())
+        }
+    }
     async fn dir_commit(&mut self, dir: &mut Dir<BLOCK_SIZE>) -> Result<(), FsError> {
-        // TODO: "keep pairs in order such that pair[0] is most recent"
-        // lfs_pairswap(dir->pair)
+        // keep pairs in order such that pair[0] is most recent
+        dir.ptr.swap();
         dir.block = dir.block.take().map(|mut b| {
             b.revision_count += 1;
             b
         });
-        match dir.block.as_ref() {
-            None => panic!("asked to commit block at {:?} without data", dir.ptr),
-            Some(block) => {
-                let buf = Block::<BLOCK_SIZE>::try_from(block).map_err(|_| FsError::Inval)?;
-                let start = dir.ptr.a.as_offset(self.block_size as usize);
-                self.storage
-                    .erase(start, start + self.block_size)
-                    .await
-                    .map_err(|_| FsError::Io)?;
-                self.storage
-                    .write(start, buf.as_slice())
-                    .await
-                    .map_err(|_| FsError::Io)?;
-                // TODO: if erase or write fails, try to relocate
-                // TODO: Reread block to verify write
-                Ok(())
+        let oldpair = dir.ptr;
+        let mut relocated = false;
+        loop {
+            match dir.block.as_ref() {
+                None => panic!("asked to commit block at {:?} without data", dir.ptr),
+                Some(block) => {
+                    let buf = Block::<BLOCK_SIZE>::try_from(block).map_err(|_| FsError::Inval)?;
+                    match self.write_block(dir.ptr.a, buf).await {
+                        Ok(()) => break,
+                        Err(FsError::Corrupt) => {
+                            // If erase or write fails, try to relocate
+                            info!("bad block at {:?}", dir.ptr.a);
+                            relocated = true;
+
+                            if dir.ptr == BlockPointerPair::new(0, 1) {
+                                warn!("Superblock {:?} has become unwritable", dir.ptr.a);
+                                return Err(FsError::Corrupt)
+                            }
+
+                            dir.ptr.a = self.alloc().await?;
+                        }
+                        Err(e) => return Err(e)
+                    }
+                }
             }
         }
+        if relocated {
+            info!("relocating {:?} to {:?}", oldpair, dir.ptr);
+            todo!();
+        }
+        Ok(())
     }
     // async pub fn mkdir(&mut self, path: &str) {
     //     // TODO: deorphan

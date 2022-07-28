@@ -30,8 +30,17 @@ pub struct BlockPointerPair {
 }
 
 impl BlockPointerPair {
+    pub fn new(a: BlockPointer, b: BlockPointer) -> Self {
+        Self {
+            a: a,
+            b: b,
+        }
+    }
     pub fn is_null(&self) -> bool {
         self.a == 0xffffffff && self.b == 0xffffffff
+    }
+    pub fn swap(&mut self) {
+        (self.a, self.b) = (self.b, self.a);
     }
 }
 
