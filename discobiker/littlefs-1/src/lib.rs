@@ -1,8 +1,9 @@
 #![no_std]
+#![feature(generic_const_exprs)]
 #![cfg_attr(
     feature = "async",
     feature(generic_associated_types),
-    feature(type_alias_impl_trait)
+    feature(type_alias_impl_trait),
 )]
 
 mod block;
@@ -593,7 +594,7 @@ impl<S: AsyncNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE> {
             return Err(FsError::Corrupt);
         }
         // sanity check that fetch works
-        self.read_newer_block(superdir.ptr)?;
+        self.read_newer_block(superdir.ptr).await?;
         Ok(())
     }
     async fn write_block(
@@ -866,6 +867,7 @@ mod tests_async {
 
     #[test]
     fn format() {
+        do_test(async {
         let mut buf = [0u8; 8192];
         let mut fs: AsyncLittleFs<_, 512> =
             AsyncLittleFs::new(SliceStorage::new(buf.as_mut_slice()));
@@ -873,5 +875,6 @@ mod tests_async {
         let mount_err = fs.mount().await;
         info!("formatted fs: {:?}", buf);
         mount_err.unwrap();
+        });
     }
 }
