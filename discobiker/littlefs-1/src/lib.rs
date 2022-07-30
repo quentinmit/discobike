@@ -217,6 +217,7 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE>
             .ok_or(FsError::Corrupt)
     }
     pub async fn mount(&mut self) -> Result<(), FsError> {
+        self.free = free::FreeBlockCache::new();
         let sb = self
             .read_newer_block(BlockPointerPair { a: 0, b: 1 })
             .await?;
@@ -595,6 +596,7 @@ impl<S: AsyncNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE> {
         }
         // sanity check that fetch works
         self.read_newer_block(superdir.ptr).await?;
+        self.free.ack();
         Ok(())
     }
     async fn write_block(
@@ -714,7 +716,6 @@ mod tests_async {
 
     extern crate std;
     use alloc::format;
-    use core::iter::repeat;
     use std::println;
     extern crate alloc;
     use alloc::string::String;

@@ -115,13 +115,13 @@ where
     T: Integer + ToPrimitive + Clone + Copy,
 {
     fn split_partials(&self, block_size: T) -> (Option<Self>, Option<Self>, Option<Self>) {
-        let mut start = min(self.end, self.start.next_multiple_of(&block_size));
+        let start = min(self.end, self.start.next_multiple_of(&block_size));
         let prefix = if self.start != start {
             Some(self.start..start)
         } else {
             None
         };
-        let mut end = max(start, self.end.prev_multiple_of(&block_size));
+        let end = max(start, self.end.prev_multiple_of(&block_size));
         let suffix = if self.end != end {
             Some(end..self.end)
         } else {
