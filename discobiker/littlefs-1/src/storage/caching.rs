@@ -1,5 +1,6 @@
 use crate::Block;
 use core::ops::*;
+use core::cmp::{max, min};
 use num::{Integer, NumCast, ToPrimitive};
 use paste::paste;
 
@@ -90,10 +91,11 @@ where
         Ok(())
     }
     async fn erase_partial(&mut self, from: u32, to: u32) -> Result<(), NorFlashErrorKind> {
+        trace!("erase partial {:?}-{:?}", from, to);
         self.fetch_block_containing(from).await?;
         let block = self.cache.as_mut().unwrap();
         let start = (from - block.start) as usize;
-        let end = (from - block.start) as usize;
+        let end = (to - block.start) as usize;
         block.buf.as_mut_slice()[start..end].fill(0xFF);
         Ok(())
     }
@@ -113,13 +115,13 @@ where
     T: Integer + ToPrimitive + Clone + Copy,
 {
     fn split_partials(&self, block_size: T) -> (Option<Self>, Option<Self>, Option<Self>) {
-        let mut start = self.start.next_multiple_of(&block_size);
+        let mut start = min(self.end, self.start.next_multiple_of(&block_size));
         let prefix = if self.start != start {
             Some(self.start..start)
         } else {
             None
         };
-        let mut end = self.end.prev_multiple_of(&block_size);
+        let mut end = max(start, self.end.prev_multiple_of(&block_size));
         let suffix = if self.end != end {
             Some(end..self.end)
         } else {
@@ -178,6 +180,7 @@ macro_rules! split_op {
             {
                 let range = $range;
                 let (prefix, infix, suffix) = range.split_partials(S::ERASE_SIZE as u32);
+                trace!("{:?} split into {:?}, {:?}, {:?}", range, prefix, infix, suffix);
                 if let Some(prefix) = prefix {
                     let slice = prefix.sub(range.start).to_usize();
                     let (a, b) = $args(prefix, slice);
@@ -236,10 +239,12 @@ where
 
 #[cfg(all(test, feature = "async"))]
 pub(crate) mod tests_async {
-    extern crate alloc;
     use super::super::slice::SliceStorage;
     use super::*;
 
+    extern crate alloc;
+    extern crate std;
+    use std::println;
     use tokio_test::block_on as do_test;
 
     fn block_on_sync(_: ()) {}
@@ -256,7 +261,11 @@ pub(crate) mod tests_async {
             AsyncNorFlash::write(&mut cache, 0, &TESTDATA)
                 .await
                 .unwrap();
+            AsyncNorFlash::erase(&mut cache, 10, 20)
+                .await
+                .unwrap();
             cache.commit().await.unwrap();
+            println!("result: {:?}", buf);
         })
     }
 }
