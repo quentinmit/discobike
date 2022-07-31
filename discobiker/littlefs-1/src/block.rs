@@ -49,7 +49,7 @@ impl<const BLOCK_SIZE: usize> Block<BLOCK_SIZE> {
     pub fn as_mut_slice(&mut self) -> &mut [u8] {
         self.0.as_mut_slice()
     }
-    pub fn as_metadata<'a>(&self) -> Result<MetadataBlock<&[u8]>, FsError> {
+    pub fn as_metadata<'a, T>(&self) -> Result<MetadataBlock<&[u8]>, FsError<T>> {
         self.as_slice().read(&mut 0).map_err(|_| FsError::Corrupt)
     }
     pub fn len(&self) -> usize {

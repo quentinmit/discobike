@@ -32,9 +32,9 @@ use embedded_storage_async::nor_flash::{AsyncNorFlash, AsyncReadNorFlash};
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub enum FsError {
+pub enum FsError<T> {
     /// Input/output error occurred.
-    Io,
+    Io(T),
     /// File was corrupt.
     Corrupt,
     /// No entry found with that name.
@@ -186,7 +186,7 @@ impl<S, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE> {
     async(keep_self, feature = "async")
 )]
 impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE> {
-    async fn read_block(&mut self, ptr: BlockPointer) -> Result<Block<BLOCK_SIZE>, FsError> {
+    async fn read_block(&mut self, ptr: BlockPointer) -> Result<Block<BLOCK_SIZE>, FsError<S::Error>> {
         let block_size = if self.block_size > 0 {
             self.block_size as usize
         } else {
@@ -196,7 +196,7 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE>
         self.storage
             .read(ptr.as_offset(BLOCK_SIZE), buf.as_mut_slice())
             .await
-            .map_err(|_| FsError::Io)?;
+            .map_err(|e| FsError::Io(e))?;
         Ok(buf)
     }
     /// Read the newer revision from ptr. ptr.a will be left as the block
@@ -204,21 +204,21 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE>
     async fn read_newer_block(
         &mut self,
         ptr: &mut BlockPointerPair,
-    ) -> Result<Block<BLOCK_SIZE>, FsError> {
+    ) -> Result<Block<BLOCK_SIZE>, FsError<S::Error>> {
         let buf1 = self.read_block(ptr.a).await?;
         let buf2 = self.read_block(ptr.b).await?;
 
         [(ptr.a, buf1), (ptr.b, buf2)]
             .into_iter()
             .filter_map(|(ptr, buf)| {
-                let revision = buf.as_metadata().ok().map(|block| block.revision_count);
+                let revision = buf.as_metadata::<S::Error>().ok().map(|block| block.revision_count);
                 revision.map(|revision| (ptr, buf, revision))
             })
             .reduce(|(aptr, a, arev), (bptr, b, brev)| if arev > brev { (aptr, a, arev) } else { (bptr, b, brev) })
             .map(|(goodptr, buf, _)| { if goodptr == ptr.b { ptr.swap() }; buf })
             .ok_or(FsError::Corrupt)
     }
-    pub async fn mount(&mut self) -> Result<(), FsError> {
+    pub async fn mount(&mut self) -> Result<(), FsError<S::Error>> {
         self.free = free::FreeBlockCache::new();
         let sb = self
             .read_newer_block(&mut BlockPointerPair { a: 0, b: 1 })
@@ -253,7 +253,7 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE>
     }
     /// Find a file or directory by path. Returns the parent Dir and if the file
     /// or directory exists its DirEntryData.
-    async fn dir_find<'a>(&mut self, path: &'a str) -> Result<(Dir<BLOCK_SIZE>, Option<structs::DirEntryData>), FsError> {
+    async fn dir_find<'a>(&mut self, path: &'a str) -> Result<(Dir<BLOCK_SIZE>, Option<structs::DirEntryData>), FsError<S::Error>> {
         // TODO: Support a different starting directory.
         let mut dir = Dir::<BLOCK_SIZE>::new(self.root_directory_ptr);
         let mut names = path.split("/");
@@ -319,7 +319,7 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE>
             directory_ptr: ptr,
         })))
     }
-    pub async fn dir_open(&mut self, path: &str) -> Result<Dir<BLOCK_SIZE>, FsError> {
+    pub async fn dir_open(&mut self, path: &str) -> Result<Dir<BLOCK_SIZE>, FsError<S::Error>> {
         let entry_data = self.dir_find(path).await?.1.ok_or(FsError::Noent)?;
         match entry_data {
             structs::DirEntryData::Directory { directory_ptr } => Ok(Dir {
@@ -331,7 +331,7 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE>
             _ => Err(FsError::Corrupt),
         }
     }
-    pub async fn dir_read(&mut self, dir: &mut Dir<BLOCK_SIZE>) -> Result<Option<Info>, FsError> {
+    pub async fn dir_read(&mut self, dir: &mut Dir<BLOCK_SIZE>) -> Result<Option<Info>, FsError<S::Error>> {
         // TODO: Cache the state in dir somehow?
         // TODO: Synthesize "." and ".." entries.
         loop {
@@ -363,7 +363,7 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE>
             return Ok(None);
         }
     }
-    async fn dir_fetch(&mut self, dir: &mut Dir<BLOCK_SIZE>) -> Result<(), FsError> {
+    async fn dir_fetch(&mut self, dir: &mut Dir<BLOCK_SIZE>) -> Result<(), FsError<S::Error>> {
         match dir.block {
             None => {
                 dir.block = Some(
@@ -382,7 +382,7 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE>
         file: &mut File,
         path: &str,
         flags: FileOpenFlags,
-    ) -> Result<(), FsError> {
+    ) -> Result<(), FsError<S::Error>> {
         // TODO: deorphan once after mount
         if flags != FileOpenFlags::RDONLY {
             return Err(FsError::Inval);
@@ -401,7 +401,7 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE>
         }
     }
 
-    pub async fn file_read(&mut self, file: &mut File, buf: &mut [u8]) -> Result<usize, FsError> {
+    pub async fn file_read(&mut self, file: &mut File, buf: &mut [u8]) -> Result<usize, FsError<S::Error>> {
         let size = min(buf.len() as u32, file.size.saturating_sub(file.pos));
         let mut buf = &mut buf[..size as usize];
 
@@ -417,7 +417,7 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE>
                     &mut buf[..diff],
                 )
                 .await
-                .map_err(|_| FsError::Io)?;
+                .map_err(|e| FsError::Io(e))?;
             buf = &mut buf[diff..];
         }
         // We only update file here so that the position is not updated on a failed read.
@@ -441,7 +441,7 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE>
         head: BlockPointer,
         size: u32,
         pos: u32,
-    ) -> Result<(BlockPointer, u32), FsError> {
+    ) -> Result<(BlockPointer, u32), FsError<S::Error>> {
         let mut head = head;
         let (mut current, _) = self.ctz_index(size - 1);
         let (target, pos) = self.ctz_index(pos);
@@ -452,7 +452,7 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE>
             self.storage
                 .read(head.as_offset(self.block_size as usize), &mut buf[..])
                 .await
-                .map_err(|_| FsError::Io)?;
+                .map_err(|e| FsError::Io(e))?;
             head = buf.read_with(&mut 0, LE).map_err(|_| FsError::Corrupt)?;
             if !(head >= 2 && head <= self.block_count) {
                 return Err(FsError::Corrupt);
@@ -464,9 +464,9 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE>
 
     /// Traverse the entire filesystem, calling `f` with a pointer to every
     /// allocated block.
-    async fn traverse<F>(&mut self, mut f: F) -> Result<(), FsError>
+    async fn traverse<F>(&mut self, mut f: F) -> Result<(), FsError<S::Error>>
     where
-        F: FnMut(BlockPointer) -> Result<(), FsError>,
+        F: FnMut(BlockPointer) -> Result<(), FsError<S::Error>>,
     {
         if self.root_directory_ptr.is_null() {
             return Ok(());
@@ -497,9 +497,9 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE>
         head: BlockPointer,
         size: u32,
         mut f: F,
-    ) -> Result<(), FsError>
+    ) -> Result<(), FsError<S::Error>>
     where
-        F: FnMut(BlockPointer) -> Result<(), FsError>,
+        F: FnMut(BlockPointer) -> Result<(), FsError<S::Error>>,
     {
         if size == 0 {
             return Ok(());
@@ -517,7 +517,7 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE>
             self.storage
                 .read(head.as_offset(self.block_size as usize), buf.as_mut_slice())
                 .await
-                .map_err(|_| FsError::Io)?;
+                .map_err(|e| FsError::Io(e))?;
             let mut offset = 0;
             while offset < buf.len() {
                 let ptr: BlockPointer = buf.as_slice().read_with(&mut offset, LE).unwrap();
@@ -536,7 +536,7 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE>
 )]
 impl<S: AsyncNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE> {
     /// Find the next free block and return its pointer.
-    async fn alloc(&mut self) -> Result<BlockPointer, FsError> {
+    async fn alloc(&mut self) -> Result<BlockPointer, FsError<S::Error>> {
         loop {
             trace!("alloc: current free = {:?}", self.free);
             match self.free.next_free()? {
@@ -553,7 +553,7 @@ impl<S: AsyncNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE> {
             }
         }
     }
-    async fn dir_alloc(&mut self) -> Result<Dir<BLOCK_SIZE>, FsError> {
+    async fn dir_alloc(&mut self) -> Result<Dir<BLOCK_SIZE>, FsError<S::Error>> {
         let ptr = BlockPointerPair {
             a: self.alloc().await?,
             b: self.alloc().await?,
@@ -568,7 +568,7 @@ impl<S: AsyncNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE> {
         });
         Ok(dir)
     }
-    pub async fn format(&mut self) -> Result<(), FsError> {
+    pub async fn format(&mut self) -> Result<(), FsError<S::Error>> {
         let block_count = (self.storage.capacity() / BLOCK_SIZE) as BlockPointer;
         self.block_size = BLOCK_SIZE as u32;
         // Everything is free!
@@ -607,7 +607,7 @@ impl<S: AsyncNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE> {
             self.dir_commit(&mut superdir).await,
         ]
         .into_iter()
-        .any(|r| r == Ok(()))
+        .any(|r| r.is_ok())
         {
             return Err(FsError::Corrupt);
         }
@@ -620,28 +620,28 @@ impl<S: AsyncNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE> {
         &mut self,
         ptr: BlockPointer,
         buf: Block<BLOCK_SIZE>,
-    ) -> Result<(), FsError> {
+    ) -> Result<(), FsError<S::Error>> {
         let start = ptr.as_offset(self.block_size as usize);
         self.storage
             .erase(start, start + self.block_size)
             .await
-            .map_err(|_| FsError::Io)?;
+            .map_err(|e| FsError::Io(e))?;
         self.storage
             .write(start, buf.as_slice())
             .await
-            .map_err(|_| FsError::Io)?;
+            .map_err(|e| FsError::Io(e))?;
         let mut readback: Block<BLOCK_SIZE> = Block::zero(buf.len());
         self.storage
             .read(start, readback.as_mut_slice())
             .await
-            .map_err(|_| FsError::Io)?;
+            .map_err(|e| FsError::Io(e))?;
         if buf != readback {
             Err(FsError::Corrupt)
         } else {
             Ok(())
         }
     }
-    async fn dir_commit(&mut self, dir: &mut Dir<BLOCK_SIZE>) -> Result<(), FsError> {
+    async fn dir_commit(&mut self, dir: &mut Dir<BLOCK_SIZE>) -> Result<(), FsError<S::Error>> {
         // keep pairs in order such that pair[0] is most recent
         trace!("before swap: {:?}", dir.ptr);
         dir.ptr.swap();
@@ -681,17 +681,20 @@ impl<S: AsyncNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE> {
         }
         Ok(())
     }
-    async fn dir_append(&mut self, dir: &mut Dir<BLOCK_SIZE>, entry: structs::DirEntry<'_>) -> Result<(), FsError> {
+    async fn dir_append(&mut self, dir: &mut Dir<BLOCK_SIZE>, entry: structs::DirEntry<'_>) -> Result<(), FsError<S::Error>> {
         let entrybuf = Block::<BLOCK_SIZE>::try_from(entry).map_err(|_| FsError::Inval)?;
         let size = entrybuf.len();
         loop {
             self.dir_fetch(dir).await?;
             let mut block = dir.block.clone().unwrap();
             let oldlen = Block::<BLOCK_SIZE>::try_from(&block).map(|b| b.len()).unwrap_or(BLOCK_SIZE);
+            trace!("Block {:?} oldlen: {} trying to add {}", dir.ptr, oldlen, size);
             if oldlen + size < self.block_size as usize {
                 block.contents.try_extend_from_slice(entrybuf.as_slice()).unwrap();
                 dir.block = Some(block);
+                trace!("Trying to commit {:?}", dir);
                 self.dir_commit(dir).await?;
+                trace!("committed");
                 return Ok(());
             }
             if !block.continued {
@@ -715,7 +718,7 @@ impl<S: AsyncNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE> {
             dir.pos = 0;
         }
     }
-    pub async fn mkdir(&mut self, path: &str) -> Result<(), FsError> {
+    pub async fn mkdir(&mut self, path: &str) -> Result<(), FsError<S::Error>> {
         // TODO: deorphan
         let (mut cwd, entrydata) = self.dir_find(path).await?;
         if entrydata != None {
@@ -729,6 +732,8 @@ impl<S: AsyncNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE> {
             b.tail_ptr = tail_ptr;
         });
         self.dir_commit(&mut dir).await?;
+
+        trace!("New directory committed at {:?}", dir.ptr);
 
         let entry = structs::DirEntry{
             name: path.rsplit_once('/').map(|p| p.1).unwrap_or(path),
@@ -796,7 +801,7 @@ mod tests_async {
         let mut iter_blocks = HashSet::new();
         for i in 0..fs.block_count {
             let buf = fs.read_block(i as BlockPointer).await.unwrap();
-            let block = buf.as_metadata();
+            let block = buf.as_metadata::<T::Error>();
             match block {
                 Ok(b) => {
                     iter_count += 1;
@@ -992,6 +997,35 @@ mod tests_async {
                 }
             }
             assert_eq!(names.as_slice(), &["dir0", "dir1", "dir2", "dir3", "dir4", "dir5"]);
+
+            dump_blocks(&mut fs).await;
+        });
+    }
+
+    #[test]
+    fn mkdir_continued() {
+        do_test(async {
+            let mut buf = [0u8; 8192];
+            let mut fs: AsyncLittleFs<_, 512> =
+                AsyncLittleFs::new(SliceStorage::new(buf.as_mut_slice()));
+            fs.format().await.unwrap();
+            fs.mount().await.unwrap();
+            let mut want_names = Vec::<String>::new();
+            for i in 0..5 {
+                let name = format!("{}{}", "x".repeat(128), i);
+                want_names.push(name.clone());
+                fs.mkdir(&name).await.unwrap();
+            }
+            assert_eq!(fs.mkdir("dir").await, Err(FsError::Nospc));
+
+            let mut dir = fs.dir_open("/").await.unwrap();
+            let mut names = Vec::<String>::new();
+            while let Some(info) = fs.dir_read(&mut dir).await.unwrap() {
+                if info.entry_type == EntryType::Directory {
+                    names.push(info.name.as_ref().into());
+                }
+            }
+            assert_eq!(names.as_slice(), want_names.as_slice());
 
             dump_blocks(&mut fs).await;
         });

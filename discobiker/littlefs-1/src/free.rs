@@ -39,7 +39,7 @@ impl FreeBlockCache {
         // Ignore any data we already have.
         self.size = 0;
     }
-    pub fn next_free(&mut self) -> Result<Option<BlockPointer>, FsError> {
+    pub fn next_free<T>(&mut self) -> Result<Option<BlockPointer>, FsError<T>> {
         trace!(
             "next_free searching [{}+{}, {})",
             self.off,
