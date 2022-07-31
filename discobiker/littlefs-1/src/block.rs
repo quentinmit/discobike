@@ -55,6 +55,9 @@ impl<const BLOCK_SIZE: usize> Block<BLOCK_SIZE> {
     pub fn len(&self) -> usize {
         self.0.len()
     }
+    pub fn try_extend_from_slice(&mut self, other: &[u8]) -> Result<(), arrayvec::CapacityError> {
+        self.0.try_extend_from_slice(other)
+    }
 }
 
 impl<'a, const BLOCK_SIZE: usize> TryRead<'a, Bytes> for Block<BLOCK_SIZE> {

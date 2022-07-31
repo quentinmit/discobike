@@ -249,7 +249,9 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE>
             _ => Err(FsError::Corrupt),
         }
     }
-    async fn dir_find<'a>(&mut self, path: &'a str) -> Result<structs::DirEntryData, FsError> {
+    /// Find a file or directory by path. Returns the parent Dir and if the file
+    /// or directory exists its DirEntryData.
+    async fn dir_find<'a>(&mut self, path: &'a str) -> Result<(Dir<BLOCK_SIZE>, Option<structs::DirEntryData>), FsError> {
         // TODO: Support a different starting directory.
         let mut dir = Dir::<BLOCK_SIZE>::new(self.root_directory_ptr);
         let mut names = path.split("/");
@@ -287,7 +289,7 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE>
                 dir.ptr = block.tail_ptr;
                 if let Some(entry) = block.find_entry(name).map_err(|_| FsError::Corrupt)? {
                     if let None = names.clone().next() {
-                        return Ok(entry.data);
+                        return Ok((dir, Some(entry.data)));
                     } else {
                         match entry.data {
                             structs::DirEntryData::Directory { directory_ptr } => {
@@ -301,16 +303,17 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE>
                 }
             }
             if !found {
-                return Err(FsError::Noent);
+                return Ok((dir, None));
             }
         }
         // Fake directory for /
-        Ok(structs::DirEntryData::Directory {
-            directory_ptr: dir.ptr,
-        })
+        let ptr = dir.ptr;
+        Ok((dir, Some(structs::DirEntryData::Directory {
+            directory_ptr: ptr,
+        })))
     }
     pub async fn dir_open(&mut self, path: &str) -> Result<Dir<BLOCK_SIZE>, FsError> {
-        let entry_data = self.dir_find(path).await?;
+        let entry_data = self.dir_find(path).await?.1.ok_or(FsError::Noent)?;
         match entry_data {
             structs::DirEntryData::Directory { directory_ptr } => Ok(Dir {
                 head: directory_ptr,
@@ -370,7 +373,7 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE>
         if flags != FileOpenFlags::RDONLY {
             return Err(FsError::Inval);
         }
-        let entry_data = self.dir_find(path).await?;
+        let entry_data = self.dir_find(path).await?.1.ok_or(FsError::Noent)?;
         match entry_data {
             structs::DirEntryData::File { head, size } => {
                 *file = File {
@@ -663,27 +666,77 @@ impl<S: AsyncNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE> {
         }
         Ok(())
     }
-    // async pub fn mkdir(&mut self, path: &str) {
-    //     // TODO: deorphan
-    //     let (cwd, entrydata) = self.dir_find(path).await?;
-    //     if entrydata != None {
-    //         return Err(FsError::Exist);
-    //     }
+    async fn dir_append(&mut self, dir: &mut Dir<BLOCK_SIZE>, entry: structs::DirEntry<'_>) -> Result<(), FsError> {
+        let entrybuf = Block::<BLOCK_SIZE>::try_from(entry).map_err(|_| FsError::Inval)?;
+        let size = entrybuf.len();
+        loop {
+            match dir.block {
+                None => {
+                    dir.block = Some(
+                        self.read_newer_block(dir.ptr)
+                            .await?
+                            .read(&mut 0)
+                            .map_err(|_| FsError::Corrupt)?,
+                    );
+                },
+                Some(_) => (),
+            };
+            let mut block = dir.block.clone().unwrap();
+            let oldlen = Block::<BLOCK_SIZE>::try_from(&block).map(|b| b.len()).unwrap_or(BLOCK_SIZE);
+            if oldlen + size < self.block_size as usize {
+                block.contents.try_extend_from_slice(entrybuf.as_slice()).unwrap();
+                dir.block = Some(block);
+                self.dir_commit(dir).await?;
+                return Ok(());
+            }
+            if !block.continued {
+                // Need to allocate a new dir block
+                let mut olddir = dir.clone();
+                *dir = self.dir_alloc().await?;
+                dir.block.as_mut().map(|b| {
+                    b.tail_ptr = block.tail_ptr;
+                    b.contents = entrybuf;
+                });
+                self.dir_commit(dir).await?;
+                olddir.block.as_mut().map(|b| {
+                    b.continued = true;
+                    b.tail_ptr = dir.ptr;
+                });
+                self.dir_commit(&mut olddir).await?;
+                return Ok(());
+            }
+            dir.ptr = block.tail_ptr;
+            dir.block = None;
+            dir.pos = 0;
+        }
+    }
+    pub async fn mkdir(&mut self, path: &str) -> Result<(), FsError> {
+        // TODO: deorphan
+        let (mut cwd, entrydata) = self.dir_find(path).await?;
+        if entrydata != None {
+            return Err(FsError::Exist);
+        }
 
-    //     self.alloc_ack().await?;
-    //     let dir: Dir = Default::default();
-    //     self.dir_alloc(&mut dir).await?;
-    //     dir.tail = cwd.d.tail;
-    //     self.dir_commit(&mut dir).await?;
+        self.free.ack();
+        let mut dir = self.dir_alloc().await?;
+        let tail_ptr = cwd.block.as_ref().unwrap().tail_ptr;
+        dir.block.as_mut().map(|b| {
+            b.tail_ptr = tail_ptr;
+        });
+        self.dir_commit(&mut dir).await?;
 
-    //     let entry = structs::DirEntry{
-    //         name: path.rsplit_once('/')[1],
-    //         attributes: [],
-    //         data: structs::DirEntryData::Directory { directory_ptr: dir.ptr },
-    //     };
-    //     self.dir_append(cwd, entry).await?;
-    //     self.alloc_ack().await?;
-    // }
+        let entry = structs::DirEntry{
+            name: path.rsplit_once('/').map(|p| p.1).unwrap_or(path),
+            attributes: &[],
+            data: structs::DirEntryData::Directory { directory_ptr: dir.ptr },
+        };
+        cwd.block.as_mut().map(|b| {
+            b.tail_ptr = dir.ptr;
+        });
+        self.dir_append(&mut cwd, entry).await?;
+        self.free.ack();
+        Ok(())
+    }
 }
 
 #[cfg(all(test, feature = "log"))]
