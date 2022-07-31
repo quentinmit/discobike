@@ -199,27 +199,29 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE>
             .map_err(|_| FsError::Io)?;
         Ok(buf)
     }
+    /// Read the newer revision from ptr. ptr.a will be left as the block
+    /// containing the newer revision.
     async fn read_newer_block(
         &mut self,
-        ptr: BlockPointerPair,
+        ptr: &mut BlockPointerPair,
     ) -> Result<Block<BLOCK_SIZE>, FsError> {
         let buf1 = self.read_block(ptr.a).await?;
         let buf2 = self.read_block(ptr.b).await?;
 
-        [buf1, buf2]
+        [(ptr.a, buf1), (ptr.b, buf2)]
             .into_iter()
-            .filter_map(|buf| {
+            .filter_map(|(ptr, buf)| {
                 let revision = buf.as_metadata().ok().map(|block| block.revision_count);
-                revision.map(|revision| (buf, revision))
+                revision.map(|revision| (ptr, buf, revision))
             })
-            .reduce(|(a, arev), (b, brev)| if arev > brev { (a, arev) } else { (b, brev) })
-            .map(|(buf, _)| buf)
+            .reduce(|(aptr, a, arev), (bptr, b, brev)| if arev > brev { (aptr, a, arev) } else { (bptr, b, brev) })
+            .map(|(goodptr, buf, _)| { if goodptr == ptr.b { ptr.swap() }; buf })
             .ok_or(FsError::Corrupt)
     }
     pub async fn mount(&mut self) -> Result<(), FsError> {
         self.free = free::FreeBlockCache::new();
         let sb = self
-            .read_newer_block(BlockPointerPair { a: 0, b: 1 })
+            .read_newer_block(&mut BlockPointerPair { a: 0, b: 1 })
             .await?;
         let md = sb.as_metadata()?;
         let entry = md
@@ -365,7 +367,7 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE>
         match dir.block {
             None => {
                 dir.block = Some(
-                    self.read_newer_block(dir.ptr)
+                    self.read_newer_block(&mut dir.ptr)
                         .await?
                         .read(&mut 0)
                         .map_err(|_| FsError::Corrupt)?,
@@ -474,7 +476,7 @@ impl<S: AsyncReadNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE>
             f(cwd.a)?;
             f(cwd.b)?;
 
-            let buf = self.read_newer_block(cwd).await?;
+            let buf = self.read_newer_block(&mut cwd).await?;
             let block = buf.as_metadata()?;
 
             for entry in &block {
@@ -610,7 +612,7 @@ impl<S: AsyncNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE> {
             return Err(FsError::Corrupt);
         }
         // sanity check that fetch works
-        self.read_newer_block(superdir.ptr).await?;
+        self.read_newer_block(&mut superdir.ptr).await?;
         self.free.ack();
         Ok(())
     }
@@ -641,6 +643,7 @@ impl<S: AsyncNorFlash, const BLOCK_SIZE: usize> AsyncLittleFs<S, BLOCK_SIZE> {
     }
     async fn dir_commit(&mut self, dir: &mut Dir<BLOCK_SIZE>) -> Result<(), FsError> {
         // keep pairs in order such that pair[0] is most recent
+        trace!("before swap: {:?}", dir.ptr);
         dir.ptr.swap();
         dir.block = dir.block.take().map(|mut b| {
             b.revision_count += 1;
@@ -761,6 +764,7 @@ mod test_log {
     idents(
         AsyncLittleFs(async, sync = "LittleFs"),
         do_test(async = "block_on", sync = "block_on_sync"),
+        AsyncReadNorFlash(async, sync = "ReadNorFlash"),
     ),
     sync(self = "tests_sync", feature = "sync"),
     async(keep_self, feature = "async")
@@ -772,6 +776,7 @@ mod tests_async {
     extern crate std;
     use alloc::format;
     use std::println;
+    use std::collections::HashSet;
     extern crate alloc;
     use alloc::string::String;
     use alloc::vec::Vec;
@@ -785,6 +790,36 @@ mod tests_async {
 
     const THREE_FILES: &[u8] = include_bytes!("../testdata/three-files.img");
     const LARGE_DIR: &[u8] = include_bytes!("../testdata/large-dir.img");
+
+    async fn dump_blocks<T: AsyncReadNorFlash>(fs: &mut AsyncLittleFs<T, 512>) {
+        let mut iter_count = 0;
+        let mut iter_blocks = HashSet::new();
+        for i in 0..fs.block_count {
+            let buf = fs.read_block(i as BlockPointer).await.unwrap();
+            let block = buf.as_metadata();
+            match block {
+                Ok(b) => {
+                    iter_count += 1;
+                    iter_blocks.insert(i);
+                    info!("Block {}: {:?}", i, b);
+                },
+                Err(FsError::Corrupt) => (),
+                Err(e) => panic!("as_metadata: {:?}", e),
+            }
+        }
+        let mut traverse_count = 0;
+        fs.traverse(|ptr| {
+            trace!("found {:?}", ptr);
+            traverse_count += 1;
+            if !iter_blocks.contains(&ptr) {
+                warn!("missing block {:?}", ptr);
+            }
+            Ok(())
+        })
+            .await
+            .unwrap();
+        //assert_eq!(iter_count, traverse_count);
+    }
 
     #[test]
     fn three_files() {
@@ -957,6 +992,8 @@ mod tests_async {
                 }
             }
             assert_eq!(names.as_slice(), &["dir0", "dir1", "dir2", "dir3", "dir4", "dir5"]);
+
+            dump_blocks(&mut fs).await;
         });
     }
 }
