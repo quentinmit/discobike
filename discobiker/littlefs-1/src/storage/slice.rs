@@ -187,6 +187,10 @@ mod tests_async {
         })
     }
 
+    fn get_write_size<T: AsyncNorFlash>(_: &T) -> usize {
+        T::WRITE_SIZE
+    }
+
     #[test]
     fn write() {
         do_test(async {
@@ -202,10 +206,12 @@ mod tests_async {
                 .unwrap();
             assert_eq!(&readback, TESTDATA);
 
-            assert_eq!(
-                AsyncNorFlash::write(&mut ss, 0, &TESTDATA[0..5]).await,
-                Err(NorFlashErrorKind::NotAligned)
-            );
+            if get_write_size(&ss) > 1 {
+                assert_eq!(
+                    AsyncNorFlash::write(&mut ss, 0, &TESTDATA[0..5]).await,
+                    Err(NorFlashErrorKind::NotAligned)
+                );
+            }
         })
     }
 
