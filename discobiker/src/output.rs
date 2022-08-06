@@ -3,9 +3,10 @@ use crate::I2cDevice;
 use crate::{HeadlightMode, UnderlightMode};
 use apds9960::{Apds9960Async as Apds9960, LightData};
 use defmt::*;
+use drogue_device::drivers::led::neopixel::rgb::NeoPixelRgb;
 use embassy::time::{Duration, Instant, Timer};
 use embassy_nrf::pac;
-use embassy_nrf::peripherals::{PWM2, PWM3};
+use embassy_nrf::peripherals::{PWM1, PWM2, PWM3};
 use embassy_nrf::pwm::{SimplePwm, Prescaler};
 use embassy_nrf::wdt::WatchdogHandle;
 use embassy_nrf::gpio::{Level, Output, OutputDrive};
@@ -72,10 +73,13 @@ const DISPLAY_TIMEOUT: Duration = Duration::from_secs(60);
 const PWM_MAX_HEADLIGHT: u16 = 625;
 const PWM_MAX_TAILLIGHT: u16 = 255;
 
+const UNDERLIGHT_PIXELS: usize = 35;
+
 #[embassy::task]
 pub async fn output_task(
     mut wdt_handle: WatchdogHandle,
     power: pac::POWER,
+    pwm1: PWM1,
     pwm2: PWM2,
     pwm3: PWM3,
     pin_power_enable: crate::PinPowerEnable,
@@ -84,6 +88,7 @@ pub async fn output_task(
     pin_tail_c: crate::PinTailC,
     pin_tail_r: crate::PinTailR,
     mut apds9960: Apds9960<I2cDevice>,
+    pin_underlight: crate::PinUnderlight,
 ) {
     let mut power_enable = Output::new(pin_power_enable, Level::Low, OutputDrive::Standard);
     let mut headlight_pwm = SimplePwm::new_1ch(pwm3, pin_headlight_dim);
@@ -96,6 +101,7 @@ pub async fn output_task(
     taillight_pwm.set_duty(0, PWM_MAX_TAILLIGHT);
     taillight_pwm.set_duty(1, PWM_MAX_TAILLIGHT);
     taillight_pwm.set_duty(2, PWM_MAX_TAILLIGHT);
+    let mut underlight = NeoPixelRgb::<'_, _, UNDERLIGHT_PIXELS>::new(pwm1, pin_underlight);
     loop {
         let now = Instant::now();
 

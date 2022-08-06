@@ -29,7 +29,7 @@ use embassy::blocking_mutex::Mutex as BlockingMutex;
 use embassy::mutex::Mutex;
 use embassy_embedded_hal::shared_bus::i2c::I2cBusDevice;
 
-use drogue_device::drivers::led::neopixel::{rgb, rgb::NeoPixelRgb};
+use drogue_device::drivers::led::neopixel::{filter, rgb, rgb::NeoPixelRgb};
 
 use nrf_softdevice::ble::{gatt_server, peripheral};
 use nrf_softdevice::{raw, Softdevice, ble::Connection};
@@ -480,13 +480,14 @@ fn config() -> embassy_nrf::config::Config {
 
 #[embassy::main(config = "config()")]
 async fn main(spawner: Spawner, p: Peripherals) {
-    info!("Hello World!");
+    info!("Booting!");
     let mut neopixel = unwrap!(NeoPixelRgb::<'_, _, 1>::new(p.PWM0, use_pin_neo_pixel!(p)));
-    if let Err(e) = neopixel.set(&[rgb::GREEN]).await {
-        error!("failed to set neopixel on boot: {:?}", e);
-    }
-
+    //if let Err(e) = neopixel.set(&[rgb::GREEN]).await {
+    //    error!("failed to set neopixel on boot: {:?}", e);
+    //}
+    info!("neopixel set on boot");
     let wdt_handle = start_wdt(p.WDT, &mut neopixel).await;
+    info!("WDT started");
 
     let sdconfig = nrf_softdevice::Config {
         clock: Some(raw::nrf_clock_lf_cfg_t {
@@ -523,6 +524,8 @@ async fn main(spawner: Spawner, p: Peripherals) {
     };
 
     let sd = Softdevice::enable(&sdconfig);
+
+    info!("Softdevice enabled");
 
     #[cfg(feature = "mdbt50q")]
     let led = Output::new(use_pin_led!(p), Level::Low, OutputDrive::Standard);
@@ -561,10 +564,12 @@ async fn main(spawner: Spawner, p: Peripherals) {
     unwrap!(spawner.spawn(bluetooth_task(spawner, sd)));
     unwrap!(spawner.spawn(output::output_task(
         wdt_handle, power,
-        p.PWM2, p.PWM3,
+        p.PWM1, p.PWM2, p.PWM3,
         use_pin_power_enable!(p), use_pin_headlight_dim!(p),
         use_pin_tail_l!(p), use_pin_tail_c!(p), use_pin_tail_r!(p),
-        apds9960)));
+        apds9960,
+        use_pin_underlight!(p),
+    )));
     unwrap!(spawner.spawn(adc_task(saadc, pin_vbat, Duration::from_millis(500))));
     #[cfg(feature = "mdbt50q")]
     unwrap!(spawner.spawn(blinker(led, Duration::from_millis(300))));
