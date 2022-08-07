@@ -76,7 +76,9 @@ macro_rules! define_pin {
 // 2* / P0.10
 // 3 / P1.11 - Gyro + Accel IRQ
 // 4 / P1.10 - Blue LED ("Conn")
-define_pin!(ConnLed, P1_10);
+//define_pin!(ConnLed, P1_10);
+#[cfg(not(feature = "mdbt50q"))]
+define_pin!(Led, P1_10);
 // 5* / P1.08 - NeoPixel Connector (Propmaker)
 define_pin!(Underlight, P1_08);
 // 6* / P0.07 - IRQ (Propmaker)
@@ -298,7 +300,7 @@ pub static STATE: BlockingMutex::<ThreadModeRawMutex, Cell<ActualState>> = Block
     lux: None,
 }));
 
-fn bluetooth_start_server(sd: &'static mut Softdevice) -> Result<(), gatt_server::RegisterError> {
+fn bluetooth_start_server(sd: &mut Softdevice) -> Result<(), gatt_server::RegisterError> {
     let server: &Server = SERVER_FOREVER.put(Server::new(sd)?);
 
     let v = unwrap!(server.bas.battery_level_get());
@@ -441,7 +443,7 @@ async fn adc_task(psaadc: SAADC, pin_vbat: PinVbat, interval: Duration) {
     }
 }
 
-#[cfg(feature = "mdbt50q")]
+//#[cfg(feature = "mdbt50q")]
 #[embassy_executor::task]
 async fn blinker(mut led: Output<'static, PinLed>, interval: Duration) {
     loop {
@@ -482,6 +484,9 @@ fn config() -> embassy_nrf::config::Config {
     config
 }
 
+const BLUETOOTH: bool = false;
+const WDT: bool = false;
+
 #[embassy_executor::main(config = "config()")]
 async fn main(spawner: Spawner, p: Peripherals) {
     info!("Booting!");
@@ -490,7 +495,7 @@ async fn main(spawner: Spawner, p: Peripherals) {
     //    error!("failed to set neopixel on boot: {:?}", e);
     //}
     info!("neopixel set on boot");
-    let wdt_handle = start_wdt(p.WDT, &mut neopixel).await;
+    let wdt_handle = if WDT { Some(start_wdt(p.WDT, &mut neopixel).await) } else { None };
     info!("WDT started");
 
     let sdconfig = nrf_softdevice::Config {
@@ -531,7 +536,7 @@ async fn main(spawner: Spawner, p: Peripherals) {
 
     info!("Softdevice enabled");
 
-    #[cfg(feature = "mdbt50q")]
+    //#[cfg(feature = "mdbt50q")]
     let led = Output::new(use_pin_led!(p), Level::Low, OutputDrive::Standard);
 
     let saadc = p.SAADC;
@@ -554,6 +559,8 @@ async fn main(spawner: Spawner, p: Peripherals) {
 
     let apds9960 = Apds9960::new(I2cBusDevice::new(i2c_bus));
 
+    info!("Peripherals initialized, starting actors");
+
     let power_actor = spawn_actor!(
         spawner, POWER, actors::power::Power<I2cDevice>,
         actors::power::Power::new(I2cBusDevice::new(i2c_bus))
@@ -564,8 +571,11 @@ async fn main(spawner: Spawner, p: Peripherals) {
         actors::display::Display::new(I2cBusDevice::new(i2c_bus), DisplaySize128x64)
     );
 
-    unwrap!(spawner.spawn(softdevice_task(sd)));
-    unwrap!(spawner.spawn(bluetooth_task(spawner, sd)));
+    if BLUETOOTH {
+        unwrap!(bluetooth_start_server(sd));
+        unwrap!(spawner.spawn(softdevice_task(sd)));
+        unwrap!(spawner.spawn(bluetooth_task(spawner, sd)));
+    }
     unwrap!(spawner.spawn(output::output_task(
         wdt_handle, power,
         p.PWM1, p.PWM2, p.PWM3,
@@ -575,6 +585,6 @@ async fn main(spawner: Spawner, p: Peripherals) {
         use_pin_underlight!(p),
     )));
     unwrap!(spawner.spawn(adc_task(saadc, pin_vbat, Duration::from_millis(500))));
-    #[cfg(feature = "mdbt50q")]
+    //#[cfg(feature = "mdbt50q")]
     unwrap!(spawner.spawn(blinker(led, Duration::from_millis(300))));
 }

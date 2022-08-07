@@ -120,65 +120,67 @@ where
         const COLS: usize = 128 / 6;
         let line_height = text_style.font.character_size.height;
         loop {
-            self.display.clear();
-            let mut buf = StaticString::<COLS>::new();
-            let desired_state = DESIRED_STATE.lock(|c| c.get());
             let state = STATE.lock(|c| c.get());
+            if state.display_on {
+                self.display.clear();
+                let mut buf = StaticString::<COLS>::new();
+                let desired_state = DESIRED_STATE.lock(|c| c.get());
 
-            let mut x = StaticVec::<u8, 128>::filled_with(|| 0);
-            match bincode::serde::encode_into_slice(&state, x.as_mut_slice(), bincode::config::standard()) {
-                Err(e) =>
-                    error!("serializing state: {}", Debug2Format(&e)),
-                Ok(n) => {
-                    x.truncate(n);
-                    info!("current state: {=[u8]}", x.as_slice());
+                let mut x = StaticVec::<u8, 128>::filled_with(|| 0);
+                match bincode::serde::encode_into_slice(&state, x.as_mut_slice(), bincode::config::standard()) {
+                    Err(e) =>
+                        error!("serializing state: {}", Debug2Format(&e)),
+                    Ok(n) => {
+                        x.truncate(n);
+                        info!("current state: {=[u8]}", x.as_slice());
+                    }
                 }
-            }
 
-            // Line 0: XX.XVext X.XXXA X.XXV
-            state.vext.write_dim(&mut buf, V, 4, 1)?;
-            buf.push_str_truncating("Vext ");
-            state.current.write_dim(&mut buf, A, 5, 3)?;
-            buf.push_str_truncating("A ");
-            state.vbat.write_dim(&mut buf, V, 4, 2)?;
-            buf.push_str_truncating(if state.vbus_detected { "V" } else { "v" });
-            Text::with_baseline(&buf, Point::zero(), text_style, Baseline::Top)
-                .draw(&mut self.display)?;
-            yield_now().await;
-            buf.clear();
-            // Line 1: XXX°XXX° XXX.X°
-            buf.push_str_truncating("XXX°XXX° XXX.X°");
-            Text::with_baseline(&buf, Point::new(0, 1*line_height as i32), text_style, Baseline::Top)
-                .draw(&mut self.display)?;
-            yield_now().await;
-            buf.clear();
-            // Line 2: XXXX.XXhPa XXX.XX'
-            // Line 3: XXX°TXXX.XX°
-            buf.push_str_truncating("UL: ");
-            core::write!(&mut buf, "{:?} {:02X}", desired_state.underlight_mode, state.underlight_brightness)?;
-            Text::with_baseline(&buf, Point::new(0, 3*line_height as i32), text_style, Baseline::Top)
-                .draw(&mut self.display)?;
-            yield_now().await;
-            buf.clear();
-            // Line 4: XXX.XXG    XXXXX lux
-            state.accel_mag.write_dim(&mut buf, STANDARD_ACCELERATION_OF_GRAVITY as f32*MPS2, 6, 2)?;
-            buf.push_str_truncating("G    ");
-            state.lux.write_dim(&mut buf, LX, 5, 0)?;
-            buf.push_str_truncating(" lux");
-            Text::with_baseline(&buf, Point::new(0, 4*line_height as i32), text_style, Baseline::Top)
-                .draw(&mut self.display)?;
-            yield_now().await;
-            buf.clear();
-            // Line 5: Mode: Day XXX% XXs
-            buf.push_str_truncating("Mode: ");
-            core::write!(&mut buf, "{:?} {:3} {}", state.headlight_mode, state.headlight_brightness * 100.0, state.move_timer)?;
-            Text::with_baseline(&buf, Point::new(0, 5*line_height as i32), text_style, Baseline::Top)
-                .draw(&mut self.display)?;
-            yield_now().await;
-            buf.clear();
-            let start_flush = Instant::now();
-            self.display.flush().await?;
-            info!("display.flush took {} µs", start_flush.elapsed().as_micros());
+                // Line 0: XX.XVext X.XXXA X.XXV
+                state.vext.write_dim(&mut buf, V, 4, 1)?;
+                buf.push_str_truncating("Vext ");
+                state.current.write_dim(&mut buf, A, 5, 3)?;
+                buf.push_str_truncating("A ");
+                state.vbat.write_dim(&mut buf, V, 4, 2)?;
+                buf.push_str_truncating(if state.vbus_detected { "V" } else { "v" });
+                Text::with_baseline(&buf, Point::zero(), text_style, Baseline::Top)
+                    .draw(&mut self.display)?;
+                yield_now().await;
+                buf.clear();
+                // Line 1: XXX°XXX° XXX.X°
+                buf.push_str_truncating("XXX°XXX° XXX.X°");
+                Text::with_baseline(&buf, Point::new(0, 1*line_height as i32), text_style, Baseline::Top)
+                    .draw(&mut self.display)?;
+                yield_now().await;
+                buf.clear();
+                // Line 2: XXXX.XXhPa XXX.XX'
+                // Line 3: XXX°TXXX.XX°
+                buf.push_str_truncating("UL: ");
+                core::write!(&mut buf, "{:?} {:02X}", desired_state.underlight_mode, state.underlight_brightness)?;
+                Text::with_baseline(&buf, Point::new(0, 3*line_height as i32), text_style, Baseline::Top)
+                    .draw(&mut self.display)?;
+                yield_now().await;
+                buf.clear();
+                // Line 4: XXX.XXG    XXXXX lux
+                state.accel_mag.write_dim(&mut buf, STANDARD_ACCELERATION_OF_GRAVITY as f32*MPS2, 6, 2)?;
+                buf.push_str_truncating("G    ");
+                state.lux.write_dim(&mut buf, LX, 5, 0)?;
+                buf.push_str_truncating(" lux");
+                Text::with_baseline(&buf, Point::new(0, 4*line_height as i32), text_style, Baseline::Top)
+                    .draw(&mut self.display)?;
+                yield_now().await;
+                buf.clear();
+                // Line 5: Mode: Day XXX% XXs
+                buf.push_str_truncating("Mode: ");
+                core::write!(&mut buf, "{:?} {:3} {}", state.headlight_mode, state.headlight_brightness * 100.0, state.move_timer)?;
+                Text::with_baseline(&buf, Point::new(0, 5*line_height as i32), text_style, Baseline::Top)
+                    .draw(&mut self.display)?;
+                yield_now().await;
+                buf.clear();
+                let start_flush = Instant::now();
+                self.display.flush().await?;
+                info!("display.flush took {} µs", start_flush.elapsed().as_micros());
+            }
 
             select_biased! {
                 message = inbox.next().fuse() => {

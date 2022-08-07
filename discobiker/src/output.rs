@@ -77,7 +77,7 @@ const UNDERLIGHT_PIXELS: usize = 35;
 
 #[embassy_executor::task]
 pub async fn output_task(
-    mut wdt_handle: WatchdogHandle,
+    mut wdt_handle: Option<WatchdogHandle>,
     power: pac::POWER,
     pwm1: PWM1,
     pwm2: PWM2,
@@ -105,15 +105,18 @@ pub async fn output_task(
     loop {
         let now = Instant::now();
 
-        wdt_handle.pet();
+        if let Some(wdt_handle) = wdt_handle.as_mut() {
+            wdt_handle.pet();
+        }
 
-        let color = apds9960
+        let color: Option<LightData> = None;
+/*         let color = apds9960
             .read_light()
             .await
             .inspect_err(|e| {
                 error!("failed to read light sensor: {:?}", defmt::Debug2Format(&e));
             })
-            .ok();
+            .ok(); */
         // 3.5 counts/lux in the c channel according to datasheet
         let lux_value =
             color.map(|color| max(color.calculate_lux(), color.clear as f32 / (3.5 / LX))); // If C is overloaded, use RGB
@@ -183,6 +186,7 @@ pub async fn output_task(
         let state = STATE.lock(|c| c.update(|s| {
             let mut s = s;
             use crate::HeadlightMode::*;
+            s.display_on = s.move_timer.elapsed() < DISPLAY_TIMEOUT || s.vbus_timer.elapsed() < DISPLAY_TIMEOUT;
             if s.vext.map_or(true, |v| v < 11.2*V) || !s.vbus_detected {
                 s.headlight_brightness = 0.0;
                 s.taillight_brightness = 0.0;

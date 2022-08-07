@@ -88,6 +88,7 @@ where
         info!("initializing ina219");
         self.ina219.set_adc_mode(ADCMode::SampleMode128).await?;
         self.ina219.set_current_range(3.2 * A, 0.1 * OHM).await?;
+        info!("ina219 initialized");
         loop {
             let state = STATE.lock(|c| c.get());
             match state.display_on {

@@ -12,7 +12,7 @@ use embedded_hal_async::i2c as i2c_mod_async;
 
 use byteorder::{BigEndian, ByteOrder, LittleEndian};
 
-pub const INA219_ADDR: u8 = 0x41;
+pub const INA219_ADDR: u8 = 0x40;
 
 enum Register {
     Configuration = 0x00,
@@ -266,7 +266,8 @@ where
     where
         F: FnOnce(Configuration) -> Configuration,
     {
-        let old_config: Configuration = self.read_register(Register::Configuration).await?.into();
+        let old_value = self.read_register(Register::Configuration).await?;
+        let old_config: Configuration = old_value.into();
         let new_config = f(old_config);
         match self
             .write_register(Register::Configuration, new_config.into())
