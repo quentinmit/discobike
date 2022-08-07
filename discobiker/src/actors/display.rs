@@ -5,8 +5,8 @@ use core::fmt::Write;
 use defmt::{*, panic};
 use futures::FutureExt;
 use futures::select_biased;
-use embassy::time::{Duration, Timer, Instant};
-use embassy::util::yield_now;
+use embassy_executor::time::{Duration, Timer, Instant};
+use embassy_util::yield_now;
 use embedded_graphics::prelude::*;
 use embedded_graphics::{
     mono_font::{iso_8859_1::FONT_6X10, MonoTextStyleBuilder},

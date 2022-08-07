@@ -4,7 +4,7 @@ use crate::{HeadlightMode, UnderlightMode};
 use apds9960::{Apds9960Async as Apds9960, LightData};
 use defmt::*;
 use drogue_device::drivers::led::neopixel::rgb::NeoPixelRgb;
-use embassy::time::{Duration, Instant, Timer};
+use embassy_executor::time::{Duration, Instant, Timer};
 use embassy_nrf::pac;
 use embassy_nrf::peripherals::{PWM1, PWM2, PWM3};
 use embassy_nrf::pwm::{SimplePwm, Prescaler};
@@ -75,7 +75,7 @@ const PWM_MAX_TAILLIGHT: u16 = 255;
 
 const UNDERLIGHT_PIXELS: usize = 35;
 
-#[embassy::task]
+#[embassy_executor::task]
 pub async fn output_task(
     mut wdt_handle: WatchdogHandle,
     power: pac::POWER,

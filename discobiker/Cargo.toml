@@ -17,14 +17,15 @@ opt-level = 3
 opt-level = 3
 
 [dependencies]
-embassy = { version = "0.1.0", features = ["nightly", "defmt"]}
+embassy-executor = { version = "0.1.0", features = ["nightly", "defmt"]}
+embassy-util = { version = "0.1.0", features = ["nightly", "defmt"]}
 embassy-hal-common = { version = "0.1.0", features = ["defmt"] }
 embassy-nrf = { version = "0.1.0", features = [ "nightly", "defmt", "nrf52840", "gpiote", "time-driver-rtc1", "unstable-traits", "unstable-pac" ]}
 embassy-embedded-hal = "0.1.0"
 cortex-m        = { version = "0.7.3" }
 cortex-m-rt = "0.7.0"
 defmt = { version = "0.3", features = [] }
-nrf-softdevice-defmt-rtt = { version = "0.1.0" }
+defmt-rtt = { version = "0.3.2" }
 panic-probe = { version = "0.3", features= ["print-defmt"] }
 nrf-softdevice = { version = "0.1.0", features = ["defmt", "nrf52840", "s140", "ble-peripheral", "ble-central", "ble-gatt-server", "critical-section-impl"] }
 nrf-softdevice-s140 = { version = "0.1.1" }
@@ -61,20 +62,23 @@ lsm6ds33 = { version = "0.2.0", default-features = false, features = ["async"] }
 maybe-async-cfg = "0.2.1"
 
 [patch.crates-io]
-embassy = { git = "https://github.com/embassy-rs/embassy" }
+embassy-executor = { git = "https://github.com/embassy-rs/embassy" }
+embassy-util = { git = "https://github.com/embassy-rs/embassy" }
 embassy-hal-common = { git = "https://github.com/embassy-rs/embassy" }
 embassy-nrf = { git = "https://github.com/embassy-rs/embassy" }
 embassy-macros = { git = "https://github.com/embassy-rs/embassy" }
 embassy-embedded-hal = { git = "https://github.com/embassy-rs/embassy" }
 nrf-softdevice = { git = "https://github.com/embassy-rs/nrf-softdevice" }
 nrf-softdevice-s140 = { git = "https://github.com/embassy-rs/nrf-softdevice" }
-nrf-softdevice-defmt-rtt = { git = "https://github.com/embassy-rs/nrf-softdevice" }
 apds9960 = { git = "https://github.com/quentinmit/apds9960-rs", branch = "async" }
 uom = { git = "https://github.com/quentinmit/uom", branch = "photometric" }
-drogue-device = { git = "https://github.com/drogue-iot/drogue-device" }
+#drogue-device = { git = "https://github.com/drogue-iot/drogue-device" }
+drogue-device = { path = "/Users/quentin/Software/drogue-device/device" }
 reqwless = { git = "https://github.com/drogue-iot/reqwless" }
-ector = { git = "https://github.com/drogue-iot/ector.git" }
-ssd1306 = { git = "https://github.com/simmsb/ssd1306" }
+#ector = { git = "https://github.com/drogue-iot/ector.git" }
+ector = { git = "https://github.com/quentinmit/ector.git", branch = "embassy-split" }
+#ssd1306 = { git = "https://github.com/simmsb/ssd1306" }
+ssd1306 = { path = "/Users/quentin/Software/ssd1306" }
 display-interface = { git = "https://github.com/simmsb/display-interface" }
 physical_constants = { git = "https://github.com/quentinmit/rust-physical_constants", branch = "no_std" }
 dimensioned = { git = "https://github.com/quentinmit/dimensioned", branch = "no_std" }

@@ -4,7 +4,7 @@ use defmt::{*, panic};
 use crate::drivers::ina219::{INA219Async, INA219_ADDR, ADCMode};
 use ector::{actor, Actor, Address, Inbox};
 use embedded_hal_async::i2c;
-use embassy::time::{Duration, Timer, Instant};
+use embassy_executor::time::{Duration, Timer, Instant};
 use dim::si::{
     f32consts::{A, LX, OHM},
     Volt, Lux,

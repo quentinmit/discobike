@@ -10,10 +10,10 @@ use core::convert::TryInto;
 use core::mem;
 use core::fmt;
 use defmt::*;
-use embassy::blocking_mutex::ThreadModeMutex;
-use embassy::executor::Spawner;
-use embassy::time::{Duration, Timer, Instant};
-use embassy::util::Forever;
+use embassy_util::blocking_mutex::ThreadModeMutex;
+use embassy_executor::executor::Spawner;
+use embassy_executor::time::{Duration, Timer, Instant};
+use embassy_util::Forever;
 use embassy_nrf as _;
 use embassy_nrf::gpio::{Input, Level, Output, OutputDrive, Pull};
 use embassy_nrf::interrupt;
@@ -24,16 +24,15 @@ use embassy_nrf::wdt;
 use embassy_nrf::{pac, saadc};
 use embassy_nrf::{peripherals, Peripherals};
 
-use embassy::blocking_mutex::raw::ThreadModeRawMutex;
-use embassy::blocking_mutex::Mutex as BlockingMutex;
-use embassy::mutex::Mutex;
-use embassy_embedded_hal::shared_bus::i2c::I2cBusDevice;
+use embassy_util::blocking_mutex::{raw::ThreadModeRawMutex, Mutex as BlockingMutex};
+use embassy_util::mutex::Mutex;
+use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice as I2cBusDevice;
 
 use drogue_device::drivers::led::neopixel::{filter, rgb, rgb::NeoPixelRgb};
 
 use nrf_softdevice::ble::{gatt_server, peripheral};
 use nrf_softdevice::{raw, Softdevice, ble::Connection};
-use nrf_softdevice_defmt_rtt as _;
+use defmt_rtt as _;
 use panic_probe as _;
 
 use apds9960::Apds9960Async as Apds9960;
@@ -168,7 +167,7 @@ pub struct Server {
     underlight: UnderlightService,
 }
 
-#[embassy::task]
+#[embassy_executor::task]
 async fn softdevice_task(sd: &'static Softdevice) {
     sd.run().await;
 }
@@ -299,18 +298,21 @@ pub static STATE: BlockingMutex::<ThreadModeRawMutex, Cell<ActualState>> = Block
     lux: None,
 }));
 
-#[embassy::task]
-async fn bluetooth_task(
-    spawner: Spawner,
-    sd: &'static Softdevice,
-) {
-    let server: &Server = SERVER_FOREVER.put(unwrap!(gatt_server::register(sd)));
+fn bluetooth_start_server(sd: &'static mut Softdevice) -> Result<(), gatt_server::RegisterError> {
+    let server: &Server = SERVER_FOREVER.put(Server::new(sd)?);
 
     let v = unwrap!(server.bas.battery_level_get());
     info!("Initial battery level: {=u8}", v);
 
     SERVER.borrow().replace(Some(server));
+    Ok(())
+}
 
+#[embassy_executor::task]
+async fn bluetooth_task(
+    spawner: Spawner,
+    sd: &'static Softdevice,
+) {
     #[rustfmt::skip]
     let adv_data = &[
         // 0x01 = flags
@@ -324,6 +326,8 @@ async fn bluetooth_task(
     let scan_data = &[
         0x03, 0x03, 0x09, 0x18,
     ];
+
+    let server = SERVER.borrow().borrow().unwrap();
 
     loop {
         let config = peripheral::Config::default();
@@ -340,7 +344,7 @@ async fn bluetooth_task(
     }
 }
 
-#[embassy::task(pool_size = "4")]
+#[embassy_executor::task(pool_size = "4")]
 pub async fn gatt_server_task(
     sd: &'static Softdevice,
     conn: Connection,
@@ -404,7 +408,7 @@ pub async fn gatt_server_task(
 }
 
 
-#[embassy::task]
+#[embassy_executor::task]
 async fn adc_task(psaadc: SAADC, pin_vbat: PinVbat, interval: Duration) {
     let config = saadc::Config::default();
     let channel_config = saadc::ChannelConfig::single_ended(pin_vbat);
@@ -438,7 +442,7 @@ async fn adc_task(psaadc: SAADC, pin_vbat: PinVbat, interval: Duration) {
 }
 
 #[cfg(feature = "mdbt50q")]
-#[embassy::task]
+#[embassy_executor::task]
 async fn blinker(mut led: Output<'static, PinLed>, interval: Duration) {
     loop {
         led.set_high();
@@ -478,7 +482,7 @@ fn config() -> embassy_nrf::config::Config {
     config
 }
 
-#[embassy::main(config = "config()")]
+#[embassy_executor::main(config = "config()")]
 async fn main(spawner: Spawner, p: Peripherals) {
     info!("Booting!");
     let mut neopixel = unwrap!(NeoPixelRgb::<'_, _, 1>::new(p.PWM0, use_pin_neo_pixel!(p)));

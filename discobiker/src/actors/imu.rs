@@ -11,7 +11,7 @@ use dim::ucum::{
     Radian, Second, UCUM,
 };
 use ector::{actor, Actor, Address, Inbox};
-use embassy::time::{Duration, Timer};
+use embassy_executor::time::{Duration, Timer};
 use embedded_hal_async::i2c;
 use lsm6ds33::{self, *};
 
