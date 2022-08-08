@@ -102,6 +102,11 @@ pub async fn output_task(
     taillight_pwm.set_duty(1, PWM_MAX_TAILLIGHT);
     taillight_pwm.set_duty(2, PWM_MAX_TAILLIGHT);
     let mut underlight = NeoPixelRgb::<'_, _, UNDERLIGHT_PIXELS>::new(pwm1, pin_underlight);
+
+    info!("Enabling apds9960");
+    apds9960.enable().await.unwrap();
+    apds9960.enable_light().await.unwrap();
+    info!("Enabled");
     loop {
         let now = Instant::now();
 
@@ -110,13 +115,13 @@ pub async fn output_task(
         }
 
         let color: Option<LightData> = None;
-/*         let color = apds9960
+        let color = apds9960
             .read_light()
             .await
             .inspect_err(|e| {
                 error!("failed to read light sensor: {:?}", defmt::Debug2Format(&e));
             })
-            .ok(); */
+            .ok();
         // 3.5 counts/lux in the c channel according to datasheet
         let lux_value =
             color.map(|color| max(color.calculate_lux(), color.clear as f32 / (3.5 / LX))); // If C is overloaded, use RGB

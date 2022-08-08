@@ -590,7 +590,8 @@ async fn main(spawner: Spawner, p: Peripherals) {
     let i2c_bus = Mutex::<ThreadModeRawMutex, _>::new(i2c);
     let i2c_bus = I2C_BUS.put(i2c_bus);
 
-    let apds9960 = Apds9960::new(I2cBusDevice::new(i2c_bus));
+    let mut apds9960 = Apds9960::new(I2cBusDevice::new(i2c_bus));
+    info!("APDS9960 ID: {}", apds9960.read_device_id().await.unwrap());
 
     info!("Peripherals initialized, starting actors");
 
