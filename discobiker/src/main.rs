@@ -409,17 +409,50 @@ pub async fn gatt_server_task(
     }
 }
 
+fn calculate_adc_one_bit(config: &saadc::Config, channel_config: &saadc::ChannelConfig) -> Volt<f32> {
+    use saadc::*;
+    // RESULT = [V(P) – V(N) ] * GAIN/REFERENCE * 2(RESOLUTION - m)
+    // buf[0] = V * (1/6) / (0.6 volts) * 2^12
+    // V = buf[0] * 6 * 0.6 / 2^12
+    let adc_resolution = match config.resolution {
+        Resolution::_8BIT => 8,
+        Resolution::_10BIT => 10,
+        Resolution::_12BIT => 12,
+        Resolution::_14BIT => 14,
+        _ => defmt::panic!("unsupported resolution"),
+    };
+    let adc_gain = match channel_config.gain {
+        Gain::GAIN1_6 => 1.0/6.0,
+        Gain::GAIN1_5 => 1.0/5.0,
+        Gain::GAIN1_4 => 1.0/4.0,
+        Gain::GAIN1_3 => 1.0/3.0,
+        Gain::GAIN1_2 => 1.0/2.0,
+        Gain::GAIN1 => 1.0,
+        Gain::GAIN2 => 2.0,
+        Gain::GAIN4 => 4.0,
+        _ => defmt::panic!("unsupported gain"),
+    };
+    let adc_reference = match channel_config.reference {
+        Reference::INTERNAL => 0.6 * V,
+        Reference::VDD1_4 => 3.3 / 4.0 * V,
+        _ => defmt::panic!("unsupported reference"),
+    };
+    adc_reference / adc_gain / 2.0.powi(adc_resolution)
+}
 
 #[embassy_executor::task]
 async fn adc_task(psaadc: SAADC, pin_vbat: PinVbat, interval: Duration) {
     let config = saadc::Config::default();
+    // P0.29 / AIN5 is connected to Vbat through a 100K/100K resistor divider.
     let channel_config = saadc::ChannelConfig::single_ended(pin_vbat);
+    let adc_one_bit = calculate_adc_one_bit(&config, &channel_config);
     let mut saadc = saadc::Saadc::new(psaadc, interrupt::take!(SAADC), config, [channel_config]);
 
     loop {
         let mut buf = [0; 1];
         saadc.sample(&mut buf).await;
-        let vbat = ((buf[0] as f32) * 3.6 * 2.0 / 16384.0) * V;
+        // Vbat/2 is being sampled
+        let vbat = (buf[0] as f32) * 2.0 * adc_one_bit;
         let vbat_percent = if vbat <= 0.0*V {
             0
         } else {
