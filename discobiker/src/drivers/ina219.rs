@@ -168,7 +168,7 @@ where
     }
     pub async fn continuous_sample(&mut self, bus: bool, shunt: bool) -> Result<(), E> {
         self.modify_config(|c| {
-            c.with_sample_continuous(false)
+            c.with_sample_continuous(true)
                 .with_sample_bus(bus)
                 .with_sample_shunt(shunt)
         })
