@@ -491,9 +491,9 @@ const WDT: bool = false;
 async fn main(spawner: Spawner, p: Peripherals) {
     info!("Booting!");
     let mut neopixel = unwrap!(NeoPixelRgb::<'_, _, 1>::new(p.PWM0, use_pin_neo_pixel!(p)));
-    //if let Err(e) = neopixel.set(&[rgb::GREEN]).await {
-    //    error!("failed to set neopixel on boot: {:?}", e);
-    //}
+    if let Err(e) = neopixel.set_with_filter(&[rgb::GREEN], &mut filter::Brightness(10)).await {
+        error!("failed to set neopixel on boot: {:?}", e);
+    }
     info!("neopixel set on boot");
     let wdt_handle = if WDT { Some(start_wdt(p.WDT, &mut neopixel).await) } else { None };
     info!("WDT started");
