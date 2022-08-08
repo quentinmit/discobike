@@ -484,8 +484,8 @@ fn config() -> embassy_nrf::config::Config {
     config
 }
 
-const BLUETOOTH: bool = false;
-const WDT: bool = false;
+const BLUETOOTH: bool = true;
+const WDT: bool = true;
 
 #[embassy_executor::main(config = "config()")]
 async fn main(spawner: Spawner, p: Peripherals) {
