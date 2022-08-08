@@ -6,9 +6,10 @@ use ector::{actor, Actor, Address, Inbox};
 use embedded_hal_async::i2c;
 use embassy_executor::time::{Duration, Timer, Instant};
 use dim::si::{
-    f32consts::{A, LX, OHM},
+    f32consts::{V, A, LX, OHM},
     Volt, Lux,
 };
+use dim::traits::Dimensionless;
 
 pub struct Power<I2C> {
     ina219: INA219Async<I2C>,
@@ -49,9 +50,9 @@ where
                 })
             });
             info!(
-                "Vext = {:?}, Iext = {:?}",
-                defmt::Debug2Format(&vext),
-                defmt::Debug2Format(&current)
+                "Vext = {} V, Iext = {} A",
+                (vext/V).value(),
+                current.map(|v| *(v/A).value()),
             );
             if !state.display_on {
                 return Ok(());
