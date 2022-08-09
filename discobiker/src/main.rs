@@ -146,21 +146,21 @@ pub struct ExternalBatteryService {
     battery_volts: u8,
 }
 
-#[nrf_softdevice::gatt_service(uuid = "878d5329-5f2e-4308-85c9-bd1f00000000")]
+#[nrf_softdevice::gatt_service(uuid = "00000000-1fbd-c985-0843-2e5f29538d87")]
 pub struct HeadlightService {
-    #[characteristic(uuid = "878d5329-5f2e-4308-85c9-bd1f00010000", read, write)]
+    #[characteristic(uuid = "00000001-1fbd-c985-0843-2e5f29538d87", read, write)]
     headlight_mode: u8,
 }
 
-#[nrf_softdevice::gatt_service(uuid = "878d5329-5f2e-4308-85c9-bd1f01000000")]
+#[nrf_softdevice::gatt_service(uuid = "00000100-1fbd-c985-0843-2e5f29538d87")]
 pub struct UnderlightService {
-    #[characteristic(uuid = "878d5329-5f2e-4308-85c9-bd1f01010000", read, write)]
+    #[characteristic(uuid = "00000101-1fbd-c985-0843-2e5f29538d87", read, write)]
     underlight_mode: u8,
-    #[characteristic(uuid = "878d5329-5f2e-4308-85c9-bd1f01020000", read, write)]
+    #[characteristic(uuid = "00000102-1fbd-c985-0843-2e5f29538d87", read, write)]
     underlight_effect: u8,
-    #[characteristic(uuid = "878d5329-5f2e-4308-85c9-bd1f01030000", read, write)]
+    #[characteristic(uuid = "00000103-1fbd-c985-0843-2e5f29538d87", read, write)]
     underlight_color: [u8; 4],
-    #[characteristic(uuid = "878d5329-5f2e-4308-85c9-bd1f01040000", read, write)]
+    #[characteristic(uuid = "00000104-1fbd-c985-0843-2e5f29538d87", read, write)]
     underlight_speed: i16,
 }
 
