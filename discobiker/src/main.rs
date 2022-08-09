@@ -210,7 +210,7 @@ impl fmt::Display for EventTimer {
         if self.last == Instant::MIN {
             core::write!(formatter, "NEVER")
         } else {
-            core::write!(formatter, "{} s", (Instant::now() - self.last).as_secs())
+            core::write!(formatter, "{}s", (Instant::now() - self.last).as_secs())
         }
     }
 }
@@ -476,7 +476,7 @@ async fn adc_task(psaadc: SAADC, pin_vbat: PinVbat, interval: Duration) {
                 s
             })
         });
-        info!(
+        trace!(
             "vbat: {=i16} = {=f32} V = {=u8} %",
             &buf[0],
             vbat / V,

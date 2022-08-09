@@ -96,14 +96,12 @@ where
                 (accel[0].powi(P2::new()) + accel[1].powi(P2::new()) + accel[2].powi(P2::new()))
                     .sqrt();
 
-            if true {
-                trace!(
-                    "accel: {} m/s^2 gyro: {} rad/s accel_mag: {} m/s^2",
-                    accel.map(|v| *(v / MPS2).value()),
-                    gyro.map(|v| *(v / (RAD / S)).value()),
-                    (accel_mag / MPS2).value(),
-                );
-            }
+            trace!(
+                "accel: {} m/s^2 gyro: {} rad/s accel_mag: {} m/s^2",
+                accel.map(|v| *(v / MPS2).value()),
+                gyro.map(|v| *(v / (RAD / S)).value()),
+                (accel_mag / MPS2).value(),
+            );
 
             STATE.lock(|c| {
                 c.update(|s| {

@@ -46,7 +46,7 @@ where
                     s
                 })
             });
-            info!(
+            trace!(
                 "Vext = {} V, Iext = {} A",
                 (vext / V).value(),
                 current.map(|v| *(v / A).value()),
@@ -71,7 +71,7 @@ where
                     s
                 })
             });
-            info!("Vext = {:?}", defmt::Debug2Format(&vext));
+            trace!("Vext = {:?}", defmt::Debug2Format(&vext));
             if state.display_on {
                 return Ok(());
             }
