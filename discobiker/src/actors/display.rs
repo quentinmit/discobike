@@ -24,9 +24,11 @@ use ssd1306::{
 use bincode;
 
 extern crate dimensioned as dim;
-use dim::si::f32consts::{A, LX, MPS2, V};
-use dim::traits::Dimensioned;
+use dim::f32prefixes::HECTO;
+use dim::si::f32consts::{A, LX, MPS2, V, PA, K, M, FT};
+use dim::traits::{Dimensioned, Map};
 use physical_constants::STANDARD_ACCELERATION_OF_GRAVITY;
+use num_traits::Float;
 
 use ector::{actor, Actor, Address, Inbox};
 
@@ -117,9 +119,9 @@ where
         Self { display }
     }
 
-    async fn run_display<M>(&mut self, inbox: &mut M) -> Result<(), Error>
+    async fn run_display<MBOX>(&mut self, inbox: &mut MBOX) -> Result<(), Error>
     where
-        M: Inbox<DisplayMessage>,
+        MBOX: Inbox<DisplayMessage>,
     {
         use Error::FormatError;
         self.display.init().await?;
@@ -172,6 +174,21 @@ where
                 yield_now().await;
                 buf.clear();
                 // Line 2: XXXX.XXhPa XXX.XX'
+                state.pressure.write_dim(&mut buf, HECTO * PA, 7, 2).map_err(|_| FormatError(2))?;
+                buf.push_str_truncating("hPa ");
+                let altitude = state.pressure.map(|p|
+                    44330.0 * M * (1.0 - (p / (1013.0 * HECTO * PA)).map(|v| v.powf(0.1903)))
+                );
+                altitude.write_dim(&mut buf, FT, 6, 2).map_err(|_| FormatError(2))?;
+                Text::with_baseline(
+                    &buf,
+                    Point::new(0, 2 * line_height as i32),
+                    text_style,
+                    Baseline::Top,
+                )
+                .draw(&mut self.display)?;
+                yield_now().await;
+                buf.clear();
                 // Line 3: XXX°TXXX.XX°
                 buf.push_str_truncating("UL: ");
                 core::write!(

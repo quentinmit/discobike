@@ -56,10 +56,13 @@ use core::sync::atomic::*;
 
 #[macro_use]
 extern crate dimensioned as dim;
+use dim::f32prefixes::HECTO;
 use dim::si::{
-    f32consts::{LX, MPS2, V},
-    Ampere, Lux, MeterPerSecond2, Volt,
+    f32consts::{LX, MPS2, V, PA},
+    Ampere, Lux, MeterPerSecond2, Volt, Pascal, Kelvin,
 };
+
+const CELSIUS_ZERO: f32 = 273.15;
 
 macro_rules! define_pin {
     ($name:ident, $pin:ident) => {
@@ -281,7 +284,10 @@ pub struct ActualState {
     vext: Option<Volt<f32>>,
     current: Option<Ampere<f32>>,
     accel_mag: Option<MeterPerSecond2<f32>>,
+    accel_temperature: Option<Kelvin<f32>>,
     lux: Option<Lux<f32>>,
+    pressure: Option<Pascal<f32>>,
+    temperature: Option<Kelvin<f32>>,
 }
 
 pub static STATE: BlockingMutex<ThreadModeRawMutex, Cell<ActualState>> =
@@ -302,7 +308,10 @@ pub static STATE: BlockingMutex<ThreadModeRawMutex, Cell<ActualState>> =
         vext: None,
         current: None,
         accel_mag: None,
+        accel_temperature: None,
         lux: None,
+        pressure: None,
+        temperature: None,
     }));
 
 fn bluetooth_start_server(sd: &mut Softdevice) -> Result<(), gatt_server::RegisterError> {
@@ -638,6 +647,14 @@ async fn main(spawner: Spawner, p: Peripherals) {
         actors::imu::Imu<I2cDevice>,
         actors::imu::Imu::new(I2cBusDevice::new(i2c_bus))
     );
+
+    let barometer = spawn_actor!(
+        spawner,
+        BAROMETER,
+        actors::barometer::Barometer<I2cDevice>,
+        actors::barometer::Barometer::new(I2cBusDevice::new(i2c_bus))
+    );
+    barometer.notify(actors::barometer::BarometerMessage::On).await;
 
     if BLUETOOTH {
         unwrap!(bluetooth_start_server(sd));

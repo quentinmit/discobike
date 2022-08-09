@@ -184,6 +184,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "bme280"
+version = "0.4.4"
+dependencies = [
+ "defmt",
+ "embedded-hal 1.0.0-alpha.8",
+ "embedded-hal-async",
+ "maybe-async-cfg",
+]
+
+[[package]]
 name = "bytemuck"
 version = "1.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -479,6 +489,7 @@ dependencies = [
  "arrayvec",
  "atomic_float",
  "bincode",
+ "bme280",
  "byteorder",
  "cortex-m",
  "cortex-m-rt",
@@ -671,6 +682,7 @@ dependencies = [
  "defmt",
  "embassy-macros",
  "embedded-hal 0.2.7",
+ "embedded-hal 1.0.0-alpha.8",
  "embedded-hal-async",
  "futures-util",
 ]

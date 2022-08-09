@@ -1,7 +1,7 @@
-use crate::{LSM6DS33_ADDR, STATE};
+use crate::{LSM6DS33_ADDR, STATE, CELSIUS_ZERO};
 use core::fmt;
 use defmt::*;
-use dim::si::{f32consts::MPS2, MeterPerSecond2};
+use dim::si::{f32consts::{K, MPS2}, Kelvin, MeterPerSecond2};
 use dim::typenum::P2;
 use dim::ucum::{
     self,
@@ -92,6 +92,7 @@ where
                 gyro_raw.1 * RAD / S,
                 gyro_raw.2 * RAD / S,
             ];
+            let temp = (lsm6ds33.read_temperature().await? + CELSIUS_ZERO) * K;
             let accel_mag =
                 (accel[0].powi(P2::new()) + accel[1].powi(P2::new()) + accel[2].powi(P2::new()))
                     .sqrt();
@@ -110,6 +111,7 @@ where
                     if s.accel_mag.map_or(false, |v| v > 12.0 * MPS2) {
                         s.move_timer.update();
                     }
+                    s.accel_temperature = Some(temp);
                     s
                 })
             });

@@ -17,7 +17,7 @@ opt-level = 3
 opt-level = 3
 
 [dependencies]
-embassy-executor = { version = "0.1.0", features = ["nightly", "defmt"]}
+embassy-executor = { version = "0.1.0", features = ["nightly", "defmt", "unstable-traits"]}
 embassy-util = { version = "0.1.0", features = ["nightly", "defmt"]}
 embassy-hal-common = { version = "0.1.0", features = ["defmt"] }
 embassy-nrf = { version = "0.1.0", features = [ "nightly", "defmt", "nrf52840", "gpiote", "time-driver-rtc1", "unstable-traits", "unstable-pac" ]}
@@ -60,6 +60,7 @@ num-derive = "0.3.3"
 num_enum = { version = "0.5.7", default-features = false }
 lsm6ds33 = { version = "0.2.0", default-features = false, features = ["async"] }
 maybe-async-cfg = "0.2.1"
+bme280 = { version = "0.4.4", default-features = false, features = ["async", "with_defmt"] }
 
 [patch.crates-io]
 embassy-executor = { git = "https://github.com/embassy-rs/embassy" }
@@ -85,3 +86,5 @@ dimensioned = { git = "https://github.com/quentinmit/dimensioned", branch = "no_
 bincode = { git = "https://github.com/bincode-org/bincode" }
 #lsm6ds33 = { git = "https://github.com/quentinmit/lsm6ds33", branch = "async" }
 lsm6ds33 = { path = "/Users/quentin/Software/lsm6ds33" }
+#bme280 = { git = "https://github.com/quentinmit/bme280-rs", branch = "async" }
+bme280 = { path = "/Users/quentin/Software/bme280-rs" }
