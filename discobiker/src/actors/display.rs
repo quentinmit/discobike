@@ -1,8 +1,8 @@
-use crate::{DESIRED_STATE, STATE};
+use crate::{DESIRED_STATE, STATE, CELSIUS_ZERO};
 use core::fmt;
 use core::fmt::Write;
 use defmt::{panic, *};
-use embassy_executor::time::{Duration, Instant, Timer};
+use embassy_executor::time::{Duration, Instant, Timer, Ticker};
 use embassy_util::yield_now;
 use embedded_graphics::prelude::*;
 use embedded_graphics::{
@@ -11,7 +11,7 @@ use embedded_graphics::{
     text::{Baseline, Text},
 };
 use futures::select_biased;
-use futures::FutureExt;
+use futures::{StreamExt, FutureExt};
 use staticvec::{StaticString, StaticVec};
 
 use embedded_hal_async::i2c;
@@ -26,11 +26,15 @@ use bincode;
 extern crate dimensioned as dim;
 use dim::f32prefixes::HECTO;
 use dim::si::f32consts::{A, LX, MPS2, V, PA, K, M, FT};
+use dim::si::Kelvin;
 use dim::traits::{Dimensioned, Map};
 use physical_constants::STANDARD_ACCELERATION_OF_GRAVITY;
 use num_traits::Float;
 
 use ector::{actor, Actor, Address, Inbox};
+
+const R: Kelvin<f32> = Kelvin::new(5.0/9.0);
+const FAHRENHEIT_ZERO: f32 = CELSIUS_ZERO * 9.0/5.0;
 
 pub struct Display<I2C, SIZE: DisplaySize> {
     // interface, mode, size, addr_mode, rotation
@@ -131,6 +135,7 @@ where
             .build();
         const COLS: usize = 128 / 6;
         let line_height = text_style.font.character_size.height;
+        let mut ticker = Ticker::every(Duration::from_millis(1000/10));
         loop {
             let state = STATE.lock(|c| c.get());
             if state.display_on {
@@ -163,7 +168,12 @@ where
                 yield_now().await;
                 buf.clear();
                 // Line 1: XXX°XXX° XXX.X°
-                buf.push_str_truncating("XXX°XXX° XXX.X°");
+                match state.accel_temperature {
+                    None => buf.push_str_truncating("XXX°XXX° ---.-°"),
+                    Some(temp) => {
+                        core::write!(&mut buf, "XXX°XXX° {:5.1}°", (temp / R) - FAHRENHEIT_ZERO).map_err(|_| FormatError(1))?;
+                    }
+                };
                 Text::with_baseline(
                     &buf,
                     Point::new(0, 1 * line_height as i32),
@@ -180,6 +190,7 @@ where
                     44330.0 * M * (1.0 - (p / (1013.0 * HECTO * PA)).map(|v| v.powf(0.1903)))
                 );
                 altitude.write_dim(&mut buf, FT, 6, 2).map_err(|_| FormatError(2))?;
+                buf.push_str_truncating("'");
                 Text::with_baseline(
                     &buf,
                     Point::new(0, 2 * line_height as i32),
@@ -258,7 +269,7 @@ where
                         DisplayMessage::Off => info!("display off"),
                     }
                 },
-                _ = Timer::after(Duration::from_millis(1000/5)).fuse() => (),
+                _ = ticker.next().fuse() => (),
             };
         }
         Ok(())

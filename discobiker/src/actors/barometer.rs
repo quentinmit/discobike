@@ -5,7 +5,6 @@ use defmt::{panic, *};
 use dim::f32prefixes::HECTO;
 use dim::si::{
     f32consts::{K, PA},
-    Pascal, Kelvin,
 };
 use futures::select_biased;
 use futures::FutureExt;
@@ -69,7 +68,7 @@ where
                     match message {
                         BarometerMessage::On => warn!("barometer on while already on"),
                         BarometerMessage::Off => {
-                            self.bme280.set_mode(SensorMode::Sleep).await;
+                            self.bme280.set_mode(SensorMode::Sleep).await?;
                             return Ok(());
                         },
                     }
@@ -86,7 +85,7 @@ where
             match inbox.next().await {
                 BarometerMessage::On => {
                     info!("barometer on");
-                    self.run_high_power(inbox).await;
+                    self.run_high_power(inbox).await?;
                 },
                 BarometerMessage::Off => warn!("barometer off while already off"),
             };
