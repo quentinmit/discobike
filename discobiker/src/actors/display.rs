@@ -43,7 +43,7 @@ pub enum DisplayMessage {
 #[derive(Debug)]
 pub enum Error {
     DisplayError(DisplayError),
-    FormatError(fmt::Error),
+    FormatError(isize),
 }
 
 impl From<DisplayError> for Error {
@@ -53,8 +53,8 @@ impl From<DisplayError> for Error {
 }
 
 impl From<fmt::Error> for Error {
-    fn from(e: fmt::Error) -> Self {
-        Self::FormatError(e)
+    fn from(_e: fmt::Error) -> Self {
+        Self::FormatError(-1)
     }
 }
 
@@ -121,6 +121,7 @@ where
     where
         M: Inbox<DisplayMessage>,
     {
+        use Error::FormatError;
         self.display.init().await?;
         let text_style = MonoTextStyleBuilder::new()
             .font(&FONT_6X10)
@@ -149,11 +150,11 @@ where
                 }
 
                 // Line 0: XX.XVext X.XXXA X.XXV
-                state.vext.write_dim(&mut buf, V, 4, 1)?;
+                state.vext.write_dim(&mut buf, V, 4, 1).map_err(|_| FormatError(0))?;
                 buf.push_str_truncating("Vext ");
-                state.current.write_dim(&mut buf, A, 5, 3)?;
+                state.current.write_dim(&mut buf, A, 5, 3).map_err(|_| FormatError(0))?;
                 buf.push_str_truncating("A ");
-                state.vbat.write_dim(&mut buf, V, 4, 2)?;
+                state.vbat.write_dim(&mut buf, V, 4, 2).map_err(|_| FormatError(0))?;
                 buf.push_str_truncating(if state.vbus_detected { "V" } else { "v" });
                 Text::with_baseline(&buf, Point::zero(), text_style, Baseline::Top)
                     .draw(&mut self.display)?;
@@ -178,7 +179,7 @@ where
                     "{:?} {:02X}",
                     desired_state.underlight_mode,
                     state.underlight_brightness
-                )?;
+                ).map_err(|_| FormatError(3))?;
                 Text::with_baseline(
                     &buf,
                     Point::new(0, 3 * line_height as i32),
@@ -194,9 +195,9 @@ where
                     STANDARD_ACCELERATION_OF_GRAVITY as f32 * MPS2,
                     6,
                     2,
-                )?;
+                ).map_err(|_| FormatError(4))?;
                 buf.push_str_truncating("G    ");
-                state.lux.write_dim(&mut buf, LX, 5, 0)?;
+                state.lux.write_dim(&mut buf, LX, 5, 0).map_err(|_| FormatError(4))?;
                 buf.push_str_truncating(" lux");
                 Text::with_baseline(
                     &buf,
@@ -211,11 +212,11 @@ where
                 buf.push_str_truncating("Mode: ");
                 core::write!(
                     &mut buf,
-                    "{:?} {:3} {}",
+                    "{:?} {:3.0} {}",
                     state.headlight_mode,
                     state.headlight_brightness * 100.0,
-                    state.move_timer
-                )?;
+                    state.move_timer,
+                ).map_err(|_| FormatError(5))?;
                 Text::with_baseline(
                     &buf,
                     Point::new(0, 5 * line_height as i32),
