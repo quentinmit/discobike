@@ -210,7 +210,7 @@ impl fmt::Display for EventTimer {
         if self.last == Instant::MIN {
             core::write!(formatter, "NEVER")
         } else {
-            core::write!(formatter, "{} s", (Instant::now() - Instant::MIN).as_secs())
+            core::write!(formatter, "{} s", (Instant::now() - self.last).as_secs())
         }
     }
 }
