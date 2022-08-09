@@ -227,7 +227,7 @@ pub async fn output_task(
                     s.headlight_brightness.step_towards(target_brightness, 0.01);
                 let target_taillight_brightness = if taillight_on { 1.0 } else { 0.0 };
                 s.taillight_brightness =
-                    s.taillight_brightness.step_towards(target_brightness, 0.05);
+                    s.taillight_brightness.step_towards(target_taillight_brightness, 0.05);
                 s
             })
         });
@@ -236,9 +236,9 @@ pub async fn output_task(
             PWM_MAX_HEADLIGHT - (PWM_MAX_HEADLIGHT as f32 * state.headlight_brightness) as u16,
         ); // TODO: Figure out how to invert polarity.
         if state.taillight_brightness == 0.0 {
-            taillight_pwm.set_duty(0, 0);
-            taillight_pwm.set_duty(1, 0);
-            taillight_pwm.set_duty(2, 0);
+            taillight_pwm.set_duty(0, PWM_MAX_TAILLIGHT);
+            taillight_pwm.set_duty(1, PWM_MAX_TAILLIGHT);
+            taillight_pwm.set_duty(2, PWM_MAX_TAILLIGHT);
         } else {
             let tail_phase =
                 (now.as_ticks() % TAIL_PERIOD.as_ticks()) as f32 / TAIL_PERIOD.as_ticks() as f32;
@@ -253,9 +253,9 @@ pub async fn output_task(
             let tail_pwm_1 = (255.0 * state.taillight_brightness * tail_intensity) as u16;
             let tail_pwm_2 = (255.0 * state.taillight_brightness * (1.0 - tail_intensity)) as u16;
 
-            taillight_pwm.set_duty(0, tail_pwm_1);
-            taillight_pwm.set_duty(1, tail_pwm_2);
-            taillight_pwm.set_duty(2, tail_pwm_2);
+            taillight_pwm.set_duty(0, PWM_MAX_TAILLIGHT-tail_pwm_1);
+            taillight_pwm.set_duty(1, PWM_MAX_TAILLIGHT-tail_pwm_2);
+            taillight_pwm.set_duty(2, PWM_MAX_TAILLIGHT-tail_pwm_2);
         }
 
         if underlight_on {
