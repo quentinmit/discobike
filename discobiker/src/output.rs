@@ -128,11 +128,6 @@ pub async fn output_task(
         let lux_value =
             color.map(|color| max(color.calculate_lux(), color.clear as f32 / (3.5 / LX))); // If C is overloaded, use RGB
 
-        //   // Update mode
-        //   accel_mag = vecMag(accel_evt.acceleration);
-        //   if (accel_mag > 12) {
-        //     last_move_time = now;
-        //   }
         //   // TODO: Use IMU angle for mode too?
 
         let vbus_detected = power.usbregstatus.read().vbusdetect().is_vbus_present();
