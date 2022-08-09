@@ -605,6 +605,11 @@ async fn main(spawner: Spawner, p: Peripherals) {
         actors::display::Display::new(I2cBusDevice::new(i2c_bus), DisplaySize128x64)
     );
 
+    let imu = spawn_actor!(
+        spawner, IMU, actors::imu::Imu<I2cDevice>,
+        actors::imu::Imu::new(I2cBusDevice::new(i2c_bus))
+    );
+
     if BLUETOOTH {
         unwrap!(bluetooth_start_server(sd));
         unwrap!(spawner.spawn(softdevice_task(sd)));

@@ -1,7 +1,7 @@
 use crate::{LSM6DS33_ADDR, STATE};
 use core::fmt;
 use defmt::*;
-use dim::derived;
+use dim::{derived, Dimensionless};
 use dim::{typenum::Pow, Sqrt};
 use dim::typenum::P2;
 use dim::si::{f32consts::MPS2, MeterPerSecond2};
@@ -19,7 +19,7 @@ derived!(ucum, UCUM: RadianPerSecond = Radian / Second);
 //const RADPS: RadianPerSecond<f32> = RAD / S;
 
 pub struct Imu<I2C> {
-    lsm6ds33: Lsm6ds33Async<I2C>,
+    i2c: Option<I2C>,
 }
 
 pub enum ImuMessage {}
@@ -55,36 +55,34 @@ impl<I2C, E> Imu<I2C>
 where
     I2C: i2c::I2c<Error = E>,
 {
-    pub async fn new(i2c: I2C) -> Result<Self, Error<I2C>> {
-        let lsm6ds33 = Lsm6ds33Async::new(i2c, LSM6DS33_ADDR).await?;
-        Ok(Imu { lsm6ds33 })
+    pub fn new(i2c: I2C) -> Self {
+        Self { i2c: Some(i2c) }
     }
-    async fn run_imu<M>(&mut self, _inbox: &mut M) -> Result<(), Error<I2C>>
+    async fn run_imu<M>(&mut self, lsm6ds33: &mut Lsm6ds33Async<I2C>, _inbox: &mut M) -> Result<(), Error<I2C>>
     where
         M: Inbox<ImuMessage>,
     {
-        info!("initializing imu");
-        self.lsm6ds33
+        lsm6ds33
             .set_accelerometer_scale(AccelerometerScale::G02)
             .await?;
-        self.lsm6ds33
+        lsm6ds33
             .set_gyroscope_scale(GyroscopeFullScale::Dps245)
             .await?;
-        self.lsm6ds33
+        lsm6ds33
             .set_accelerometer_output(AccelerometerOutput::Rate104)
             .await?;
-        self.lsm6ds33
+        lsm6ds33
             .set_gyroscope_output(GyroscopeOutput::Rate104)
             .await?;
-        self.lsm6ds33
+        lsm6ds33
             .set_accelerometer_bandwidth(AccelerometerBandwidth::Freq400)
             .await?;
-        self.lsm6ds33.set_low_power_mode(true).await?;
+        lsm6ds33.set_low_power_mode(true).await?;
         loop {
-            let accel_raw = self.lsm6ds33.read_accelerometer().await?; // m/s^2
+            let accel_raw = lsm6ds33.read_accelerometer().await?; // m/s^2
             let accel: [MeterPerSecond2<f32>; 3] =
                 [accel_raw.0 * MPS2, accel_raw.1 * MPS2, accel_raw.2 * MPS2];
-            let gyro_raw = self.lsm6ds33.read_gyro().await?; // rads/s
+            let gyro_raw = lsm6ds33.read_gyro().await?; // rads/s
             let gyro: [RadianPerSecond<f32>; 3] = [
                 gyro_raw.0 * RAD / S,
                 gyro_raw.1 * RAD / S,
@@ -92,6 +90,13 @@ where
             ];
             let accel_mag =
                 (accel[0].powi(P2::new()) + accel[1].powi(P2::new()) + accel[2].powi(P2::new())).sqrt();
+
+            if false {
+                trace!("accel: {} m/s^2 gyro: {} rad/s",
+                    accel.map(|v| *(v / MPS2).value()),
+                    gyro.map(|v| *(v/ (RAD / S)).value()),
+                );
+            }
 
             STATE.lock(|c| {
                 c.update(|s| {
@@ -122,7 +127,19 @@ where
     {
         loop {
             info!("run_imu");
-            let res = self.run_imu(&mut inbox).await;
+            let mut i2c = self.i2c.take().unwrap();
+            info!("initializing imu");
+            let mut lsm6ds33 = Lsm6ds33Async::new(i2c, LSM6DS33_ADDR).await;
+            match lsm6ds33 {
+                Ok(mut lsm6ds33) => {
+                    let res = self.run_imu(&mut lsm6ds33, &mut inbox).await;
+                    self.i2c.replace(lsm6ds33.release());
+                },
+                Err((i2c, e)) => {
+                    error!("constructing lsm6ds33 failed: {:?}", Debug2Format(&e));
+                    self.i2c.replace(i2c);
+                },
+            };
             /*res.map_err(|e| {
                 error!("run_imu failed: {:?}", Debug2Format(&e));
             });*/

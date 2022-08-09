@@ -1168,7 +1168,6 @@ dependencies = [
 [[package]]
 name = "lsm6ds33"
 version = "0.2.0"
-source = "git+https://github.com/quentinmit/lsm6ds33?branch=async#250671f9f0fa26969121e1ab1071149291e5badb"
 dependencies = [
  "embedded-hal-async",
  "maybe-async-cfg",
