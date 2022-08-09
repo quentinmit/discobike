@@ -1,15 +1,15 @@
 use crate::{LSM6DS33_ADDR, STATE};
 use core::fmt;
 use defmt::*;
-use dim::{derived, Dimensionless};
-use dim::{typenum::Pow, Sqrt};
-use dim::typenum::P2;
 use dim::si::{f32consts::MPS2, MeterPerSecond2};
+use dim::typenum::P2;
 use dim::ucum::{
     self,
     f32consts::{DEG, RAD, S},
     Radian, Second, UCUM,
 };
+use dim::{derived, Dimensionless};
+use dim::{typenum::Pow, Sqrt};
 use ector::{actor, Actor, Address, Inbox};
 use embassy_executor::time::{Duration, Timer};
 use embedded_hal_async::i2c;
@@ -58,7 +58,11 @@ where
     pub fn new(i2c: I2C) -> Self {
         Self { i2c: Some(i2c) }
     }
-    async fn run_imu<M>(&mut self, lsm6ds33: &mut Lsm6ds33Async<I2C>, _inbox: &mut M) -> Result<(), Error<I2C>>
+    async fn run_imu<M>(
+        &mut self,
+        lsm6ds33: &mut Lsm6ds33Async<I2C>,
+        _inbox: &mut M,
+    ) -> Result<(), Error<I2C>>
     where
         M: Inbox<ImuMessage>,
     {
@@ -89,7 +93,8 @@ where
                 gyro_raw.2 * RAD / S,
             ];
             let accel_mag =
-                (accel[0].powi(P2::new()) + accel[1].powi(P2::new()) + accel[2].powi(P2::new())).sqrt();
+                (accel[0].powi(P2::new()) + accel[1].powi(P2::new()) + accel[2].powi(P2::new()))
+                    .sqrt();
 
             if false {
                 trace!("accel: {} m/s^2 gyro: {} rad/s",
@@ -102,7 +107,7 @@ where
                 c.update(|s| {
                     let mut s = s;
                     s.accel_mag = Some(accel_mag);
-                    if s.accel_mag.map_or(false, |v| v > 12.0*MPS2) {
+                    if s.accel_mag.map_or(false, |v| v > 12.0 * MPS2) {
                         s.move_timer.update();
                     }
                     s
@@ -134,11 +139,11 @@ where
                 Ok(mut lsm6ds33) => {
                     let res = self.run_imu(&mut lsm6ds33, &mut inbox).await;
                     self.i2c.replace(lsm6ds33.release());
-                },
+                }
                 Err((i2c, e)) => {
                     error!("constructing lsm6ds33 failed: {:?}", Debug2Format(&e));
                     self.i2c.replace(i2c);
-                },
+                }
             };
             /*res.map_err(|e| {
                 error!("run_imu failed: {:?}", Debug2Format(&e));

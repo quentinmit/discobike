@@ -119,7 +119,7 @@ struct BusVoltage {
 
 bitfield_u16!(BusVoltage);
 
-#[maybe_async_cfg::maybe(sync(keep_self), async(feature="async"))]
+#[maybe_async_cfg::maybe(sync(keep_self), async(feature = "async"))]
 pub struct INA219<I2C> {
     i2c: I2C,
     address: u8,
@@ -129,7 +129,7 @@ pub struct INA219<I2C> {
     shunt_resistance: Option<Ohm<f32>>,
 }
 
-#[maybe_async_cfg::maybe(sync(keep_self), async(feature="async", idents(i2c_mod(fn))))]
+#[maybe_async_cfg::maybe(sync(keep_self), async(feature = "async", idents(i2c_mod(fn))))]
 impl<I2C, E> INA219<I2C>
 where
     I2C: i2c_mod::I2c<Error = E>,

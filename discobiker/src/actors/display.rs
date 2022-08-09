@@ -1,11 +1,8 @@
-use staticvec::{StaticVec, StaticString};
 use crate::{DESIRED_STATE, STATE};
 use core::fmt;
 use core::fmt::Write;
-use defmt::{*, panic};
-use futures::FutureExt;
-use futures::select_biased;
-use embassy_executor::time::{Duration, Timer, Instant};
+use defmt::{panic, *};
+use embassy_executor::time::{Duration, Instant, Timer};
 use embassy_util::yield_now;
 use embedded_graphics::prelude::*;
 use embedded_graphics::{
@@ -13,6 +10,9 @@ use embedded_graphics::{
     pixelcolor::BinaryColor,
     text::{Baseline, Text},
 };
+use futures::select_biased;
+use futures::FutureExt;
+use staticvec::{StaticString, StaticVec};
 
 use embedded_hal_async::i2c;
 
@@ -24,7 +24,7 @@ use ssd1306::{
 use bincode;
 
 extern crate dimensioned as dim;
-use dim::si::{f32consts::{V, A, MPS2, LX}};
+use dim::si::f32consts::{A, LX, MPS2, V};
 use dim::traits::Dimensioned;
 use physical_constants::STANDARD_ACCELERATION_OF_GRAVITY;
 
@@ -62,18 +62,17 @@ trait WriteDim<T, W: Write> {
     fn write_dim(self, w: &mut W, unit: T, width: usize, decimals: usize) -> fmt::Result;
 }
 
-impl <T, W> WriteDim<T, W> for Option<T>
+impl<T, W> WriteDim<T, W> for Option<T>
 where
     T: Dimensioned + core::ops::Div + core::ops::Mul,
     <T as Dimensioned>::Value: PartialOrd<f32>,
     <T as core::ops::Div>::Output: fmt::Display,
     W: Write,
 {
-    fn write_dim(self, w: &mut W, unit: T, width: usize, decimals: usize) -> fmt::Result
-    {
+    fn write_dim(self, w: &mut W, unit: T, width: usize, decimals: usize) -> fmt::Result {
         match self {
             None => {
-                for _ in 0..width-decimals-1 {
+                for _ in 0..width - decimals - 1 {
                     w.write_char('-')?;
                 }
                 if decimals > 0 {
@@ -84,10 +83,20 @@ where
                 } else {
                     w.write_char('-')?;
                 };
-            },
+            }
             Some(v) => {
-                let decimals = if decimals > 0 && v.value_unsafe() < &0.0 { decimals - 1 } else { decimals };
-                core::write!(w, "{:0width$.precision$}", v/unit, width = width, precision = decimals)?;
+                let decimals = if decimals > 0 && v.value_unsafe() < &0.0 {
+                    decimals - 1
+                } else {
+                    decimals
+                };
+                core::write!(
+                    w,
+                    "{:0width$.precision$}",
+                    v / unit,
+                    width = width,
+                    precision = decimals
+                )?;
             }
         };
         Ok(())
@@ -127,9 +136,12 @@ where
                 let desired_state = DESIRED_STATE.lock(|c| c.get());
 
                 let mut x = StaticVec::<u8, 128>::filled_with(|| 0);
-                match bincode::serde::encode_into_slice(&state, x.as_mut_slice(), bincode::config::standard()) {
-                    Err(e) =>
-                        error!("serializing state: {}", Debug2Format(&e)),
+                match bincode::serde::encode_into_slice(
+                    &state,
+                    x.as_mut_slice(),
+                    bincode::config::standard(),
+                ) {
+                    Err(e) => error!("serializing state: {}", Debug2Format(&e)),
                     Ok(n) => {
                         x.truncate(n);
                         info!("current state: {=[u8]}", x.as_slice());
@@ -149,37 +161,76 @@ where
                 buf.clear();
                 // Line 1: XXX°XXX° XXX.X°
                 buf.push_str_truncating("XXX°XXX° XXX.X°");
-                Text::with_baseline(&buf, Point::new(0, 1*line_height as i32), text_style, Baseline::Top)
-                    .draw(&mut self.display)?;
+                Text::with_baseline(
+                    &buf,
+                    Point::new(0, 1 * line_height as i32),
+                    text_style,
+                    Baseline::Top,
+                )
+                .draw(&mut self.display)?;
                 yield_now().await;
                 buf.clear();
                 // Line 2: XXXX.XXhPa XXX.XX'
                 // Line 3: XXX°TXXX.XX°
                 buf.push_str_truncating("UL: ");
-                core::write!(&mut buf, "{:?} {:02X}", desired_state.underlight_mode, state.underlight_brightness)?;
-                Text::with_baseline(&buf, Point::new(0, 3*line_height as i32), text_style, Baseline::Top)
-                    .draw(&mut self.display)?;
+                core::write!(
+                    &mut buf,
+                    "{:?} {:02X}",
+                    desired_state.underlight_mode,
+                    state.underlight_brightness
+                )?;
+                Text::with_baseline(
+                    &buf,
+                    Point::new(0, 3 * line_height as i32),
+                    text_style,
+                    Baseline::Top,
+                )
+                .draw(&mut self.display)?;
                 yield_now().await;
                 buf.clear();
                 // Line 4: XXX.XXG    XXXXX lux
-                state.accel_mag.write_dim(&mut buf, STANDARD_ACCELERATION_OF_GRAVITY as f32*MPS2, 6, 2)?;
+                state.accel_mag.write_dim(
+                    &mut buf,
+                    STANDARD_ACCELERATION_OF_GRAVITY as f32 * MPS2,
+                    6,
+                    2,
+                )?;
                 buf.push_str_truncating("G    ");
                 state.lux.write_dim(&mut buf, LX, 5, 0)?;
                 buf.push_str_truncating(" lux");
-                Text::with_baseline(&buf, Point::new(0, 4*line_height as i32), text_style, Baseline::Top)
-                    .draw(&mut self.display)?;
+                Text::with_baseline(
+                    &buf,
+                    Point::new(0, 4 * line_height as i32),
+                    text_style,
+                    Baseline::Top,
+                )
+                .draw(&mut self.display)?;
                 yield_now().await;
                 buf.clear();
                 // Line 5: Mode: Day XXX% XXs
                 buf.push_str_truncating("Mode: ");
-                core::write!(&mut buf, "{:?} {:3} {}", state.headlight_mode, state.headlight_brightness * 100.0, state.move_timer)?;
-                Text::with_baseline(&buf, Point::new(0, 5*line_height as i32), text_style, Baseline::Top)
-                    .draw(&mut self.display)?;
+                core::write!(
+                    &mut buf,
+                    "{:?} {:3} {}",
+                    state.headlight_mode,
+                    state.headlight_brightness * 100.0,
+                    state.move_timer
+                )?;
+                Text::with_baseline(
+                    &buf,
+                    Point::new(0, 5 * line_height as i32),
+                    text_style,
+                    Baseline::Top,
+                )
+                .draw(&mut self.display)?;
                 yield_now().await;
                 buf.clear();
                 let start_flush = Instant::now();
                 self.display.flush().await?;
-                info!("display.flush took {} µs", start_flush.elapsed().as_micros());
+                info!(
+                    "display.flush took {} µs",
+                    start_flush.elapsed().as_micros()
+                );
             }
 
             select_biased! {

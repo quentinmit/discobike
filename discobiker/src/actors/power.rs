@@ -1,15 +1,15 @@
+use crate::drivers::ina219::{ADCMode, INA219Async, INA219_ADDR};
 use crate::STATE;
 use core::fmt;
-use defmt::{*, panic};
-use crate::drivers::ina219::{INA219Async, INA219_ADDR, ADCMode};
-use ector::{actor, Actor, Address, Inbox};
-use embedded_hal_async::i2c;
-use embassy_executor::time::{Duration, Timer, Instant};
+use defmt::{panic, *};
 use dim::si::{
-    f32consts::{V, A, LX, OHM},
-    Volt, Lux,
+    f32consts::{A, LX, OHM, V},
+    Lux, Volt,
 };
 use dim::traits::Dimensionless;
+use ector::{actor, Actor, Address, Inbox};
+use embassy_executor::time::{Duration, Instant, Timer};
+use embedded_hal_async::i2c;
 
 pub struct Power<I2C> {
     ina219: INA219Async<I2C>,
@@ -20,7 +20,7 @@ pub enum PowerMessage {
     DisplayOff,
 }
 
-const POLL_HIGH_EVERY: Duration = Duration::from_millis(1000/30);
+const POLL_HIGH_EVERY: Duration = Duration::from_millis(1000 / 30);
 const POLL_LOW_EVERY: Duration = Duration::from_millis(1000);
 
 impl<I2C, E> Power<I2C>
@@ -29,13 +29,10 @@ where
 {
     pub fn new(i2c: I2C) -> Self {
         let ina219 = INA219Async::new(i2c, INA219_ADDR);
-        Power {
-            ina219
-        }
+        Power { ina219 }
     }
 
-    async fn run_high_power(&mut self) -> Result<(), E>
-    {
+    async fn run_high_power(&mut self) -> Result<(), E> {
         self.ina219.continuous_sample(true, true).await?;
         loop {
             let vext = self.ina219.get_bus_voltage().await?;
@@ -51,8 +48,8 @@ where
             });
             info!(
                 "Vext = {} V, Iext = {} A",
-                (vext/V).value(),
-                current.map(|v| *(v/A).value()),
+                (vext / V).value(),
+                current.map(|v| *(v / A).value()),
             );
             if !state.display_on {
                 return Ok(());
@@ -60,8 +57,7 @@ where
             Timer::after(POLL_HIGH_EVERY).await;
         }
     }
-    async fn run_low_power(&mut self) -> Result<(), E>
-    {
+    async fn run_low_power(&mut self) -> Result<(), E> {
         loop {
             self.ina219.trigger_sample(true, false).await?;
             let vext = self.ina219.get_bus_voltage().await?;
@@ -109,7 +105,7 @@ where
     type Message<'m> = PowerMessage;
 
     async fn on_mount<M>(&mut self, _: Address<PowerMessage>, mut inbox: M)
-        where
+    where
         M: Inbox<PowerMessage>,
     {
         loop {

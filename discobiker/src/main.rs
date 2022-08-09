@@ -7,13 +7,11 @@
 
 use core::cell::{Cell, RefCell};
 use core::convert::TryInto;
-use core::mem;
 use core::fmt;
+use core::mem;
 use defmt::*;
-use embassy_util::blocking_mutex::ThreadModeMutex;
 use embassy_executor::executor::Spawner;
-use embassy_executor::time::{Duration, Timer, Instant};
-use embassy_util::Forever;
+use embassy_executor::time::{Duration, Instant, Timer};
 use embassy_nrf as _;
 use embassy_nrf::gpio::{Input, Level, Output, OutputDrive, Pull};
 use embassy_nrf::interrupt;
@@ -23,40 +21,45 @@ use embassy_nrf::twim::{self, Twim};
 use embassy_nrf::wdt;
 use embassy_nrf::{pac, saadc};
 use embassy_nrf::{peripherals, Peripherals};
+use embassy_util::blocking_mutex::ThreadModeMutex;
+use embassy_util::Forever;
 
+use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice as I2cBusDevice;
 use embassy_util::blocking_mutex::{raw::ThreadModeRawMutex, Mutex as BlockingMutex};
 use embassy_util::mutex::Mutex;
-use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice as I2cBusDevice;
 
 use drogue_device::drivers::led::neopixel::{filter, rgb, rgb::NeoPixelRgb};
 
-use nrf_softdevice::ble::{gatt_server, peripheral};
-use nrf_softdevice::{raw, Softdevice, ble::Connection};
 use defmt_rtt as _;
+use nrf_softdevice::ble::{gatt_server, peripheral};
+use nrf_softdevice::{ble::Connection, raw, Softdevice};
 use panic_probe as _;
 
 use apds9960::Apds9960Async as Apds9960;
 
-use paste::paste;
 use num_enum::TryFromPrimitive;
+use paste::paste;
 
 use ector::spawn_actor;
 
+mod actors;
 mod drivers;
 mod output;
-mod actors;
 use ssd1306::size::DisplaySize128x64;
 
-use serde::{Serialize, Deserialize, Serializer};
+use serde::{Deserialize, Serialize, Serializer};
 
 use num_traits::float::Float;
 
-use core::sync::atomic::*;
 use atomic_float::AtomicF32;
+use core::sync::atomic::*;
 
 #[macro_use]
 extern crate dimensioned as dim;
-use dim::si::{Volt, Ampere, MeterPerSecond2, Lux, f32consts::{V, MPS2, LX}};
+use dim::si::{
+    f32consts::{LX, MPS2, V},
+    Ampere, Lux, MeterPerSecond2, Volt,
+};
 
 macro_rules! define_pin {
     ($name:ident, $pin:ident) => {
@@ -179,11 +182,11 @@ static SERVER_FOREVER: Forever<Server> = Forever::new();
 
 #[derive(Copy, Clone)]
 pub struct EventTimer {
-    last: Instant
+    last: Instant,
 }
 impl EventTimer {
     pub const fn new() -> Self {
-        EventTimer{last: Instant::MIN}
+        EventTimer { last: Instant::MIN }
     }
     pub fn update(&mut self) {
         self.last = Instant::now();
@@ -198,7 +201,7 @@ impl Serialize for EventTimer {
     where
         S: Serializer,
     {
-        serializer.serialize_f32(self.last.elapsed().as_micros() as f32/1e6)
+        serializer.serialize_f32(self.last.elapsed().as_micros() as f32 / 1e6)
     }
 }
 
@@ -252,12 +255,13 @@ pub struct DesiredState {
     // underlight_color
 }
 
-pub static DESIRED_STATE: BlockingMutex::<ThreadModeRawMutex, Cell<DesiredState>> = BlockingMutex::new(Cell::new(DesiredState {
-    headlight_mode: HeadlightMode::Auto,
-    underlight_mode: UnderlightMode::Auto,
-    underlight_effect: Effect::Rainbow,
-    underlight_speed: 1024,
-}));
+pub static DESIRED_STATE: BlockingMutex<ThreadModeRawMutex, Cell<DesiredState>> =
+    BlockingMutex::new(Cell::new(DesiredState {
+        headlight_mode: HeadlightMode::Auto,
+        underlight_mode: UnderlightMode::Auto,
+        underlight_effect: Effect::Rainbow,
+        underlight_speed: 1024,
+    }));
 
 #[derive(Copy, Clone, Serialize)]
 pub struct ActualState {
@@ -280,25 +284,26 @@ pub struct ActualState {
     lux: Option<Lux<f32>>,
 }
 
-pub static STATE: BlockingMutex::<ThreadModeRawMutex, Cell<ActualState>> = BlockingMutex::new(Cell::new(ActualState {
-    headlight_mode: HeadlightMode::Off,
-    headlight_brightness: 0.0,
-    taillight_brightness: 0.0,
-    underlight_brightness: 0,
-    display_on: false,
-    vbus_detected: false,
+pub static STATE: BlockingMutex<ThreadModeRawMutex, Cell<ActualState>> =
+    BlockingMutex::new(Cell::new(ActualState {
+        headlight_mode: HeadlightMode::Off,
+        headlight_brightness: 0.0,
+        taillight_brightness: 0.0,
+        underlight_brightness: 0,
+        display_on: false,
+        vbus_detected: false,
 
-    vbus_timer: EventTimer::new(),
-    move_timer: EventTimer::new(),
-    vext_present_timer: EventTimer::new(),
-    vext_poll_timer: EventTimer::new(),
+        vbus_timer: EventTimer::new(),
+        move_timer: EventTimer::new(),
+        vext_present_timer: EventTimer::new(),
+        vext_poll_timer: EventTimer::new(),
 
-    vbat: None,
-    vext: None,
-    current: None,
-    accel_mag: None,
-    lux: None,
-}));
+        vbat: None,
+        vext: None,
+        current: None,
+        accel_mag: None,
+        lux: None,
+    }));
 
 fn bluetooth_start_server(sd: &mut Softdevice) -> Result<(), gatt_server::RegisterError> {
     let server: &Server = SERVER_FOREVER.put(Server::new(sd)?);
@@ -311,10 +316,7 @@ fn bluetooth_start_server(sd: &mut Softdevice) -> Result<(), gatt_server::Regist
 }
 
 #[embassy_executor::task]
-async fn bluetooth_task(
-    spawner: Spawner,
-    sd: &'static Softdevice,
-) {
+async fn bluetooth_task(spawner: Spawner, sd: &'static Softdevice) {
     #[rustfmt::skip]
     let adv_data = &[
         // 0x01 = flags
@@ -347,69 +349,78 @@ async fn bluetooth_task(
 }
 
 #[embassy_executor::task(pool_size = "4")]
-pub async fn gatt_server_task(
-    sd: &'static Softdevice,
-    conn: Connection,
-    server: &'static Server,
-) {
+pub async fn gatt_server_task(sd: &'static Softdevice, conn: Connection, server: &'static Server) {
     // Run the GATT server on the connection. This returns when the connection gets disconnected.
     let res = gatt_server::run(&conn, server, |e| match e {
-        ServerEvent::Bas(_) => {},
-        ServerEvent::ExternalBattery(_) => {},
+        ServerEvent::Bas(_) => {}
+        ServerEvent::ExternalBattery(_) => {}
         ServerEvent::Headlight(e) => match e {
             HeadlightServiceEvent::HeadlightModeWrite(val) => {
-                DESIRED_STATE.lock(|c| c.update(|s| {
-                    let mut s = s;
-                    if let Ok(val) = val.try_into() {
-                        s.headlight_mode = val;
-                    }
-                    s
-                }));
-            },
+                DESIRED_STATE.lock(|c| {
+                    c.update(|s| {
+                        let mut s = s;
+                        if let Ok(val) = val.try_into() {
+                            s.headlight_mode = val;
+                        }
+                        s
+                    })
+                });
+            }
         },
         ServerEvent::Underlight(e) => match e {
             UnderlightServiceEvent::UnderlightModeWrite(val) => {
-                DESIRED_STATE.lock(|c| c.update(|s| {
-                    let mut s = s;
-                    if let Ok(val) = val.try_into() {
-                        s.underlight_mode = val;
-                    }
-                    s
-                }));
-            },
+                DESIRED_STATE.lock(|c| {
+                    c.update(|s| {
+                        let mut s = s;
+                        if let Ok(val) = val.try_into() {
+                            s.underlight_mode = val;
+                        }
+                        s
+                    })
+                });
+            }
             UnderlightServiceEvent::UnderlightEffectWrite(val) => {
-                DESIRED_STATE.lock(|c| c.update(|s| {
-                    let mut s = s;
-                    if let Ok(val) = val.try_into() {
-                        s.underlight_effect = val;
-                    }
-                    s
-                }));
-            },
+                DESIRED_STATE.lock(|c| {
+                    c.update(|s| {
+                        let mut s = s;
+                        if let Ok(val) = val.try_into() {
+                            s.underlight_effect = val;
+                        }
+                        s
+                    })
+                });
+            }
             UnderlightServiceEvent::UnderlightColorWrite(val) => {
-                DESIRED_STATE.lock(|c| c.update(|s| {
-                    let mut s = s;
-                    //TODO: s.underlight_color = val;
-                    s
-                }));
-            },
+                DESIRED_STATE.lock(|c| {
+                    c.update(|s| {
+                        let mut s = s;
+                        //TODO: s.underlight_color = val;
+                        s
+                    })
+                });
+            }
             UnderlightServiceEvent::UnderlightSpeedWrite(val) => {
-                DESIRED_STATE.lock(|c| c.update(|s| {
-                    let mut s = s;
-                    s.underlight_speed = val;
-                    s
-                }));
-            },
+                DESIRED_STATE.lock(|c| {
+                    c.update(|s| {
+                        let mut s = s;
+                        s.underlight_speed = val;
+                        s
+                    })
+                });
+            }
         },
     })
-        .await;
+    .await;
 
     if let Err(e) = res {
         info!("gatt_server run exited with error: {:?}", e);
     }
 }
 
-fn calculate_adc_one_bit(config: &saadc::Config, channel_config: &saadc::ChannelConfig) -> Volt<f32> {
+fn calculate_adc_one_bit(
+    config: &saadc::Config,
+    channel_config: &saadc::ChannelConfig,
+) -> Volt<f32> {
     use saadc::*;
     // RESULT = [V(P) – V(N) ] * GAIN/REFERENCE * 2(RESOLUTION - m)
     // buf[0] = V * (1/6) / (0.6 volts) * 2^12
@@ -422,11 +433,11 @@ fn calculate_adc_one_bit(config: &saadc::Config, channel_config: &saadc::Channel
         _ => defmt::panic!("unsupported resolution"),
     };
     let adc_gain = match channel_config.gain {
-        Gain::GAIN1_6 => 1.0/6.0,
-        Gain::GAIN1_5 => 1.0/5.0,
-        Gain::GAIN1_4 => 1.0/4.0,
-        Gain::GAIN1_3 => 1.0/3.0,
-        Gain::GAIN1_2 => 1.0/2.0,
+        Gain::GAIN1_6 => 1.0 / 6.0,
+        Gain::GAIN1_5 => 1.0 / 5.0,
+        Gain::GAIN1_4 => 1.0 / 4.0,
+        Gain::GAIN1_3 => 1.0 / 3.0,
+        Gain::GAIN1_2 => 1.0 / 2.0,
         Gain::GAIN1 => 1.0,
         Gain::GAIN2 => 2.0,
         Gain::GAIN4 => 4.0,
@@ -453,19 +464,23 @@ async fn adc_task(psaadc: SAADC, pin_vbat: PinVbat, interval: Duration) {
         saadc.sample(&mut buf).await;
         // Vbat/2 is being sampled
         let vbat = (buf[0] as f32) * 2.0 * adc_one_bit;
-        let vbat_percent = if vbat <= 0.0*V {
+        let vbat_percent = if vbat <= 0.0 * V {
             0
         } else {
-            123 - (123.0 / ((1f32 + (vbat / (3.7*V)).powi(80)).powf(0.165))) as u8
+            123 - (123.0 / ((1f32 + (vbat / (3.7 * V)).powi(80)).powf(0.165))) as u8
         };
-        STATE.lock(|c| { c.update(|s| {
-            let mut s = s;
-            s.vbat = Some(vbat);
-            s
-        })});
+        STATE.lock(|c| {
+            c.update(|s| {
+                let mut s = s;
+                s.vbat = Some(vbat);
+                s
+            })
+        });
         info!(
             "vbat: {=i16} = {=f32} V = {=u8} %",
-            &buf[0], vbat/V, vbat_percent
+            &buf[0],
+            vbat / V,
+            vbat_percent
         );
         if let Some(server) = SERVER.borrow().borrow().as_ref() {
             if let Err(e) = server.bas.battery_level_set(vbat_percent) {
@@ -489,7 +504,10 @@ async fn blinker(mut led: Output<'static, PinLed>, interval: Duration) {
 
 type I2cDevice = I2cBusDevice<'static, ThreadModeRawMutex, Twim<'static, TWISPI0>>;
 
-async fn start_wdt<'l, T: embassy_nrf::pwm::Instance>(p_wdt: peripherals::WDT, neopixel: &mut NeoPixelRgb<'l, T, 1>) -> wdt::WatchdogHandle {
+async fn start_wdt<'l, T: embassy_nrf::pwm::Instance>(
+    p_wdt: peripherals::WDT,
+    neopixel: &mut NeoPixelRgb<'l, T, 1>,
+) -> wdt::WatchdogHandle {
     let mut config = wdt::Config::default();
     config.timeout_ticks = 32768 * 5; // 5 seconds
 
@@ -524,11 +542,18 @@ const WDT: bool = true;
 async fn main(spawner: Spawner, p: Peripherals) {
     info!("Booting!");
     let mut neopixel = unwrap!(NeoPixelRgb::<'_, _, 1>::new(p.PWM0, use_pin_neo_pixel!(p)));
-    if let Err(e) = neopixel.set_with_filter(&[rgb::GREEN], &mut filter::Brightness(10)).await {
+    if let Err(e) = neopixel
+        .set_with_filter(&[rgb::GREEN], &mut filter::Brightness(10))
+        .await
+    {
         error!("failed to set neopixel on boot: {:?}", e);
     }
     info!("neopixel set on boot");
-    let wdt_handle = if WDT { Some(start_wdt(p.WDT, &mut neopixel).await) } else { None };
+    let wdt_handle = if WDT {
+        Some(start_wdt(p.WDT, &mut neopixel).await)
+    } else {
+        None
+    };
     info!("WDT started");
 
     let sdconfig = nrf_softdevice::Config {
@@ -596,7 +621,9 @@ async fn main(spawner: Spawner, p: Peripherals) {
     info!("Peripherals initialized, starting actors");
 
     let power_actor = spawn_actor!(
-        spawner, POWER, actors::power::Power<I2cDevice>,
+        spawner,
+        POWER,
+        actors::power::Power<I2cDevice>,
         actors::power::Power::new(I2cBusDevice::new(i2c_bus))
     );
 
@@ -606,7 +633,9 @@ async fn main(spawner: Spawner, p: Peripherals) {
     );
 
     let imu = spawn_actor!(
-        spawner, IMU, actors::imu::Imu<I2cDevice>,
+        spawner,
+        IMU,
+        actors::imu::Imu<I2cDevice>,
         actors::imu::Imu::new(I2cBusDevice::new(i2c_bus))
     );
 
@@ -616,10 +645,16 @@ async fn main(spawner: Spawner, p: Peripherals) {
         unwrap!(spawner.spawn(bluetooth_task(spawner, sd)));
     }
     unwrap!(spawner.spawn(output::output_task(
-        wdt_handle, power,
-        p.PWM1, p.PWM2, p.PWM3,
-        use_pin_power_enable!(p), use_pin_headlight_dim!(p),
-        use_pin_tail_l!(p), use_pin_tail_c!(p), use_pin_tail_r!(p),
+        wdt_handle,
+        power,
+        p.PWM1,
+        p.PWM2,
+        p.PWM3,
+        use_pin_power_enable!(p),
+        use_pin_headlight_dim!(p),
+        use_pin_tail_l!(p),
+        use_pin_tail_c!(p),
+        use_pin_tail_r!(p),
         apds9960,
         use_pin_underlight!(p),
     )));
