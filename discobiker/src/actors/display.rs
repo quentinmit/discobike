@@ -27,14 +27,14 @@ extern crate dimensioned as dim;
 use dim::f32prefixes::HECTO;
 use dim::si::f32consts::{A, LX, MPS2, V, PA, K, M, FT};
 use dim::si::Kelvin;
-use dim::traits::{Dimensioned, Map};
+use dim::traits::{Dimensioned, Dimensionless, Map};
 use physical_constants::STANDARD_ACCELERATION_OF_GRAVITY;
 use num_traits::Float;
 
 use ector::{actor, Actor, Address, Inbox};
 
 const R: Kelvin<f32> = Kelvin::new(5.0/9.0);
-const FAHRENHEIT_ZERO: f32 = CELSIUS_ZERO * 9.0/5.0;
+const FAHRENHEIT_ZERO: f32 = CELSIUS_ZERO * 9.0/5.0 - 32.0;
 
 pub struct Display<I2C, SIZE: DisplaySize> {
     // interface, mode, size, addr_mode, rotation
@@ -171,6 +171,7 @@ where
                 match state.accel_temperature {
                     None => buf.push_str_truncating("XXX°XXX° ---.-°"),
                     Some(temp) => {
+                        trace!("Temp = {}°K ({}°C)", (temp/K).value(), (temp/K).value() - CELSIUS_ZERO);
                         core::write!(&mut buf, "XXX°XXX° {:5.1}°", (temp / R) - FAHRENHEIT_ZERO).map_err(|_| FormatError(1))?;
                     }
                 };
