@@ -4,13 +4,14 @@ use crate::{HeadlightMode, UnderlightMode};
 use apds9960::{Apds9960Async as Apds9960, LightData};
 use defmt::*;
 use drogue_device::drivers::led::neopixel::rgb::NeoPixelRgb;
-use embassy_executor::time::{Duration, Instant, Timer};
+use embassy_executor::time::{Duration, Instant, Ticker};
 use embassy_nrf::gpio::{Level, Output, OutputDrive};
 use embassy_nrf::pac;
 use embassy_nrf::peripherals::{PWM1, PWM2, PWM3};
 use embassy_nrf::pwm::{Prescaler, SimplePwm};
 use embassy_nrf::wdt::WatchdogHandle;
 use embedded_hal::digital::blocking::OutputPin;
+use futures::StreamExt;
 extern crate dimensioned as dim;
 use crate::{DESIRED_STATE, STATE};
 use dim::si::{
@@ -107,6 +108,7 @@ pub async fn output_task(
     apds9960.enable().await.unwrap();
     apds9960.enable_light().await.unwrap();
     info!("Enabled");
+    let mut ticker = Ticker::every(Duration::from_millis(1000/30));
     loop {
         let now = Instant::now();
 
@@ -262,7 +264,7 @@ pub async fn output_task(
             // TODO: Update underlight
         }
 
-        Timer::after(Duration::from_millis(1000 / 30)).await;
+        ticker.next().await;
     }
 }
 
