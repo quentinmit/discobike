@@ -1,7 +1,6 @@
 use crate::drivers::ina219::{ADCMode, INA219Async, INA219_ADDR};
-use crate::STATE;
+use crate::{STATE, Debug2Format};
 use core::fmt;
-use defmt::{panic, *};
 use dim::si::{
     f32consts::{A, LX, OHM, V},
     Lux, Volt,
@@ -47,7 +46,7 @@ where
                 })
             });
             trace!(
-                "Vext = {} V, Iext = {} A",
+                "Vext = {} V, Iext = {:?} A",
                 (vext / V).value(),
                 current.map(|v| *(v / A).value()),
             );
@@ -71,7 +70,7 @@ where
                     s
                 })
             });
-            trace!("Vext = {:?}", defmt::Debug2Format(&vext));
+            trace!("Vext = {:?}", Debug2Format(&vext));
             if state.display_on {
                 return Ok(());
             }

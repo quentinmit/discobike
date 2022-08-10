@@ -9,25 +9,51 @@ resolver = "2"
 default = ["async"]
 async = []
 mdbt50q = []
+rtos-trace = ["dep:rtos-trace", "embassy-executor/rtos-trace", "systemview-target", "systemview-target/log", "log"]
+defmt = ["dep:defmt", "dep:defmt-rtt", "embassy-executor/defmt", "embassy-util/defmt", "embassy-hal-common/defmt", "embassy-nrf/defmt", "nrf-softdevice/defmt", "panic-probe/print-defmt", "drogue-device/defmt", "bme280/with_defmt"]
 
 [profile.dev.package.nrf-softdevice]
 opt-level = 3
 
 [profile.dev.package.embedded-graphics]
 opt-level = 3
+debug-assertions = false
+overflow-checks = false
+
+[profile.dev.package.ssd1306]
+opt-level = 3
+debug-assertions = false
+overflow-checks = false
+
+[profile.dev.package.bincode]
+opt-level = 3
+
+[profile.dev.package.serde]
+opt-level = 3
+
+[profile.dev.package.embassy-executor]
+opt-level = 3
+
+[profile.dev.package.defmt]
+opt-level = 3
+
+[profile.dev.package.dimensioned]
+opt-level = 3
+debug-assertions = false
+overflow-checks = false
 
 [dependencies]
-embassy-executor = { version = "0.1.0", features = ["nightly", "defmt", "unstable-traits"]}
-embassy-util = { version = "0.1.0", features = ["nightly", "defmt"]}
-embassy-hal-common = { version = "0.1.0", features = ["defmt"] }
-embassy-nrf = { version = "0.1.0", features = [ "nightly", "defmt", "nrf52840", "gpiote", "time-driver-rtc1", "unstable-traits", "unstable-pac" ]}
+embassy-executor = { version = "0.1.0", features = ["nightly", "unstable-traits"]}
+embassy-util = { version = "0.1.0", features = ["nightly", ]}
+embassy-hal-common = { version = "0.1.0", features = [] }
+embassy-nrf = { version = "0.1.0", features = ["nightly", "nrf52840", "gpiote", "time-driver-rtc1", "unstable-traits", "unstable-pac"]}
 embassy-embedded-hal = "0.1.0"
-cortex-m        = { version = "0.7.3" }
+cortex-m = { version = "0.7.3" }
 cortex-m-rt = "0.7.0"
-defmt = { version = "0.3", features = [] }
-defmt-rtt = { version = "0.3.2" }
-panic-probe = { version = "0.3", features= ["print-defmt"] }
-nrf-softdevice = { version = "0.1.0", features = ["defmt", "nrf52840", "s140", "ble-peripheral", "ble-central", "ble-gatt-server", "critical-section-impl"] }
+defmt = { version = "0.3", features = [], optional = true }
+defmt-rtt = { version = "0.3.2", optional = true }
+panic-probe = { version = "0.3", features= [] }
+nrf-softdevice = { version = "0.1.0", features = ["nrf52840", "s140", "ble-peripheral", "ble-central", "ble-gatt-server", "critical-section-impl"] }
 nrf-softdevice-s140 = { version = "0.1.1" }
 embedded-hal = "1.0.0-alpha.8"
 embedded-storage = "0.3.0"
@@ -35,6 +61,7 @@ embedded-storage-async = "0.3.0"
 futures = { version = "0.3.5", default-features = false, features = ["async-await"] }
 fixed = "1.2.0"
 heapless = "0.7.1"
+log = { version = "0.4.17", optional = true }
 num-traits = { version = "0.2.14", default-features = false, features = ["libm"] }
 critical-section = "0.2.7"
 modular-bitfield = "0.11.2"
@@ -44,7 +71,7 @@ apds9960 = { version = "0.1.0", default-features = false, features = ["async"] }
 embedded-hal-async = "0.1.0-alpha.1"
 dimensioned = { version = "0.8.0", default-features = false, features = ["serde", "nightly"] }
 paste = "1.0.7"
-drogue-device = { version = "0.1.0", default-features = false, features = ["defmt", "time", "neopixel", "nrf"] }
+drogue-device = { version = "0.1.0", default-features = false, features = ["time", "neopixel", "nrf"] }
 ector = { version = "0.1.0", default-features = false }
 ssd1306 = { version = "0.7.0" }
 embedded-graphics = "0.7.1"
@@ -60,15 +87,18 @@ num-derive = "0.3.3"
 num_enum = { version = "0.5.7", default-features = false }
 lsm6ds33 = { version = "0.2.0", default-features = false, features = ["async"] }
 maybe-async-cfg = "0.2.1"
-bme280 = { version = "0.4.4", default-features = false, features = ["async", "with_defmt"] }
+bme280 = { version = "0.4.4", default-features = false, features = ["async"] }
+systemview-target = { version = "0.1.1", features = ["cortex-m"], optional = true }
+rtos-trace = { version = "0.1.2", optional = true }
+cfg-if = "1.0.0"
 
 [patch.crates-io]
-embassy-executor = { git = "https://github.com/embassy-rs/embassy" }
-embassy-util = { git = "https://github.com/embassy-rs/embassy" }
-embassy-hal-common = { git = "https://github.com/embassy-rs/embassy" }
-embassy-nrf = { git = "https://github.com/embassy-rs/embassy" }
-embassy-macros = { git = "https://github.com/embassy-rs/embassy" }
-embassy-embedded-hal = { git = "https://github.com/embassy-rs/embassy" }
+#embassy-executor = { git = "https://github.com/embassy-rs/embassy" }
+#embassy-util = { git = "https://github.com/embassy-rs/embassy" }
+#embassy-hal-common = { git = "https://github.com/embassy-rs/embassy" }
+#embassy-nrf = { git = "https://github.com/embassy-rs/embassy" }
+#embassy-macros = { git = "https://github.com/embassy-rs/embassy" }
+#embassy-embedded-hal = { git = "https://github.com/embassy-rs/embassy" }
 nrf-softdevice = { git = "https://github.com/embassy-rs/nrf-softdevice" }
 nrf-softdevice-s140 = { git = "https://github.com/embassy-rs/nrf-softdevice" }
 apds9960 = { git = "https://github.com/quentinmit/apds9960-rs", branch = "async" }
@@ -88,3 +118,11 @@ bincode = { git = "https://github.com/bincode-org/bincode" }
 lsm6ds33 = { path = "/Users/quentin/Software/lsm6ds33" }
 #bme280 = { git = "https://github.com/quentinmit/bme280-rs", branch = "async" }
 bme280 = { path = "/Users/quentin/Software/bme280-rs" }
+embassy-executor = { path = "/Users/quentin/Software/embassy/embassy-executor" }
+embassy-macros = { path = "/Users/quentin/Software/embassy/embassy-macros" }
+embassy-nrf = { path = "/Users/quentin/Software/embassy/embassy-nrf" }
+embassy-util = { path = "/Users/quentin/Software/embassy/embassy-util" }
+embassy-hal-common = { path = "/Users/quentin/Software/embassy/embassy-hal-common" }
+embassy-embedded-hal = { path = "/Users/quentin/Software/embassy/embassy-embedded-hal" }
+rtos-trace = { path = "/Users/quentin/Software/rtos-trace/rtos_trace" }
+systemview-target = { path = "/Users/quentin/Software/rtos-trace/systemview_target" }

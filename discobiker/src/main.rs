@@ -5,11 +5,12 @@
 #![feature(cell_update)]
 #![feature(result_option_inspect)]
 
+mod log;
+
 use core::cell::{Cell, RefCell};
 use core::convert::TryInto;
 use core::fmt;
 use core::mem;
-use defmt::*;
 use embassy_executor::executor::Spawner;
 use embassy_executor::time::{Duration, Instant, Timer};
 use embassy_nrf as _;
@@ -30,7 +31,15 @@ use embassy_util::mutex::Mutex;
 
 use drogue_device::drivers::led::neopixel::{filter, rgb, rgb::NeoPixelRgb};
 
+#[cfg(feature = "defmt")]
 use defmt_rtt as _;
+#[cfg(feature = "defmt")]
+use defmt::Debug2Format;
+#[cfg(not(feature = "defmt"))]
+fn Debug2Format<'a, T: fmt::Debug>(item: &'a T) -> &'a T {
+    item
+}
+
 use nrf_softdevice::ble::{gatt_server, peripheral};
 use nrf_softdevice::{ble::Connection, raw, Softdevice};
 use panic_probe as _;
@@ -61,6 +70,15 @@ use dim::si::{
     f32consts::{LX, MPS2, V, PA},
     Ampere, Lux, MeterPerSecond2, Volt, Pascal, Kelvin,
 };
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "systemview-target")] {
+        use systemview_target::SystemView;
+        use rtos_trace;
+        static LOGGER: systemview_target::SystemView = systemview_target::SystemView::new();
+        rtos_trace::global_trace!{SystemView}
+    }
+}
 
 const CELSIUS_ZERO: f32 = 273.15;
 
@@ -219,7 +237,8 @@ impl fmt::Display for EventTimer {
 }
 
 #[repr(u8)]
-#[derive(Copy, Clone, PartialEq, Format, Debug, Serialize, Deserialize, TryFromPrimitive)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize, TryFromPrimitive)]
 enum HeadlightMode {
     Off = 0,
     Auto = 1,
@@ -229,7 +248,8 @@ enum HeadlightMode {
 }
 
 #[repr(u8)]
-#[derive(Copy, Clone, PartialEq, Format, Debug, Serialize, Deserialize, TryFromPrimitive)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize, TryFromPrimitive)]
 enum UnderlightMode {
     Off = 0,
     Auto = 1,
@@ -238,7 +258,8 @@ enum UnderlightMode {
 }
 
 #[repr(u8)]
-#[derive(Copy, Clone, PartialEq, Format, Serialize, Deserialize, TryFromPrimitive)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[derive(Copy, Clone, PartialEq, Serialize, Deserialize, TryFromPrimitive)]
 enum Effect {
     Solid = 0,
     ColorWipe,
@@ -249,7 +270,8 @@ enum Effect {
     Fire,
 }
 
-#[derive(Copy, Clone, Format)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[derive(Copy, Clone)]
 pub struct DesiredState {
     headlight_mode: HeadlightMode,
     underlight_mode: UnderlightMode,
@@ -318,7 +340,7 @@ fn bluetooth_start_server(sd: &mut Softdevice) -> Result<(), gatt_server::Regist
     let server: &Server = SERVER_FOREVER.put(Server::new(sd)?);
 
     let v = unwrap!(server.bas.battery_level_get());
-    info!("Initial battery level: {=u8}", v);
+    info!("Initial battery level: {}", v);
 
     SERVER.borrow().replace(Some(server));
     Ok(())
@@ -350,9 +372,9 @@ async fn bluetooth_task(spawner: Spawner, sd: &'static Softdevice) {
         };
         let conn = unwrap!(peripheral::advertise_connectable(sd, adv, &config).await);
 
-        defmt::debug!("connection established");
+        debug!("connection established");
         if let Err(e) = spawner.spawn(gatt_server_task(sd, conn, server)) {
-            defmt::warn!("Error spawning gatt task: {:?}", e);
+            warn!("Error spawning gatt task: {:?}", e);
         }
     }
 }
@@ -439,7 +461,7 @@ fn calculate_adc_one_bit(
         Resolution::_10BIT => 10,
         Resolution::_12BIT => 12,
         Resolution::_14BIT => 14,
-        _ => defmt::panic!("unsupported resolution"),
+        _ => panic!("unsupported resolution"),
     };
     let adc_gain = match channel_config.gain {
         Gain::GAIN1_6 => 1.0 / 6.0,
@@ -450,12 +472,12 @@ fn calculate_adc_one_bit(
         Gain::GAIN1 => 1.0,
         Gain::GAIN2 => 2.0,
         Gain::GAIN4 => 4.0,
-        _ => defmt::panic!("unsupported gain"),
+        _ => panic!("unsupported gain"),
     };
     let adc_reference = match channel_config.reference {
         Reference::INTERNAL => 0.6 * V,
         Reference::VDD1_4 => 3.3 / 4.0 * V,
-        _ => defmt::panic!("unsupported reference"),
+        _ => panic!("unsupported reference"),
     };
     adc_reference / adc_gain / 2.0.powi(adc_resolution)
 }
@@ -486,7 +508,7 @@ async fn adc_task(psaadc: SAADC, pin_vbat: PinVbat, interval: Duration) {
             })
         });
         trace!(
-            "vbat: {=i16} = {=f32} V = {=u8} %",
+            "vbat: {} = {} V = {} %",
             &buf[0],
             vbat / V,
             vbat_percent
@@ -529,7 +551,7 @@ async fn start_wdt<'l, T: embassy_nrf::pwm::Instance>(
         Err(_) => {
             info!("Watchdog already enabled; first boot after DFU? Waiting for it to timeout...");
             if let Err(e) = neopixel.set(&[rgb::Rgb8::new(0x11, 0, 0x11)]).await {
-                error!("failed to set neopixel: {}", e);
+                error!("failed to set neopixel: {:?}", e);
             }
             loop {}
         }
@@ -549,6 +571,12 @@ const WDT: bool = false;
 
 #[embassy_executor::main(config = "config()")]
 async fn main(spawner: Spawner, p: Peripherals) {
+    #[cfg(feature = "systemview-target")]
+    {
+        LOGGER.init();
+        ::log::set_logger(&LOGGER).ok();
+        ::log::set_max_level(::log::LevelFilter::Trace);
+    }
     info!("Booting!");
     let mut neopixel = unwrap!(NeoPixelRgb::<'_, _, 1>::new(p.PWM0, use_pin_neo_pixel!(p)));
     if let Err(e) = neopixel

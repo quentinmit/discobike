@@ -1,4 +1,3 @@
-use defmt::*;
 use modular_bitfield::prelude::*;
 extern crate dimensioned as dim;
 use dim::f32prefixes::*;
@@ -11,6 +10,13 @@ use embedded_hal::i2c::blocking as i2c_mod;
 use embedded_hal_async::i2c as i2c_mod_async;
 
 use byteorder::{BigEndian, ByteOrder, LittleEndian};
+
+#[cfg(feature = "defmt")]
+use defmt::Debug2Format;
+#[cfg(not(feature = "defmt"))]
+fn Debug2Format<'a, T: ::core::fmt::Debug>(item: &'a T) -> &'a T {
+    item
+}
 
 pub const INA219_ADDR: u8 = 0x40;
 
@@ -29,7 +35,8 @@ enum BusVoltageRange {
     V16 = 0,
     V32 = 1,
 }
-#[derive(Copy, Clone, BitfieldSpecifier, Debug, Format)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[derive(Copy, Clone, BitfieldSpecifier, Debug)]
 #[bits = 2]
 enum Gain {
     Full = 0,
@@ -235,9 +242,9 @@ where
         let desired_current_lsb: Ampere<f32> = max_current / 32767.;
         let cal = *(0.04096 * V / (desired_current_lsb * shunt_resistance)) as u16;
         let actual_current_lsb: Ampere<f32> = 0.04096 * V / ((cal as f32) * shunt_resistance);
-        info!("requested max current = {=f32} A", max_current / A);
+        info!("requested max current = {} A", max_current / A);
         info!("optimal gain setting {:?}", Debug2Format(&desired_gain));
-        info!("calculated desired current LSB {=f32} µA calibration {=u16} actual current LSB {=f32} µA", desired_current_lsb/(MICRO*A), cal, actual_current_lsb/(MICRO*A));
+        info!("calculated desired current LSB {} µA calibration {} actual current LSB {} µA", desired_current_lsb/(MICRO*A), cal, actual_current_lsb/(MICRO*A));
         self.modify_config(|c| c.with_shunt_gain(desired_gain))
             .await?;
         self.write_register(Register::Calibration, cal).await?;

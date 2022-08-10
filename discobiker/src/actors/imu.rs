@@ -1,6 +1,5 @@
-use crate::{LSM6DS33_ADDR, STATE, CELSIUS_ZERO};
+use crate::{LSM6DS33_ADDR, STATE, CELSIUS_ZERO, Debug2Format};
 use core::fmt;
-use defmt::*;
 use dim::si::{f32consts::{K, MPS2}, Kelvin, MeterPerSecond2};
 use dim::typenum::P2;
 use dim::ucum::{
@@ -98,7 +97,7 @@ where
                     .sqrt();
 
             trace!(
-                "accel: {} m/s^2 gyro: {} rad/s accel_mag: {} m/s^2",
+                "accel: {:?} m/s^2 gyro: {:?} rad/s accel_mag: {} m/s^2",
                 accel.map(|v| *(v / MPS2).value()),
                 gyro.map(|v| *(v / (RAD / S)).value()),
                 (accel_mag / MPS2).value(),

@@ -1,7 +1,6 @@
 use bme280::{Configuration, SensorMode, Error, Oversampling::*, IIRFilter::*, Standby::*, i2c::AsyncBME280};
-use crate::{STATE, CELSIUS_ZERO};
+use crate::{STATE, CELSIUS_ZERO, Debug2Format};
 use core::fmt;
-use defmt::{panic, *};
 use dim::f32prefixes::HECTO;
 use dim::si::{
     f32consts::{K, PA},

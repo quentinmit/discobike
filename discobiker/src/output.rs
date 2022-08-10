@@ -1,8 +1,8 @@
 use crate::EventTimer;
 use crate::I2cDevice;
 use crate::{HeadlightMode, UnderlightMode};
+use crate::Debug2Format;
 use apds9960::{Apds9960Async as Apds9960, LightData};
-use defmt::*;
 use drogue_device::drivers::led::neopixel::rgb::NeoPixelRgb;
 use embassy_executor::time::{Duration, Instant, Ticker};
 use embassy_nrf::gpio::{Level, Output, OutputDrive};
@@ -121,7 +121,7 @@ pub async fn output_task(
             .read_light()
             .await
             .inspect_err(|e| {
-                error!("failed to read light sensor: {:?}", defmt::Debug2Format(&e));
+                error!("failed to read light sensor: {:?}", Debug2Format(&e));
             })
             .ok();
         // 3.5 counts/lux in the c channel according to datasheet

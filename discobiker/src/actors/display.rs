@@ -1,7 +1,6 @@
-use crate::{DESIRED_STATE, STATE, CELSIUS_ZERO};
+use crate::{DESIRED_STATE, STATE, CELSIUS_ZERO, Debug2Format};
 use core::fmt;
 use core::fmt::Write;
-use defmt::{panic, *};
 use embassy_executor::time::{Duration, Instant, Timer, Ticker};
 use embassy_util::yield_now;
 use embedded_graphics::prelude::*;
@@ -152,7 +151,7 @@ where
                     Err(e) => error!("serializing state: {}", Debug2Format(&e)),
                     Ok(n) => {
                         x.truncate(n);
-                        info!("current state: {=[u8]}", x.as_slice());
+                        info!("current state: {:?}", x.as_slice());
                     }
                 }
 
