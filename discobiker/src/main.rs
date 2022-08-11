@@ -77,6 +77,16 @@ cfg_if::cfg_if! {
         use rtos_trace;
         static LOGGER: systemview_target::SystemView = systemview_target::SystemView::new();
         rtos_trace::global_trace!{SystemView}
+
+        struct TraceInfo();
+
+        impl rtos_trace::RtosTraceApplicationCallbacks for TraceInfo {
+            fn system_description() {}
+            fn sysclock() -> u32 {
+                64000000
+            }
+        }
+        rtos_trace::global_application_callbacks!{TraceInfo}
     }
 }
 

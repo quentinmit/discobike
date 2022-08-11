@@ -9,7 +9,7 @@ resolver = "2"
 default = ["async"]
 async = []
 mdbt50q = []
-rtos-trace = ["dep:rtos-trace", "embassy-executor/rtos-trace", "systemview-target", "systemview-target/log", "log"]
+rtos-trace = ["dep:rtos-trace", "embassy-executor/rtos-trace", "systemview-target", "systemview-target/log", "systemview-target/callbacks-os", "systemview-target/callbacks-app", "log"]
 defmt = ["dep:defmt", "dep:defmt-rtt", "embassy-executor/defmt", "embassy-util/defmt", "embassy-hal-common/defmt", "embassy-nrf/defmt", "nrf-softdevice/defmt", "panic-probe/print-defmt", "drogue-device/defmt", "bme280/with_defmt"]
 
 [profile.dev.package.nrf-softdevice]
@@ -85,7 +85,7 @@ bincode = { version = "2.0.0-rc.1", default-features = false, features = ["serde
 serde_cbor = { version = "0.11.2", default-features = false }
 num-derive = "0.3.3"
 num_enum = { version = "0.5.7", default-features = false }
-lsm6ds33 = { version = "0.2.0", default-features = false, features = ["async"] }
+lsm6ds33 = { version = "0.3.0", default-features = false, features = ["async"] }
 maybe-async-cfg = "0.2.1"
 bme280 = { version = "0.4.4", default-features = false, features = ["async"] }
 systemview-target = { version = "0.1.1", features = ["cortex-m"], optional = true }

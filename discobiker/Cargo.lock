@@ -1258,7 +1258,7 @@ dependencies = [
 
 [[package]]
 name = "lsm6ds33"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "embedded-hal-async",
  "maybe-async-cfg",
@@ -1703,7 +1703,7 @@ dependencies = [
 
 [[package]]
 name = "rtos-trace"
-version = "0.1.2"
+version = "0.1.3"
 
 [[package]]
 name = "rust-ini"
