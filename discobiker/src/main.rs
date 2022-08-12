@@ -70,6 +70,7 @@ use dim::si::{
     f32consts::{LX, MPS2, V, PA},
     Ampere, Lux, MeterPerSecond2, Volt, Pascal, Kelvin,
 };
+use dim::Dimensionless;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "systemview-target")] {
@@ -520,7 +521,7 @@ async fn adc_task(psaadc: SAADC, pin_vbat: PinVbat, interval: Duration) {
         trace!(
             "vbat: {} = {} V = {} %",
             &buf[0],
-            vbat / V,
+            (vbat / V).value(),
             vbat_percent
         );
         if let Some(server) = SERVER.borrow().borrow().as_ref() {

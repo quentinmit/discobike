@@ -1258,7 +1258,7 @@ dependencies = [
 
 [[package]]
 name = "lsm6ds33"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "embedded-hal-async",
  "maybe-async-cfg",

@@ -85,7 +85,7 @@ bincode = { version = "2.0.0-rc.1", default-features = false, features = ["serde
 serde_cbor = { version = "0.11.2", default-features = false }
 num-derive = "0.3.3"
 num_enum = { version = "0.5.7", default-features = false }
-lsm6ds33 = { version = "0.3.0", default-features = false, features = ["async"] }
+lsm6ds33 = { version = "0.4.0", default-features = false, features = ["async"] }
 maybe-async-cfg = "0.2.1"
 bme280 = { version = "0.4.4", default-features = false, features = ["async"] }
 systemview-target = { version = "0.1.1", features = ["cortex-m"], optional = true }

@@ -3,6 +3,7 @@ extern crate dimensioned as dim;
 use dim::f32prefixes::*;
 use dim::si::f32consts::{A, OHM, V};
 use dim::si::{Ampere, Ohm, Volt};
+use dim::Dimensionless;
 use maybe_async_cfg;
 
 use embedded_hal::i2c::blocking as i2c_mod;
@@ -242,9 +243,9 @@ where
         let desired_current_lsb: Ampere<f32> = max_current / 32767.;
         let cal = *(0.04096 * V / (desired_current_lsb * shunt_resistance)) as u16;
         let actual_current_lsb: Ampere<f32> = 0.04096 * V / ((cal as f32) * shunt_resistance);
-        info!("requested max current = {} A", max_current / A);
+        info!("requested max current = {} A", (max_current / A).value());
         info!("optimal gain setting {:?}", Debug2Format(&desired_gain));
-        info!("calculated desired current LSB {} µA calibration {} actual current LSB {} µA", desired_current_lsb/(MICRO*A), cal, actual_current_lsb/(MICRO*A));
+        info!("calculated desired current LSB {} µA calibration {} actual current LSB {} µA", (desired_current_lsb/(MICRO*A)).value(), cal, (actual_current_lsb/(MICRO*A)).value());
         self.modify_config(|c| c.with_shunt_gain(desired_gain))
             .await?;
         self.write_register(Register::Calibration, cal).await?;
