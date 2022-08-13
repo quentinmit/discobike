@@ -1,7 +1,8 @@
+#![allow(dead_code)]
 use modular_bitfield::prelude::*;
 extern crate dimensioned as dim;
 use dim::f32prefixes::*;
-use dim::si::f32consts::{A, OHM, V};
+use dim::si::f32consts::{A, V};
 use dim::si::{Ampere, Ohm, Volt};
 use dim::Dimensionless;
 use maybe_async_cfg;
@@ -14,6 +15,7 @@ use byteorder::{BigEndian, ByteOrder, LittleEndian};
 
 #[cfg(feature = "defmt")]
 use defmt::Debug2Format;
+#[allow(non_snake_case)]
 #[cfg(not(feature = "defmt"))]
 fn Debug2Format<'a, T: ::core::fmt::Debug>(item: &'a T) -> &'a T {
     item

@@ -126,7 +126,6 @@ ssd1306 = { version = "0.7.0" }
 embedded-graphics = "0.7.1"
 display-interface = "0.4.1"
 arrayvec = { version = "0.7.2", default-features = false }
-atomic_float = { version = "0.1.0", default-features = false }
 physical_constants = "0.4.1"
 staticvec = { version = "0.11.6", default-features = false, features = [] }
 serde = { version = "1.0.139", default-features = false, features = ["derive"] }

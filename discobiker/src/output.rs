@@ -1,7 +1,4 @@
-use crate::EventTimer;
-use crate::I2cDevice;
 use crate::{HeadlightMode, UnderlightMode};
-use crate::Debug2Format;
 use drogue_device::drivers::led::neopixel::rgb::{NeoPixelRgb, Rgb8};
 use embassy_executor::time::{Duration, Instant, Ticker};
 use embassy_nrf::gpio::{Level, Output, OutputDrive};
@@ -14,8 +11,7 @@ use futures::StreamExt;
 extern crate dimensioned as dim;
 use crate::{DESIRED_STATE, STATE};
 use dim::si::{
-    f32consts::{A, LX, OHM, V},
-    Lux, Volt,
+    f32consts::{LX, V},
 };
 
 trait StepTowards {

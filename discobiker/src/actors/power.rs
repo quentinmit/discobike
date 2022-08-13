@@ -2,12 +2,11 @@ use crate::drivers::ina219::{ADCMode, INA219Async, INA219_ADDR};
 use crate::{STATE, Debug2Format};
 use core::fmt;
 use dim::si::{
-    f32consts::{A, LX, OHM, V},
-    Lux, Volt,
+    f32consts::{A, OHM, V},
 };
 use dim::traits::Dimensionless;
 use ector::{actor, Actor, Address, Inbox};
-use embassy_executor::time::{Duration, Instant, Timer};
+use embassy_executor::time::{Duration, Timer};
 use embedded_hal_async::i2c;
 
 pub struct Power<I2C> {

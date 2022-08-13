@@ -9,7 +9,7 @@ use futures::select_biased;
 use futures::FutureExt;
 use dim::traits::Dimensionless;
 use ector::{actor, Actor, Address, Inbox};
-use embassy_executor::time::{Duration, Instant, Timer, Delay};
+use embassy_executor::time::{Duration, Timer, Delay};
 use embedded_hal_async::i2c;
 
 pub struct Barometer<I2C> {
@@ -49,7 +49,7 @@ where
             let data = self.bme280.measure(&mut Delay{}).await?;
             let temperature = (data.temperature + CELSIUS_ZERO) * K;
             let pressure = data.pressure * PA;
-            let state = STATE.lock(|c| {
+            STATE.lock(|c| {
                 c.update(|s| {
                     let mut s = s;
                     s.temperature = Some(temperature);

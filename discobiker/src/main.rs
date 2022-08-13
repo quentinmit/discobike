@@ -15,7 +15,7 @@ use embassy_executor::executor::Spawner;
 use embassy_executor::time::{Duration, Instant, Timer};
 use embassy_nrf as _;
 use embassy_nrf::executor::InterruptExecutor;
-use embassy_nrf::gpio::{Input, Level, Output, OutputDrive, Pull};
+use embassy_nrf::gpio::{Level, Output, OutputDrive};
 use embassy_nrf::interrupt::{self, Priority, InterruptExt};
 use embassy_nrf::peripherals::{SAADC, TWISPI0};
 use embassy_nrf::twim::{self, Twim};
@@ -29,12 +29,13 @@ use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice as I2cBusDevice;
 use embassy_util::blocking_mutex::{raw::{CriticalSectionRawMutex, ThreadModeRawMutex}, Mutex as BlockingMutex};
 use embassy_util::mutex::Mutex;
 
-use drogue_device::drivers::led::neopixel::{filter, rgb, rgb::NeoPixelRgb};
+use drogue_device::drivers::led::neopixel::{rgb, rgb::NeoPixelRgb};
 
 #[cfg(feature = "defmt")]
 use defmt_rtt as _;
 #[cfg(feature = "defmt")]
 use defmt::Debug2Format;
+#[allow(non_snake_case)]
 #[cfg(not(feature = "defmt"))]
 fn Debug2Format<'a, T: fmt::Debug>(item: &'a T) -> &'a T {
     item
@@ -43,8 +44,6 @@ fn Debug2Format<'a, T: fmt::Debug>(item: &'a T) -> &'a T {
 use nrf_softdevice::ble::{gatt_server, peripheral};
 use nrf_softdevice::{ble::Connection, raw, Softdevice};
 use panic_probe as _;
-
-use apds9960::Apds9960Async as Apds9960;
 
 use num_enum::TryFromPrimitive;
 use paste::paste;
@@ -60,14 +59,10 @@ use serde::{Deserialize, Serialize, Serializer};
 
 use num_traits::float::Float;
 
-use atomic_float::AtomicF32;
-use core::sync::atomic::*;
-
 #[macro_use]
 extern crate dimensioned as dim;
-use dim::f32prefixes::HECTO;
 use dim::si::{
-    f32consts::{LX, MPS2, V, PA},
+    f32consts::{V},
     Ampere, Lux, MeterPerSecond2, Volt, Pascal, Kelvin,
 };
 use dim::Dimensionless;

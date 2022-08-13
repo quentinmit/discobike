@@ -1,11 +1,10 @@
 use crate::{LSM6DS33_ADDR, STATE, CELSIUS_ZERO, Debug2Format};
-use core::fmt;
-use dim::si::{f32consts::{K, MPS2}, Kelvin, MeterPerSecond2};
+use core::fmt::{self, Debug};
+use dim::si::{f32consts::{K, MPS2}, MeterPerSecond2};
 use dim::typenum::P2;
 use dim::ucum::{
     self,
-    f32consts::{DEG, RAD, S},
-    Radian, Second, UCUM,
+    f32consts::{RAD, S}, UCUM,
 };
 use dim::{derived, Dimensionless};
 use dim::{typenum::Pow, Sqrt};
@@ -23,27 +22,35 @@ pub struct Imu<I2C> {
 
 pub enum ImuMessage {}
 
-#[derive(Debug)]
 pub enum Error<I2C>
 where
     I2C: i2c::I2c,
+    I2C::Error: fmt::Debug,
 {
-    I2c(I2C::Error),
     Lsm6ds33(lsm6ds33::Error<I2C::Error>),
 }
 
-// impl<I2C, E> From<E> for Error<I2C>
-// where
-//     I2C: i2c::I2c<Error = E>,
-// {
-//     fn from(e: E) -> Self {
-//         Self::I2c(e)
-//     }
-// }
+impl<I2C, E> Debug for Error<I2C>
+where
+    I2C: i2c::I2c<Error = E>,
+    E: fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Error::Lsm6ds33(e) => {
+                f.write_str("Lsm6ds33(")?;
+                e.fmt(f)?;
+                f.write_str(")")?;
+            }
+        }
+        Ok(())
+    }
+}
 
 impl<I2C, E> From<lsm6ds33::Error<E>> for Error<I2C>
 where
     I2C: i2c::I2c<Error = E>,
+    E: fmt::Debug,
 {
     fn from(e: lsm6ds33::Error<E>) -> Self {
         Self::Lsm6ds33(e)
@@ -53,6 +60,7 @@ where
 impl<I2C, E> Imu<I2C>
 where
     I2C: i2c::I2c<Error = E>,
+    E: fmt::Debug,
 {
     pub fn new(i2c: I2C) -> Self {
         Self { i2c: Some(i2c) }
@@ -133,22 +141,22 @@ where
     {
         loop {
             info!("run_imu");
-            let mut i2c = self.i2c.take().unwrap();
+            let i2c = self.i2c.take().unwrap();
             info!("initializing imu");
-            let mut lsm6ds33 = Lsm6ds33Async::new(i2c, LSM6DS33_ADDR).await;
+            let lsm6ds33 = Lsm6ds33Async::new(i2c, LSM6DS33_ADDR).await;
             match lsm6ds33 {
                 Ok(mut lsm6ds33) => {
                     let res = self.run_imu(&mut lsm6ds33, &mut inbox).await;
                     self.i2c.replace(lsm6ds33.release());
+                    if let Err(e) = res {
+                        error!("run_imu failed: {:?}", Debug2Format(&e));
+                    };
                 }
                 Err((i2c, e)) => {
                     error!("constructing lsm6ds33 failed: {:?}", Debug2Format(&e));
                     self.i2c.replace(i2c);
                 }
             };
-            /*res.map_err(|e| {
-                error!("run_imu failed: {:?}", Debug2Format(&e));
-            });*/
             Timer::after(Duration::from_secs(1)).await;
         }
     }

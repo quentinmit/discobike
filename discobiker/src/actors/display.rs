@@ -124,7 +124,7 @@ where
     pub fn new(i2c: I2C, size: SIZE) -> Self {
         let interface = I2CDisplayInterface::new(i2c);
 
-        let mut display =
+        let display =
             Ssd1306::new(interface, size, DisplayRotation::Rotate180).into_buffered_graphics_mode();
         Self { display }
     }
@@ -322,7 +322,6 @@ where
                 _ = ticker.next().fuse() => (),
             };
         }
-        Ok(())
     }
 }
 

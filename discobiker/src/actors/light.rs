@@ -2,14 +2,14 @@ use apds9960::{Apds9960Async, LightData, Error};
 use crate::{STATE, Debug2Format};
 use core::fmt::{self, Debug};
 use dim::si::{
-    f32consts::{A, LX, OHM, V},
-    Lux, Volt,
+    f32consts::{LX},
+    Lux,
 };
 use futures::select_biased;
 use futures::FutureExt;
 use dim::traits::Dimensionless;
 use ector::{actor, Actor, Address, Inbox};
-use embassy_executor::time::{Duration, Instant, Timer, Delay};
+use embassy_executor::time::{Duration, Timer};
 use embedded_hal_async::i2c;
 
 trait CalculateIlluminance {
@@ -67,7 +67,6 @@ where
         info!("Enabled");
 
         loop {
-            let color: Option<LightData> = None;
             let color = self.apds9960
                 .read_light()
                 .await
@@ -79,7 +78,7 @@ where
             let lux_value =
                 color.map(|color| max(color.calculate_lux(), color.clear as f32 / (3.5 / LX))); // If C is overloaded, use RGB
 
-                let state = STATE.lock(|c| {
+            STATE.lock(|c| {
                 c.update(|s| {
                     let mut s = s;
                     s.lux = lux_value;
