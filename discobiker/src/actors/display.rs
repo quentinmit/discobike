@@ -133,8 +133,25 @@ where
     where
         MBOX: Inbox<DisplayMessage>,
     {
-        use Error::FormatError;
         self.display.init().await?;
+        self.display.set_display_on(false).await?;
+        loop {
+            match inbox.next().await {
+                DisplayMessage::On => {
+                    info!("Display on");
+                    self.run_display_on(inbox).await?;
+                }
+                DisplayMessage::Off => warn!("Display off while already off"),
+            }
+        }
+    }
+
+    async fn run_display_on<MBOX>(&mut self, inbox: &mut MBOX) -> Result<(), Error>
+    where
+    MBOX: Inbox<DisplayMessage>,
+    {
+        use Error::FormatError;
+        self.display.set_display_on(true).await?;
         let text_style = MonoTextStyleBuilder::new()
             .font(&FONT_6X10)
             .text_color(BinaryColor::On)
@@ -145,159 +162,161 @@ where
         let mut ticker = Ticker::every(DISPLAY_PERIOD);
         loop {
             let state = STATE.lock(|c| c.get());
-            if state.display_on {
-                self.display.clear();
-                let mut buf = StaticString::<COLS>::new();
-                let desired_state = DESIRED_STATE.lock(|c| c.get());
+            self.display.clear();
+            let mut buf = StaticString::<COLS>::new();
+            let desired_state = DESIRED_STATE.lock(|c| c.get());
 
-                let mut x = StaticVec::<u8, 128>::filled_with(|| 0);
-                match bincode::serde::encode_into_slice(
-                    &state,
-                    x.as_mut_slice(),
-                    bincode::config::standard(),
-                ) {
-                    Err(e) => error!("serializing state: {}", Debug2Format(&e)),
-                    Ok(n) => {
-                        x.truncate(n);
-                        info!("current state: {:?}", x.as_slice());
+            let mut x = StaticVec::<u8, 128>::filled_with(|| 0);
+            match bincode::serde::encode_into_slice(
+                &state,
+                x.as_mut_slice(),
+                bincode::config::standard(),
+            ) {
+                Err(e) => error!("serializing state: {}", Debug2Format(&e)),
+                Ok(n) => {
+                    x.truncate(n);
+                    info!("current state: {:?}", x.as_slice());
+                }
+            }
+
+            let start_draw = Instant::now();
+            // Line 0: XX.XVext X.XXXA X.XXV
+            // vext, current, vbat
+            state.vext.write_dim(&mut buf, V, 4, 1).map_err(|_| FormatError(0))?;
+            buf.push_str_truncating("Vext ");
+            state.current.write_dim(&mut buf, A, 5, 3).map_err(|_| FormatError(0))?;
+            buf.push_str_truncating("A ");
+            state.vbat.write_dim(&mut buf, V, 4, 2).map_err(|_| FormatError(0))?;
+            buf.push_str_truncating(if state.vbus_detected { "V" } else { "v" });
+            Text::with_baseline(&buf, Point::zero(), text_style, Baseline::Top)
+                .draw(&mut self.display)?;
+            yield_now().await;
+            buf.clear();
+            // Line 1: XXX°XXX° XXX.X°
+            // heading, roll, bmp280 temperature
+            buf.push_str_truncating("XXX°XXX°");
+            match state.accel_temperature {
+                None => buf.push_str_truncating("---.-°"),
+                Some(temp) => {
+                    trace!("Temp = {}°K ({}°C)", (temp/K).value(), (temp/K).value() - CELSIUS_ZERO);
+                    if let Err(_) = core::write!(&mut buf, "{:5.1}°", (temp / R) - FAHRENHEIT_ZERO){
+                        buf.push_str_truncating("ERR");
                     }
                 }
-
-                let start_draw = Instant::now();
-                // Line 0: XX.XVext X.XXXA X.XXV
-                // vext, current, vbat
-                state.vext.write_dim(&mut buf, V, 4, 1).map_err(|_| FormatError(0))?;
-                buf.push_str_truncating("Vext ");
-                state.current.write_dim(&mut buf, A, 5, 3).map_err(|_| FormatError(0))?;
-                buf.push_str_truncating("A ");
-                state.vbat.write_dim(&mut buf, V, 4, 2).map_err(|_| FormatError(0))?;
-                buf.push_str_truncating(if state.vbus_detected { "V" } else { "v" });
-                Text::with_baseline(&buf, Point::zero(), text_style, Baseline::Top)
-                    .draw(&mut self.display)?;
-                yield_now().await;
-                buf.clear();
-                // Line 1: XXX°XXX° XXX.X°
-                // heading, roll, bmp280 temperature
-                buf.push_str_truncating("XXX°XXX°");
-                match state.accel_temperature {
-                    None => buf.push_str_truncating("---.-°"),
-                    Some(temp) => {
-                        trace!("Temp = {}°K ({}°C)", (temp/K).value(), (temp/K).value() - CELSIUS_ZERO);
-                        if let Err(_) = core::write!(&mut buf, "{:5.1}°", (temp / R) - FAHRENHEIT_ZERO){
-                            buf.push_str_truncating("ERR");
-                        }
+            };
+            match state.temperature {
+                None => buf.push_str_truncating("---.-°"),
+                Some(temp) => {
+                    trace!("Temp = {}°K ({}°C)", (temp/K).value(), (temp/K).value() - CELSIUS_ZERO);
+                    if let Err(_) = core::write!(&mut buf, "{:5.1}°", (temp / R) - FAHRENHEIT_ZERO) {
+                        buf.push_str_truncating("ERR");
                     }
-                };
-                match state.temperature {
-                    None => buf.push_str_truncating("---.-°"),
-                    Some(temp) => {
-                        trace!("Temp = {}°K ({}°C)", (temp/K).value(), (temp/K).value() - CELSIUS_ZERO);
-                        if let Err(_) = core::write!(&mut buf, "{:5.1}°", (temp / R) - FAHRENHEIT_ZERO) {
-                            buf.push_str_truncating("ERR");
-                        }
-                    }
-                };
-                Text::with_baseline(
-                    &buf,
-                    Point::new(0, 1 * line_height as i32),
-                    text_style,
-                    Baseline::Top,
-                )
-                .draw(&mut self.display)?;
-                yield_now().await;
-                buf.clear();
-                // Line 2: XXXX.XXhPa XXX.XX'
-                // pressure, altitude
-                state.pressure.write_dim(&mut buf, HECTO * PA, 7, 2).map_err(|_| FormatError(2))?;
-                buf.push_str_truncating("hPa ");
-                let altitude = state.pressure.map(|p|
-                    44330.0 * M * (1.0 - (p / (1013.0 * HECTO * PA)).map(|v| v.powf(0.1903)))
-                );
-                altitude.write_dim(&mut buf, FT, 6, 2).map_err(|_| FormatError(2))?;
-                buf.push_str_truncating("'");
-                Text::with_baseline(
-                    &buf,
-                    Point::new(0, 2 * line_height as i32),
-                    text_style,
-                    Baseline::Top,
-                )
-                .draw(&mut self.display)?;
-                yield_now().await;
-                buf.clear();
-                // Line 3: XXX°TXXX.XX°
-                // debug: raw heading, mag_ok, acelerometer temperature
-                buf.push_str_truncating("UL: ");
-                core::write!(
-                    &mut buf,
-                    "{:?} {:02X}",
-                    desired_state.underlight_mode,
-                    state.underlight_brightness
-                ).map_err(|_| FormatError(3))?;
-                Text::with_baseline(
-                    &buf,
-                    Point::new(0, 3 * line_height as i32),
-                    text_style,
-                    Baseline::Top,
-                )
-                .draw(&mut self.display)?;
-                yield_now().await;
-                buf.clear();
-                // Line 4: XXX.XXG    XXXXX lux
-                // accel magnitude, lux
-                state.accel_mag.write_dim(
-                    &mut buf,
-                    STANDARD_ACCELERATION_OF_GRAVITY as f32 * MPS2,
-                    6,
-                    2,
-                ).map_err(|_| FormatError(4))?;
-                buf.push_str_truncating("G    ");
-                state.lux.write_dim(&mut buf, LX, 5, 0).map_err(|_| FormatError(4))?;
-                buf.push_str_truncating(" lux");
-                Text::with_baseline(
-                    &buf,
-                    Point::new(0, 4 * line_height as i32),
-                    text_style,
-                    Baseline::Top,
-                )
-                .draw(&mut self.display)?;
-                yield_now().await;
-                buf.clear();
-                // Line 5: Mode: Day XXX% XXs
-                // headlight mode, headlight brightness, seconds until off
-                buf.push_str_truncating("Mode: ");
-                core::write!(
-                    &mut buf,
-                    "{:?} {:3.0} {}",
-                    state.headlight_mode,
-                    state.headlight_brightness * 100.0,
-                    state.move_timer,
-                ).map_err(|_| FormatError(5))?;
-                Text::with_baseline(
-                    &buf,
-                    Point::new(0, 5 * line_height as i32),
-                    text_style,
-                    Baseline::Top,
-                )
-                .draw(&mut self.display)?;
-                yield_now().await;
-                buf.clear();
-                info!(
-                    "display.draw took {} µs",
-                    start_draw.elapsed().as_micros()
-                );
-                let start_flush = Instant::now();
-                self.display.flush().await?;
-                info!(
-                    "display.flush took {} µs",
-                    start_flush.elapsed().as_micros()
-                );
-            }
+                }
+            };
+            Text::with_baseline(
+                &buf,
+                Point::new(0, 1 * line_height as i32),
+                text_style,
+                Baseline::Top,
+            )
+            .draw(&mut self.display)?;
+            yield_now().await;
+            buf.clear();
+            // Line 2: XXXX.XXhPa XXX.XX'
+            // pressure, altitude
+            state.pressure.write_dim(&mut buf, HECTO * PA, 7, 2).map_err(|_| FormatError(2))?;
+            buf.push_str_truncating("hPa ");
+            let altitude = state.pressure.map(|p|
+                44330.0 * M * (1.0 - (p / (1013.0 * HECTO * PA)).map(|v| v.powf(0.1903)))
+            );
+            altitude.write_dim(&mut buf, FT, 6, 2).map_err(|_| FormatError(2))?;
+            buf.push_str_truncating("'");
+            Text::with_baseline(
+                &buf,
+                Point::new(0, 2 * line_height as i32),
+                text_style,
+                Baseline::Top,
+            )
+            .draw(&mut self.display)?;
+            yield_now().await;
+            buf.clear();
+            // Line 3: XXX°TXXX.XX°
+            // debug: raw heading, mag_ok, acelerometer temperature
+            buf.push_str_truncating("UL: ");
+            core::write!(
+                &mut buf,
+                "{:?} {:02X}",
+                desired_state.underlight_mode,
+                state.underlight_brightness
+            ).map_err(|_| FormatError(3))?;
+            Text::with_baseline(
+                &buf,
+                Point::new(0, 3 * line_height as i32),
+                text_style,
+                Baseline::Top,
+            )
+            .draw(&mut self.display)?;
+            yield_now().await;
+            buf.clear();
+            // Line 4: XXX.XXG    XXXXX lux
+            // accel magnitude, lux
+            state.accel_mag.write_dim(
+                &mut buf,
+                STANDARD_ACCELERATION_OF_GRAVITY as f32 * MPS2,
+                6,
+                2,
+            ).map_err(|_| FormatError(4))?;
+            buf.push_str_truncating("G    ");
+            state.lux.write_dim(&mut buf, LX, 5, 0).map_err(|_| FormatError(4))?;
+            buf.push_str_truncating(" lux");
+            Text::with_baseline(
+                &buf,
+                Point::new(0, 4 * line_height as i32),
+                text_style,
+                Baseline::Top,
+            )
+            .draw(&mut self.display)?;
+            yield_now().await;
+            buf.clear();
+            // Line 5: Mode: Day XXX% XXs
+            // headlight mode, headlight brightness, seconds until off
+            buf.push_str_truncating("Mode: ");
+            core::write!(
+                &mut buf,
+                "{:?} {:3.0} {}",
+                state.headlight_mode,
+                state.headlight_brightness * 100.0,
+                state.move_timer,
+            ).map_err(|_| FormatError(5))?;
+            Text::with_baseline(
+                &buf,
+                Point::new(0, 5 * line_height as i32),
+                text_style,
+                Baseline::Top,
+            )
+            .draw(&mut self.display)?;
+            yield_now().await;
+            buf.clear();
+            info!(
+                "display.draw took {} µs",
+                start_draw.elapsed().as_micros()
+            );
+            let start_flush = Instant::now();
+            self.display.flush().await?;
+            info!(
+                "display.flush took {} µs",
+                start_flush.elapsed().as_micros()
+            );
 
             select_biased! {
                 message = inbox.next().fuse() => {
                     match message {
-                        DisplayMessage::On => info!("display on"),
-                        DisplayMessage::Off => info!("display off"),
+                        DisplayMessage::On => warn!("display on while already on"),
+                        DisplayMessage::Off => {
+                            info!("display off");
+                            self.display.set_display_on(false).await?;
+                            return Ok(());
+                        }
                     }
                 },
                 _ = ticker.next().fuse() => (),

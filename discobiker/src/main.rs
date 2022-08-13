@@ -692,6 +692,7 @@ async fn main(spawner: Spawner, p: Peripherals) {
         spawner, DISPLAY, actors::display::Display<I2cDevice, DisplaySize128x64>,
         actors::display::Display::new(I2cBusDevice::new(i2c_bus), DisplaySize128x64)
     );
+    display.notify(actors::display::DisplayMessage::On).await;
 
     let imu = spawn_actor!(
         spawner,
