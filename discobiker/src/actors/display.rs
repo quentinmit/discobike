@@ -108,6 +108,11 @@ where
     }
 }
 
+#[cfg(debug_assertions)]
+const DISPLAY_PERIOD: Duration = Duration::from_millis(1000);
+#[cfg(not(debug_assertions))]
+const DISPLAY_PERIOD: Duration = Duration::from_millis(1000/10);
+
 // DisplaySize128x64
 impl<I2C, E, SIZE> Display<I2C, SIZE>
 where
@@ -134,7 +139,7 @@ where
             .build();
         const COLS: usize = 128 / 6;
         let line_height = text_style.font.character_size.height;
-        let mut ticker = Ticker::every(Duration::from_millis(1000/10));
+        let mut ticker = Ticker::every(DISPLAY_PERIOD);
         loop {
             let state = STATE.lock(|c| c.get());
             if state.display_on {
