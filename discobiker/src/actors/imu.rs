@@ -82,25 +82,25 @@ where
             .await?;
         lsm6ds33.set_low_power_mode(true).await?;
         loop {
-            let accel_raw = lsm6ds33.read_accelerometer().await?; // m/s^2
+            let (temp_raw, gyro_raw, accel_raw) = lsm6ds33.read_all().await?;
             let accel: [MeterPerSecond2<f32>; 3] =
                 [accel_raw.0 * MPS2, accel_raw.1 * MPS2, accel_raw.2 * MPS2];
-            let gyro_raw = lsm6ds33.read_gyro().await?; // rads/s
             let gyro: [RadianPerSecond<f32>; 3] = [
                 gyro_raw.0 * RAD / S,
                 gyro_raw.1 * RAD / S,
                 gyro_raw.2 * RAD / S,
             ];
-            let temp = (lsm6ds33.read_temperature().await? + CELSIUS_ZERO) * K;
+            let temp = (temp_raw + CELSIUS_ZERO) * K;
             let accel_mag =
                 (accel[0].powi(P2::new()) + accel[1].powi(P2::new()) + accel[2].powi(P2::new()))
                     .sqrt();
 
             trace!(
-                "accel: {:?} m/s^2 gyro: {:?} rad/s accel_mag: {} m/s^2",
+                "accel: {:?} m/s^2 gyro: {:?} rad/s accel_mag: {} m/s^2 temp: {}°C",
                 accel.map(|v| *(v / MPS2).value()),
                 gyro.map(|v| *(v / (RAD / S)).value()),
                 (accel_mag / MPS2).value(),
+                (temp / K).value() - CELSIUS_ZERO,
             );
 
             STATE.lock(|c| {
