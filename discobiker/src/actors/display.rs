@@ -69,9 +69,10 @@ trait WriteDim<T, W: Write> {
 
 impl<T, W> WriteDim<T, W> for Option<T>
 where
-    T: Dimensioned + core::ops::Div + core::ops::Mul,
-    <T as Dimensioned>::Value: PartialOrd<f32>,
-    <T as core::ops::Div>::Output: fmt::Display,
+    T: Dimensioned<Value = f32> + core::ops::Div + core::ops::Mul,
+    <T as Dimensioned>::Value: PartialOrd<f32> + fmt::Display,
+    <T as core::ops::Div>::Output: Dimensionless,
+    <<T as core::ops::Div>::Output as Dimensioned>::Value: core::fmt::Display + Copy + PartialOrd<f32>,
     W: Write,
 {
     fn write_dim(self, w: &mut W, unit: T, width: usize, decimals: usize) -> fmt::Result {
@@ -90,7 +91,8 @@ where
                 };
             }
             Some(v) => {
-                let decimals = if decimals > 0 && v.value_unsafe() < &0.0 {
+                let value = *(v / unit).value();
+                let decimals = if decimals > 0 && value < 0.0 {
                     decimals - 1
                 } else {
                     decimals
@@ -98,7 +100,7 @@ where
                 core::write!(
                     w,
                     "{:0width$.precision$}",
-                    v / unit,
+                    value,
                     width = width,
                     precision = decimals
                 )?;
