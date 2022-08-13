@@ -162,6 +162,7 @@ where
                     }
                 }
 
+                let start_draw = Instant::now();
                 // Line 0: XX.XVext X.XXXA X.XXV
                 state.vext.write_dim(&mut buf, V, 4, 1).map_err(|_| FormatError(0))?;
                 buf.push_str_truncating("Vext ");
@@ -261,6 +262,10 @@ where
                 .draw(&mut self.display)?;
                 yield_now().await;
                 buf.clear();
+                info!(
+                    "display.draw took {} µs",
+                    start_draw.elapsed().as_micros()
+                );
                 let start_flush = Instant::now();
                 self.display.flush().await?;
                 info!(
