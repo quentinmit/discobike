@@ -577,7 +577,7 @@ fn config() -> embassy_nrf::config::Config {
     config
 }
 
-const BLUETOOTH: bool = false;
+const BLUETOOTH: bool = true;
 const WDT: bool = false;
 
 #[embassy_executor::main(config = "config()")]
@@ -591,7 +591,7 @@ async fn main(spawner: Spawner, p: Peripherals) {
     info!("Booting!");
     let mut neopixel = unwrap!(NeoPixelRgb::<'_, _, 1>::new(p.PWM0, use_pin_neo_pixel!(p)));
     if let Err(e) = neopixel
-        .set_with_filter(&[rgb::GREEN], &mut filter::Brightness(10))
+        .set(&[rgb::BLACK])
         .await
     {
         error!("failed to set neopixel on boot: {:?}", e);
