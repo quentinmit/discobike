@@ -3,12 +3,12 @@ use crate::I2cDevice;
 use crate::{HeadlightMode, UnderlightMode};
 use crate::Debug2Format;
 use apds9960::{Apds9960Async as Apds9960, LightData};
-use drogue_device::drivers::led::neopixel::rgb::NeoPixelRgb;
+use drogue_device::drivers::led::neopixel::rgb::{NeoPixelRgb, Rgb8};
 use embassy_executor::time::{Duration, Instant, Ticker};
 use embassy_nrf::gpio::{Level, Output, OutputDrive};
 use embassy_nrf::pac;
 use embassy_nrf::peripherals::{PWM1, PWM2, PWM3};
-use embassy_nrf::pwm::{Prescaler, SimplePwm};
+use embassy_nrf::pwm::{self, Prescaler, SimplePwm, Instance};
 use embassy_nrf::wdt::WatchdogHandle;
 use embedded_hal::digital::blocking::OutputPin;
 use futures::StreamExt;
@@ -102,7 +102,7 @@ pub async fn output_task(
     taillight_pwm.set_duty(0, PWM_MAX_TAILLIGHT);
     taillight_pwm.set_duty(1, PWM_MAX_TAILLIGHT);
     taillight_pwm.set_duty(2, PWM_MAX_TAILLIGHT);
-    let mut underlight = NeoPixelRgb::<'_, _, UNDERLIGHT_PIXELS>::new(pwm1, pin_underlight);
+    let mut underlight = NeoPixelRgb::<'_, _, UNDERLIGHT_PIXELS>::new(pwm1, pin_underlight).unwrap();
 
     info!("Enabling apds9960");
     apds9960.enable().await.unwrap();
@@ -257,10 +257,19 @@ pub async fn output_task(
 
         if underlight_on {
             // TODO: Update underlight
+            underlight_update(&mut underlight).await.expect("failed")
         }
 
         ticker.next().await;
     }
+}
+
+async fn underlight_update<const N: usize, T: Instance>(underlight: &mut NeoPixelRgb<'_, T, N>) -> Result<(), pwm::Error> {
+    let mut pixels = [Rgb8::new(0, 0, 0); N];
+    for i in 0..N {
+        pixels[i] = Rgb8::new(i as u8, i as u8, i as u8);
+    }
+    underlight.set(&pixels).await
 }
 
 //   // Update BLE characteristics
