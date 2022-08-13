@@ -2,7 +2,6 @@ use crate::EventTimer;
 use crate::I2cDevice;
 use crate::{HeadlightMode, UnderlightMode};
 use crate::Debug2Format;
-use apds9960::{Apds9960Async as Apds9960, LightData};
 use drogue_device::drivers::led::neopixel::rgb::{NeoPixelRgb, Rgb8};
 use embassy_executor::time::{Duration, Instant, Ticker};
 use embassy_nrf::gpio::{Level, Output, OutputDrive};
@@ -18,29 +17,6 @@ use dim::si::{
     f32consts::{A, LX, OHM, V},
     Lux, Volt,
 };
-
-trait CalculateIlluminance {
-    fn calculate_lux(&self) -> Lux<f32>;
-}
-impl CalculateIlluminance for LightData {
-    fn calculate_lux(&self) -> Lux<f32> {
-        ((-0.32466 * self.red as f32)
-            + (1.57837 * self.green as f32)
-            + (-0.73191 * self.blue as f32))
-            * LX
-    }
-}
-
-#[inline]
-pub fn max<T: PartialOrd>(a: T, b: T) -> T {
-    if a > b {
-        a
-    } else if b == b {
-        b
-    } else {
-        a
-    }
-}
 
 trait StepTowards {
     fn step_towards(self, target: Self, step: Self) -> Self;
@@ -88,7 +64,6 @@ pub async fn output_task(
     pin_tail_l: crate::PinTailL,
     pin_tail_c: crate::PinTailC,
     pin_tail_r: crate::PinTailR,
-    mut apds9960: Apds9960<I2cDevice>,
     pin_underlight: crate::PinUnderlight,
 ) {
     let mut power_enable = Output::new(pin_power_enable, Level::Low, OutputDrive::Standard);
@@ -104,10 +79,6 @@ pub async fn output_task(
     taillight_pwm.set_duty(2, PWM_MAX_TAILLIGHT);
     let mut underlight = NeoPixelRgb::<'_, _, UNDERLIGHT_PIXELS>::new(pwm1, pin_underlight).unwrap();
 
-    info!("Enabling apds9960");
-    apds9960.enable().await.unwrap();
-    apds9960.enable_light().await.unwrap();
-    info!("Enabled");
     let mut ticker = Ticker::every(Duration::from_millis(1000/30));
     loop {
         let now = Instant::now();
@@ -115,19 +86,6 @@ pub async fn output_task(
         if let Some(wdt_handle) = wdt_handle.as_mut() {
             wdt_handle.pet();
         }
-
-        let color: Option<LightData> = None;
-        let color = apds9960
-            .read_light()
-            .await
-            .inspect_err(|e| {
-                error!("failed to read light sensor: {:?}", Debug2Format(&e));
-            })
-            .ok();
-        // 3.5 counts/lux in the c channel according to datasheet
-        let lux_value =
-            color.map(|color| max(color.calculate_lux(), color.clear as f32 / (3.5 / LX))); // If C is overloaded, use RGB
-
         //   // TODO: Use IMU angle for mode too?
 
         let vbus_detected = power.usbregstatus.read().vbusdetect().is_vbus_present();
@@ -137,7 +95,6 @@ pub async fn output_task(
         let state = STATE.lock(|c| {
             c.update(|s| {
                 let mut s = s;
-                s.lux = lux_value;
                 s.vbus_detected = vbus_detected;
                 if vbus_detected {
                     s.vbus_timer.update();

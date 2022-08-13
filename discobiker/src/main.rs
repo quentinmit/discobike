@@ -14,9 +14,9 @@ use core::mem;
 use embassy_executor::executor::Spawner;
 use embassy_executor::time::{Duration, Instant, Timer};
 use embassy_nrf as _;
+use embassy_nrf::executor::InterruptExecutor;
 use embassy_nrf::gpio::{Input, Level, Output, OutputDrive, Pull};
-use embassy_nrf::interrupt;
-use embassy_nrf::interrupt::Priority;
+use embassy_nrf::interrupt::{self, Priority, InterruptExt};
 use embassy_nrf::peripherals::{SAADC, TWISPI0};
 use embassy_nrf::twim::{self, Twim};
 use embassy_nrf::wdt;
@@ -26,7 +26,7 @@ use embassy_util::blocking_mutex::ThreadModeMutex;
 use embassy_util::Forever;
 
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice as I2cBusDevice;
-use embassy_util::blocking_mutex::{raw::ThreadModeRawMutex, Mutex as BlockingMutex};
+use embassy_util::blocking_mutex::{raw::{CriticalSectionRawMutex, ThreadModeRawMutex}, Mutex as BlockingMutex};
 use embassy_util::mutex::Mutex;
 
 use drogue_device::drivers::led::neopixel::{filter, rgb, rgb::NeoPixelRgb};
@@ -291,7 +291,7 @@ pub struct DesiredState {
     // underlight_color
 }
 
-pub static DESIRED_STATE: BlockingMutex<ThreadModeRawMutex, Cell<DesiredState>> =
+pub static DESIRED_STATE: BlockingMutex<CriticalSectionRawMutex, Cell<DesiredState>> =
     BlockingMutex::new(Cell::new(DesiredState {
         headlight_mode: HeadlightMode::Auto,
         underlight_mode: UnderlightMode::Auto,
@@ -323,7 +323,7 @@ pub struct ActualState {
     temperature: Option<Kelvin<f32>>,
 }
 
-pub static STATE: BlockingMutex<ThreadModeRawMutex, Cell<ActualState>> =
+pub static STATE: BlockingMutex<CriticalSectionRawMutex, Cell<ActualState>> =
     BlockingMutex::new(Cell::new(ActualState {
         headlight_mode: HeadlightMode::Off,
         headlight_brightness: 0.0,
@@ -580,14 +580,22 @@ fn config() -> embassy_nrf::config::Config {
 const BLUETOOTH: bool = true;
 const WDT: bool = false;
 
+static EXECUTOR_HIGH: Forever<InterruptExecutor<interrupt::SWI0_EGU0>> = Forever::new();
+
 #[embassy_executor::main(config = "config()")]
 async fn main(spawner: Spawner, p: Peripherals) {
-    #[cfg(feature = "systemview-target")]
+    #[cfg(all(feature = "systemview-target", feature = "log"))]
     {
         LOGGER.init();
         ::log::set_logger(&LOGGER).ok();
         ::log::set_max_level(::log::LevelFilter::Trace);
     }
+
+    let irq = interrupt::take!(SWI0_EGU0);
+    irq.set_priority(interrupt::Priority::P7);
+    let executor = EXECUTOR_HIGH.put(InterruptExecutor::new(irq));
+    let spawner_high = executor.start();
+
     info!("Booting!");
     let mut neopixel = unwrap!(NeoPixelRgb::<'_, _, 1>::new(p.PWM0, use_pin_neo_pixel!(p)));
     if let Err(e) = neopixel
@@ -663,9 +671,6 @@ async fn main(spawner: Spawner, p: Peripherals) {
     let i2c_bus = Mutex::<ThreadModeRawMutex, _>::new(i2c);
     let i2c_bus = I2C_BUS.put(i2c_bus);
 
-    let mut apds9960 = Apds9960::new(I2cBusDevice::new(i2c_bus));
-    info!("APDS9960 ID: {}", apds9960.read_device_id().await.unwrap());
-
     info!("Peripherals initialized, starting actors");
 
     let power_actor = spawn_actor!(
@@ -674,6 +679,14 @@ async fn main(spawner: Spawner, p: Peripherals) {
         actors::power::Power<I2cDevice>,
         actors::power::Power::new(I2cBusDevice::new(i2c_bus))
     );
+
+    let light = spawn_actor!(
+        spawner,
+        LIGHT,
+        actors::light::Light<I2cDevice>,
+        actors::light::Light::new(I2cBusDevice::new(i2c_bus)).await.unwrap()
+    );
+    light.notify(actors::light::LightMessage::On).await;
 
     let display = spawn_actor!(
         spawner, DISPLAY, actors::display::Display<I2cDevice, DisplaySize128x64>,
@@ -700,7 +713,7 @@ async fn main(spawner: Spawner, p: Peripherals) {
         unwrap!(spawner.spawn(softdevice_task(sd)));
         unwrap!(spawner.spawn(bluetooth_task(spawner, sd)));
     }
-    unwrap!(spawner.spawn(output::output_task(
+    unwrap!(spawner_high.spawn(output::output_task(
         wdt_handle,
         power,
         p.PWM1,
@@ -711,7 +724,6 @@ async fn main(spawner: Spawner, p: Peripherals) {
         use_pin_tail_l!(p),
         use_pin_tail_c!(p),
         use_pin_tail_r!(p),
-        apds9960,
         use_pin_underlight!(p),
     )));
     unwrap!(spawner.spawn(adc_task(saadc, pin_vbat, Duration::from_millis(500))));
