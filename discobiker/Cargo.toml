@@ -10,7 +10,18 @@ default = ["async"]
 async = []
 mdbt50q = []
 rtos-trace = ["dep:rtos-trace", "embassy-executor/rtos-trace", "systemview-target", "systemview-target/log", "systemview-target/callbacks-os", "systemview-target/callbacks-app", "log"]
-defmt = ["dep:defmt", "dep:defmt-rtt", "embassy-executor/defmt", "embassy-util/defmt", "embassy-hal-common/defmt", "embassy-nrf/defmt", "nrf-softdevice/defmt", "panic-probe/print-defmt", "drogue-device/defmt", "bme280/with_defmt"]
+defmt = [
+    "dep:defmt",
+    "dep:defmt-rtt",
+    "embassy-executor/defmt",
+    "embassy-executor/defmt-timestamp-uptime",
+    "embassy-util/defmt",
+    "embassy-hal-common/defmt",
+    "embassy-nrf/defmt",
+    "nrf-softdevice/defmt",
+    "panic-probe/print-defmt",
+    "drogue-device/defmt",
+    "bme280/with_defmt"]
 
 [profile.dev.package.nrf-softdevice]
 opt-level = 3
