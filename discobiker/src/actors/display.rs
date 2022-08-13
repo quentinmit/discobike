@@ -111,7 +111,7 @@ where
 }
 
 #[cfg(debug_assertions)]
-const DISPLAY_PERIOD: Duration = Duration::from_millis(1000);
+const DISPLAY_PERIOD: Duration = Duration::from_millis(1000/2);
 #[cfg(not(debug_assertions))]
 const DISPLAY_PERIOD: Duration = Duration::from_millis(1000/10);
 
