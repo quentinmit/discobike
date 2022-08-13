@@ -139,7 +139,8 @@ where
             .font(&FONT_6X10)
             .text_color(BinaryColor::On)
             .build();
-        const COLS: usize = 128 / 6;
+        // Allow two bytes per character for utf-8
+        const COLS: usize = 128 / 3;
         let line_height = text_style.font.character_size.height;
         let mut ticker = Ticker::every(DISPLAY_PERIOD);
         loop {
@@ -164,6 +165,7 @@ where
 
                 let start_draw = Instant::now();
                 // Line 0: XX.XVext X.XXXA X.XXV
+                // vext, current, vbat
                 state.vext.write_dim(&mut buf, V, 4, 1).map_err(|_| FormatError(0))?;
                 buf.push_str_truncating("Vext ");
                 state.current.write_dim(&mut buf, A, 5, 3).map_err(|_| FormatError(0))?;
@@ -175,11 +177,24 @@ where
                 yield_now().await;
                 buf.clear();
                 // Line 1: XXX°XXX° XXX.X°
+                // heading, roll, bmp280 temperature
+                buf.push_str_truncating("XXX°XXX°");
                 match state.accel_temperature {
-                    None => buf.push_str_truncating("XXX°XXX° ---.-°"),
+                    None => buf.push_str_truncating("---.-°"),
                     Some(temp) => {
                         trace!("Temp = {}°K ({}°C)", (temp/K).value(), (temp/K).value() - CELSIUS_ZERO);
-                        core::write!(&mut buf, "XXX°XXX° {:5.1}°", (temp / R) - FAHRENHEIT_ZERO).map_err(|_| FormatError(1))?;
+                        if let Err(_) = core::write!(&mut buf, "{:5.1}°", (temp / R) - FAHRENHEIT_ZERO){
+                            buf.push_str_truncating("ERR");
+                        }
+                    }
+                };
+                match state.temperature {
+                    None => buf.push_str_truncating("---.-°"),
+                    Some(temp) => {
+                        trace!("Temp = {}°K ({}°C)", (temp/K).value(), (temp/K).value() - CELSIUS_ZERO);
+                        if let Err(_) = core::write!(&mut buf, "{:5.1}°", (temp / R) - FAHRENHEIT_ZERO) {
+                            buf.push_str_truncating("ERR");
+                        }
                     }
                 };
                 Text::with_baseline(
@@ -192,6 +207,7 @@ where
                 yield_now().await;
                 buf.clear();
                 // Line 2: XXXX.XXhPa XXX.XX'
+                // pressure, altitude
                 state.pressure.write_dim(&mut buf, HECTO * PA, 7, 2).map_err(|_| FormatError(2))?;
                 buf.push_str_truncating("hPa ");
                 let altitude = state.pressure.map(|p|
@@ -209,6 +225,7 @@ where
                 yield_now().await;
                 buf.clear();
                 // Line 3: XXX°TXXX.XX°
+                // debug: raw heading, mag_ok, acelerometer temperature
                 buf.push_str_truncating("UL: ");
                 core::write!(
                     &mut buf,
@@ -226,6 +243,7 @@ where
                 yield_now().await;
                 buf.clear();
                 // Line 4: XXX.XXG    XXXXX lux
+                // accel magnitude, lux
                 state.accel_mag.write_dim(
                     &mut buf,
                     STANDARD_ACCELERATION_OF_GRAVITY as f32 * MPS2,
@@ -245,6 +263,7 @@ where
                 yield_now().await;
                 buf.clear();
                 // Line 5: Mode: Day XXX% XXs
+                // headlight mode, headlight brightness, seconds until off
                 buf.push_str_truncating("Mode: ");
                 core::write!(
                     &mut buf,
