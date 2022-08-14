@@ -23,6 +23,10 @@ defmt = [
     "drogue-device/defmt",
     "bme280/with_defmt"]
 
+[profile.dev]
+opt-level = 1
+debug-assertions = true
+
 [profile.dev.package.nrf-softdevice]
 opt-level = 3
 
