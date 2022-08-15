@@ -3,7 +3,7 @@ use core::cmp::min;
 use drogue_device::drivers::led::neopixel::Pixel;
 use drogue_device::drivers::led::neopixel::rgbw::{Rgbw8, BLACK};
 
-fn colorHSV(hue: u16, sat: u8, val: u8) -> Rgbw8 {
+fn color_hsv(hue: u16, sat: u8, val: u8) -> Rgbw8 {
     // Remap 0-65535 to 0-1529. Pure red is CENTERED on the 64K rollover;
     // 0 is not the start of pure red, but the midpoint...a few values above
     // zero and a few below 65536 all yield pure red (similarly, 32768 is the
@@ -61,7 +61,7 @@ fn colorHSV(hue: u16, sat: u8, val: u8) -> Rgbw8 {
     )
 }
 
-pub fn colorWipe<const N: usize>(frame: u32, speed: i16, color: Rgbw8) -> [Rgbw8; N] {
+pub fn color_wipe<const N: usize>(frame: u32, speed: i16, color: Rgbw8) -> [Rgbw8; N] {
     let frame = ((frame as i32) * (speed as i32)) as usize;
     // default speed is 1 frame per pixel
     let frame = frame / 256;
@@ -81,7 +81,7 @@ pub fn rainbow<const N: usize>(frame: u32, speed: i16) -> [Rgbw8; N] {
     let frame = ((frame as i32) * (speed as i32)) as usize;
     // default speed is 128 frames (4.2 seconds) per loop
     let frame = frame / 128;
-    let firstPixelHue = (256 * frame) % 65536;
+    let first_pixel_hue = (256 * frame) % 65536;
     // Hue of first pixel runs 5 complete loops through the color wheel.
     // Color wheel has a range of 65536 but it's OK if we roll over, so
     // just count from 0 to 5*65536. Adding 256 to firstPixelHue each time
@@ -91,13 +91,13 @@ pub fn rainbow<const N: usize>(frame: u32, speed: i16) -> [Rgbw8; N] {
       // Offset pixel hue by an amount to make one full revolution of the
       // color wheel (range of 65536) along the length of the strip
       // (strip.numPixels() steps):
-      let pixelHue = (firstPixelHue + (i * 65536 / N)) as u16;
+      let pixel_hue = (first_pixel_hue + (i * 65536 / N)) as u16;
       // strip.ColorHSV() can take 1 or 3 arguments: a hue (0 to 65535) or
       // optionally add saturation and value (brightness) (each 0 to 255).
       // Here we're using just the single-argument hue variant. The result
       // is passed through strip.gamma32() to provide 'truer' colors
       // before assigning to each pixel:
-      out[i] = colorHSV(pixelHue, 255, 255);
+      out[i] = color_hsv(pixel_hue, 255, 255);
     }
     out
 }

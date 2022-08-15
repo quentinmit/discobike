@@ -9,6 +9,7 @@ use embassy_nrf::pwm::{self, Prescaler, SimplePwm, Instance};
 use embassy_nrf::wdt::WatchdogHandle;
 use embedded_hal::digital::blocking::OutputPin;
 use futures::StreamExt;
+use num_traits::Float;
 extern crate dimensioned as dim;
 use crate::{DESIRED_STATE, STATE};
 use dim::si::{
@@ -187,7 +188,7 @@ pub async fn output_task(
         });
         headlight_pwm.set_duty(
             0,
-            PWM_MAX_HEADLIGHT - (PWM_MAX_HEADLIGHT as f32 * state.headlight_brightness) as u16,
+            (PWM_MAX_HEADLIGHT as f32 * state.headlight_brightness) as u16,
         ); // TODO: Figure out how to invert polarity.
         if state.taillight_brightness == 0.0 {
             taillight_pwm.set_duty(0, PWM_MAX_TAILLIGHT);
@@ -204,8 +205,8 @@ pub async fn output_task(
                 };
 
             // TODO: gamma
-            let tail_pwm_1 = (255.0 * state.taillight_brightness * tail_intensity) as u16;
-            let tail_pwm_2 = (255.0 * state.taillight_brightness * (1.0 - tail_intensity)) as u16;
+            let tail_pwm_1 = (PWM_MAX_TAILLIGHT as f32 * (state.taillight_brightness * tail_intensity).powf(2.8)) as u16;
+            let tail_pwm_2 = (PWM_MAX_TAILLIGHT as f32 * (state.taillight_brightness * (1.0 - tail_intensity)).powf(2.8)) as u16;
 
             taillight_pwm.set_duty(0, PWM_MAX_TAILLIGHT-tail_pwm_1);
             taillight_pwm.set_duty(1, PWM_MAX_TAILLIGHT-tail_pwm_2);
@@ -224,7 +225,7 @@ pub async fn output_task(
 async fn underlight_update<const N: usize, T: Instance>(underlight: &mut NeoPixelRgbw<'_, T, N>, desired_state: &DesiredState, state: &ActualState) -> Result<(), pwm::Error> {
     use crate::Effect::*;
     let pixels = match desired_state.underlight_effect {
-        ColorWipe => effects::colorWipe(state.underlight_frame, desired_state.underlight_speed, RED),
+        ColorWipe => effects::color_wipe(state.underlight_frame, desired_state.underlight_speed, RED),
         Rainbow => effects::rainbow(state.underlight_frame, desired_state.underlight_speed),
         _ => todo!("unsupported"),
     };
