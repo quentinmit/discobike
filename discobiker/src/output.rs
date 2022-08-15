@@ -1,5 +1,6 @@
-use crate::{HeadlightMode, UnderlightMode};
-use drogue_device::drivers::led::neopixel::rgb::{NeoPixelRgb, Rgb8};
+use crate::{HeadlightMode, UnderlightMode, ActualState, DesiredState};
+use drogue_device::drivers::led::neopixel::filter::*;
+use drogue_device::drivers::led::neopixel::rgbw::{NeoPixelRgbw, Rgbw8, RED};
 use embassy_executor::time::{Duration, Instant, Ticker};
 use embassy_nrf::gpio::{Level, Output, OutputDrive};
 use embassy_nrf::pac;
@@ -13,6 +14,8 @@ use crate::{DESIRED_STATE, STATE};
 use dim::si::{
     f32consts::{LX, V},
 };
+
+mod effects;
 
 trait StepTowards {
     fn step_towards(self, target: Self, step: Self) -> Self;
@@ -73,7 +76,7 @@ pub async fn output_task(
     taillight_pwm.set_duty(0, PWM_MAX_TAILLIGHT);
     taillight_pwm.set_duty(1, PWM_MAX_TAILLIGHT);
     taillight_pwm.set_duty(2, PWM_MAX_TAILLIGHT);
-    let mut underlight = NeoPixelRgb::<'_, _, UNDERLIGHT_PIXELS>::new(pwm1, pin_underlight).unwrap();
+    let mut underlight = NeoPixelRgbw::<'_, _, UNDERLIGHT_PIXELS>::new(pwm1, pin_underlight).unwrap();
 
     let mut ticker = Ticker::every(Duration::from_millis(1000/30));
     loop {
@@ -125,6 +128,7 @@ pub async fn output_task(
                 s.underlight_brightness = s
                     .underlight_brightness
                     .step_towards(underlight_target_brightness, 3);
+                s.underlight_frame += 1;
                 s
             })
         });
@@ -210,19 +214,21 @@ pub async fn output_task(
 
         if underlight_on {
             // TODO: Update underlight
-            underlight_update(&mut underlight).await.expect("failed")
+            underlight_update(&mut underlight, &desired_state, &state).await.expect("failed")
         }
 
         ticker.next().await;
     }
 }
 
-async fn underlight_update<const N: usize, T: Instance>(underlight: &mut NeoPixelRgb<'_, T, N>) -> Result<(), pwm::Error> {
-    let mut pixels = [Rgb8::new(0, 0, 0); N];
-    for i in 0..N {
-        pixels[i] = Rgb8::new(i as u8, i as u8, i as u8);
-    }
-    underlight.set(&pixels).await
+async fn underlight_update<const N: usize, T: Instance>(underlight: &mut NeoPixelRgbw<'_, T, N>, desired_state: &DesiredState, state: &ActualState) -> Result<(), pwm::Error> {
+    use crate::Effect::*;
+    let pixels = match desired_state.underlight_effect {
+        ColorWipe => effects::colorWipe(state.underlight_frame, desired_state.underlight_speed, RED),
+        Rainbow => effects::rainbow(state.underlight_frame, desired_state.underlight_speed),
+        _ => todo!("unsupported"),
+    };
+    underlight.set_with_filter(&pixels, &mut Brightness(state.underlight_brightness).and(Gamma{})).await
 }
 
 //   // Update BLE characteristics

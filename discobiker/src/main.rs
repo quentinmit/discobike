@@ -300,6 +300,7 @@ pub struct ActualState {
     headlight_brightness: f32,
     taillight_brightness: f32,
     underlight_brightness: u8,
+    underlight_frame: u32,
     display_on: bool,
     vbus_detected: bool,
 
@@ -324,6 +325,7 @@ pub static STATE: BlockingMutex<CriticalSectionRawMutex, Cell<ActualState>> =
         headlight_brightness: 0.0,
         taillight_brightness: 0.0,
         underlight_brightness: 0,
+        underlight_frame: 0,
         display_on: false,
         vbus_detected: false,
 
