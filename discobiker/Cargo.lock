@@ -560,7 +560,7 @@ dependencies = [
  "cfg-if",
  "cortex-m",
  "cortex-m-rt",
- "critical-section 0.2.7",
+ "critical-section 1.1.0",
  "defmt",
  "defmt-rtt",
  "dimensioned",
@@ -1287,7 +1287,9 @@ dependencies = [
 
 [[package]]
 name = "lsm6ds33"
-version = "0.4.0"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "889e1be22ed855cff38ece710d80a0cfb42f5ede0d4afdcde25a3baa026a227f"
 dependencies = [
  "arrayref",
  "embedded-hal-async",
