@@ -9,7 +9,7 @@ use dim::ucum::{
 use dim::{derived, Dimensionless};
 use dim::{typenum::Pow, Sqrt};
 use ector::{actor, Actor, Address, Inbox};
-use embassy_executor::time::{Duration, Timer};
+use embassy_time::{Duration, Timer};
 use embedded_hal_async::i2c;
 use lsm6ds33::{self, *};
 

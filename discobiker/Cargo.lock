@@ -106,7 +106,16 @@ version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e14bf7b4f565e5e717d7a7a65b2a05c0b8c96e4db636d6f780f03b15108cdd1b"
 dependencies = [
- "critical-section",
+ "critical-section 0.2.7",
+]
+
+[[package]]
+name = "atomic-polyfill"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d299f547288d6db8d5c3a2916f7b2f66134b15b8c1ac1c4357dd3b8752af7bb2"
+dependencies = [
+ "critical-section 1.1.0",
 ]
 
 [[package]]
@@ -298,12 +307,13 @@ checksum = "722e23542a15cea1f65d4a1419c4cfd7a26706c70871a13a04238ca3f40f1661"
 
 [[package]]
 name = "cortex-m"
-version = "0.7.5"
+version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd20d4ac4aa86f4f75f239d59e542ef67de87cce2c282818dc6e84155d3ea126"
+checksum = "70858629a458fdfd39f9675c4dc309411f2a3f83bede76988d81bf1a0ecee9e0"
 dependencies = [
  "bare-metal 0.2.5",
  "bitfield",
+ "critical-section 1.1.0",
  "embedded-hal 0.2.7",
  "volatile-register",
 ]
@@ -348,6 +358,12 @@ dependencies = [
  "cortex-m",
  "riscv",
 ]
+
+[[package]]
+name = "critical-section"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d02ba51481d019be9c74a831d1133c364d78831b75c833478f3a21e1fd91e01a"
 
 [[package]]
 name = "crunchy"
@@ -497,7 +513,7 @@ version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d2cbbbd58847d508d97629b32cd9730a2d28532f71e219714614406029f18b1"
 dependencies = [
- "critical-section",
+ "critical-section 0.2.7",
  "defmt",
 ]
 
@@ -544,7 +560,7 @@ dependencies = [
  "cfg-if",
  "cortex-m",
  "cortex-m-rt",
- "critical-section",
+ "critical-section 0.2.7",
  "defmt",
  "defmt-rtt",
  "dimensioned",
@@ -555,6 +571,7 @@ dependencies = [
  "embassy-executor",
  "embassy-hal-common",
  "embassy-nrf",
+ "embassy-time",
  "embassy-util",
  "embedded-graphics",
  "embedded-hal 1.0.0-alpha.8",
@@ -610,9 +627,9 @@ checksum = "0688c2a7f92e427f44895cd63841bff7b29f8d7a1648b9e7e07a4a365b2e1257"
 name = "drogue-device"
 version = "0.1.0"
 dependencies = [
- "atomic-polyfill",
+ "atomic-polyfill 0.1.8",
  "cortex-m",
- "critical-section",
+ "critical-section 0.2.7",
  "defmt",
  "drogue-device-macros",
  "ector",
@@ -620,6 +637,7 @@ dependencies = [
  "embassy-executor",
  "embassy-hal-common",
  "embassy-nrf",
+ "embassy-time",
  "embassy-util",
  "embedded-hal 0.2.7",
  "embedded-hal 1.0.0-alpha.8",
@@ -653,9 +671,9 @@ dependencies = [
 [[package]]
 name = "ector"
 version = "0.1.0"
-source = "git+https://github.com/quentinmit/ector.git?branch=embassy-split#9a880deeccd73ae1a409665355d8deb078c41746"
+source = "git+https://github.com/quentinmit/ector.git?branch=embassy-split-time#493aa864a086b7489d7113fdfbf77c9ce13226dd"
 dependencies = [
- "atomic-polyfill",
+ "atomic-polyfill 0.1.8",
  "ector-macros",
  "embassy-executor",
  "embassy-util",
@@ -668,7 +686,7 @@ dependencies = [
 [[package]]
 name = "ector-macros"
 version = "0.1.0"
-source = "git+https://github.com/quentinmit/ector.git?branch=embassy-split#9a880deeccd73ae1a409665355d8deb078c41746"
+source = "git+https://github.com/quentinmit/ector.git?branch=embassy-split-time#493aa864a086b7489d7113fdfbf77c9ce13226dd"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -699,10 +717,10 @@ dependencies = [
 name = "embassy-cortex-m"
 version = "0.1.0"
 dependencies = [
- "atomic-polyfill",
+ "atomic-polyfill 1.0.1",
  "cfg-if",
  "cortex-m",
- "critical-section",
+ "critical-section 1.1.0",
  "embassy-executor",
  "embassy-hal-common",
  "embassy-macros",
@@ -727,14 +745,12 @@ dependencies = [
 name = "embassy-executor"
 version = "0.1.0"
 dependencies = [
- "atomic-polyfill",
+ "atomic-polyfill 1.0.1",
  "cfg-if",
- "critical-section",
+ "critical-section 1.1.0",
  "defmt",
  "embassy-macros",
- "embedded-hal 0.2.7",
- "embedded-hal 1.0.0-alpha.8",
- "embedded-hal-async",
+ "embassy-time",
  "futures-util",
  "rtos-trace",
 ]
@@ -744,7 +760,6 @@ name = "embassy-hal-common"
 version = "0.1.0"
 dependencies = [
  "defmt",
- "embassy-util",
  "num-traits",
 ]
 
@@ -765,13 +780,13 @@ dependencies = [
  "cfg-if",
  "cortex-m",
  "cortex-m-rt",
- "critical-section",
+ "critical-section 1.1.0",
  "defmt",
  "embassy-cortex-m",
  "embassy-embedded-hal",
  "embassy-executor",
  "embassy-hal-common",
- "embassy-macros",
+ "embassy-time",
  "embassy-usb",
  "embassy-util",
  "embedded-hal 0.2.7",
@@ -787,6 +802,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "embassy-time"
+version = "0.1.0"
+dependencies = [
+ "atomic-polyfill 1.0.1",
+ "cfg-if",
+ "critical-section 1.1.0",
+ "defmt",
+ "embassy-macros",
+ "embedded-hal 0.2.7",
+ "embedded-hal 1.0.0-alpha.8",
+ "embedded-hal-async",
+ "futures-util",
+]
+
+[[package]]
 name = "embassy-usb"
 version = "0.1.0"
 dependencies = [
@@ -799,9 +829,9 @@ dependencies = [
 name = "embassy-util"
 version = "0.1.0"
 dependencies = [
- "atomic-polyfill",
+ "atomic-polyfill 1.0.1",
  "cfg-if",
- "critical-section",
+ "critical-section 1.1.0",
  "defmt",
  "embedded-io",
  "futures-util",
@@ -1147,7 +1177,7 @@ version = "0.7.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f6733da246dc2af610133c8be0667170fd68e8ca5630936b520300eee8846f9"
 dependencies = [
- "atomic-polyfill",
+ "atomic-polyfill 0.1.8",
  "defmt",
  "hash32",
  "rustc_version 0.4.0",
@@ -1354,7 +1384,7 @@ source = "git+https://github.com/embassy-rs/nrf-softdevice#ab0ad770c729b4f034bf0
 dependencies = [
  "cortex-m",
  "cortex-m-rt",
- "critical-section",
+ "critical-section 0.2.7",
  "defmt",
  "embassy-util",
  "embedded-storage",

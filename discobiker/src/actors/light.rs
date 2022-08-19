@@ -9,7 +9,7 @@ use futures::select_biased;
 use futures::FutureExt;
 use dim::traits::Dimensionless;
 use ector::{actor, Actor, Address, Inbox};
-use embassy_executor::time::{Duration, Timer};
+use embassy_time::{Duration, Timer};
 use embedded_hal_async::i2c;
 
 trait CalculateIlluminance {

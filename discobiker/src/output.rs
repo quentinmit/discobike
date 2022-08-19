@@ -1,7 +1,7 @@
 use crate::{HeadlightMode, UnderlightMode, ActualState, DesiredState};
 use drogue_device::drivers::led::neopixel::filter::*;
 use drogue_device::drivers::led::neopixel::rgbw::{NeoPixelRgbw, Rgbw8, RED};
-use embassy_executor::time::{Duration, Instant, Ticker};
+use embassy_time::{Duration, Instant, Ticker};
 use embassy_nrf::gpio::{Level, Output, OutputDrive};
 use embassy_nrf::pac;
 use embassy_nrf::peripherals::{PWM1, PWM2, PWM3};

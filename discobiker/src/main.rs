@@ -11,8 +11,8 @@ use core::cell::{Cell, RefCell};
 use core::convert::TryInto;
 use core::fmt;
 use core::mem;
-use embassy_executor::executor::Spawner;
-use embassy_executor::time::{Duration, Instant, Timer};
+use embassy_executor::Spawner;
+use embassy_time::{Duration, Instant, Timer};
 use embassy_nrf as _;
 use embassy_nrf::executor::InterruptExecutor;
 use embassy_nrf::gpio::{Level, Output, OutputDrive};
@@ -579,8 +579,9 @@ const WDT: bool = false;
 
 static EXECUTOR_HIGH: Forever<InterruptExecutor<interrupt::SWI0_EGU0>> = Forever::new();
 
-#[embassy_executor::main(config = "config()")]
-async fn main(spawner: Spawner, p: Peripherals) {
+#[embassy_executor::main()]
+async fn main(spawner: Spawner) {
+    let p = embassy_nrf::init(config());
     #[cfg(all(feature = "systemview-target", feature = "log"))]
     {
         LOGGER.init();

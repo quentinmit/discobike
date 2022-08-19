@@ -1,7 +1,7 @@
 use crate::{DESIRED_STATE, STATE, CELSIUS_ZERO, Debug2Format};
 use core::fmt;
 use core::fmt::Write;
-use embassy_executor::time::{Duration, Instant, Timer, Ticker};
+use embassy_time::{Duration, Instant, Timer, Ticker};
 use embassy_util::yield_now;
 use embedded_graphics::prelude::*;
 use embedded_graphics::{
