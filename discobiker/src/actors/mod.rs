@@ -4,3 +4,4 @@ pub mod imu;
 pub mod light;
 pub mod output;
 pub mod power;
+pub mod sound;

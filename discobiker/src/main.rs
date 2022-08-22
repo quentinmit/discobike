@@ -51,7 +51,7 @@ use panic_probe as _;
 use num_enum::TryFromPrimitive;
 use paste::paste;
 
-use ector::spawn_actor;
+use ector::{spawn_actor, ActorContext};
 
 mod actors;
 mod drivers;
@@ -125,7 +125,9 @@ define_pin!(TailL, P0_08);
 // 13* / P1.09 - Red LED
 define_pin!(TailR, P1_09);
 // 34 / P0.00 - PDM microphone data
+define_pin!(PdmData, P0_00);
 // 35 / P0.01 - PDM microphone clock
+define_pin!(PdmClock, P0_01);
 // 36 / P1.00 - APDS9960 Light Gesture Proximity IRQ
 // 14 / A0* / P0.04 - Audio Amp Input (Propmaker)
 // 15 / A1* / P0.05
@@ -264,7 +266,7 @@ enum UnderlightMode {
 
 #[repr(u8)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[derive(Copy, Clone, PartialEq, Serialize, Deserialize, TryFromPrimitive)]
+#[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize, TryFromPrimitive)]
 enum Effect {
     Solid = 0,
     ColorWipe,
@@ -273,6 +275,7 @@ enum Effect {
     TheaterChaseRainbow,
     CylonBounce,
     Fire,
+    VUMeter,
 }
 
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -299,7 +302,6 @@ pub struct ActualState {
     headlight_brightness: f32,
     taillight_brightness: f32,
     underlight_brightness: u8,
-    underlight_frame: u32,
     display_on: bool,
     vbus_detected: bool,
 
@@ -324,7 +326,6 @@ pub static STATE: BlockingMutex<CriticalSectionRawMutex, Cell<ActualState>> =
         headlight_brightness: 0.0,
         taillight_brightness: 0.0,
         underlight_brightness: 0,
-        underlight_frame: 0,
         display_on: false,
         vbus_detected: false,
 
@@ -667,6 +668,8 @@ async fn main(spawner: Spawner) {
 
     info!("Peripherals initialized, starting actors");
 
+    static OUTPUT: ActorContext<actors::output::Output> = ActorContext::new();
+
     let power_actor = spawn_actor!(
         spawner,
         POWER,
@@ -713,10 +716,20 @@ async fn main(spawner: Spawner) {
         unwrap!(spawner.spawn(bluetooth_task(spawner, sd)));
     }
 
-    let output = spawn_actor!(
+    let sound = spawn_actor!(
         spawner,
-        OUTPUT,
-        actors::output::Output,
+        SOUND,
+        actors::sound::Sound,
+        actors::sound::Sound::new(
+            p.PDM,
+            use_pin_pdm_data!(p),
+            use_pin_pdm_clock!(p),
+            OUTPUT.address(),
+        )
+    );
+
+    OUTPUT.mount(
+        spawner,
         actors::output::Output::new(
             wdt_handle,
             power,
@@ -729,6 +742,7 @@ async fn main(spawner: Spawner) {
             use_pin_tail_c!(p),
             use_pin_tail_r!(p),
             use_pin_underlight!(p),
+            sound,
         )
     );
     unwrap!(spawner.spawn(adc_task(saadc, pin_vbat, Duration::from_millis(500))));

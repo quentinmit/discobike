@@ -9,11 +9,13 @@ use embassy_nrf::pwm::{self, Instance, Prescaler, SimplePwm};
 use embassy_nrf::wdt::WatchdogHandle;
 use embassy_time::{Duration, Instant, Ticker, Timer};
 use embedded_hal::digital::blocking::OutputPin;
-use futures::StreamExt;
+use futures::{StreamExt, select_biased, FutureExt};
 use num_traits::Float;
 extern crate dimensioned as dim;
 use crate::{DESIRED_STATE, STATE};
 use dim::si::f32consts::{LX, V};
+
+use super::sound::{SoundMessage, SoundData};
 
 mod effects;
 
@@ -58,9 +60,18 @@ pub struct Output<'a> {
     headlight_pwm: SimplePwm<'a, PWM3>,
     taillight_pwm: SimplePwm<'a, PWM2>,
     underlight: NeoPixelRgbw<'a, PWM1, UNDERLIGHT_PIXELS>,
+    sound: Address<SoundMessage>,
+
+    underlight_frame: u32,
+    need_sound: bool,
+    sound_data: Option<SoundData>,
 }
 
-pub enum OutputMessage {}
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[derive(Debug)]
+pub enum OutputMessage {
+    SoundData(SoundData),
+}
 
 impl Output<'_> {
     pub fn new(
@@ -75,6 +86,7 @@ impl Output<'_> {
         pin_tail_c: crate::PinTailC,
         pin_tail_r: crate::PinTailR,
         pin_underlight: crate::PinUnderlight,
+        sound: Address<SoundMessage>
     ) -> Self {
         let mut power_enable = GpioOutput::new(pin_power_enable, Level::Low, OutputDrive::Standard);
         let mut headlight_pwm = SimplePwm::new_1ch(pwm3, pin_headlight_dim);
@@ -96,10 +108,15 @@ impl Output<'_> {
             headlight_pwm,
             taillight_pwm,
             underlight,
+            sound,
+
+            underlight_frame: 0,
+            need_sound: false,
+            sound_data: None,
         }
     }
 
-    async fn run_output<M>(&mut self, _inbox: &mut M) -> Result<(), ()>
+    async fn run_output<M>(&mut self, inbox: &mut M) -> Result<(), ()>
     where
         M: Inbox<OutputMessage>,
     {
@@ -158,7 +175,7 @@ impl Output<'_> {
                     s.underlight_brightness = s
                         .underlight_brightness
                         .step_towards(underlight_target_brightness, 3);
-                    s.underlight_frame += 1;
+                    self.underlight_frame += 1;
                     s
                 })
             });
@@ -252,13 +269,58 @@ impl Output<'_> {
 
             if underlight_on {
                 // TODO: Update underlight
-                underlight_update(&mut self.underlight, &desired_state, &state)
+                self.underlight_update(&desired_state, &state)
                     .await
                     .expect("failed")
             }
 
-            ticker.next().await;
+            select_biased! {
+                message = inbox.next().fuse() => {
+                    match message {
+                        OutputMessage::SoundData(data) => self.handle_sound_data(data),
+                    }
+                },
+                _ = ticker.next().fuse() => (),
+            };
         }
+    }
+
+    fn handle_sound_data(&mut self, data: SoundData) {
+        trace!("new sound_data: {}", data);
+        self.sound_data = Some(data);
+    }
+
+    async fn underlight_update(
+        &mut self,
+        desired_state: &DesiredState,
+        state: &ActualState,
+    ) -> Result<(), pwm::Error> {
+        use crate::Effect::*;
+        let need_sound = match desired_state.underlight_effect {
+            VUMeter => true,
+            _ => false,
+        };
+        if need_sound != self.need_sound {
+            self.sound.notify(match need_sound {
+                true => SoundMessage::On,
+                false => SoundMessage::Off,
+            }).await;
+            self.need_sound = need_sound;
+        }
+        let pixels = match desired_state.underlight_effect {
+            ColorWipe => {
+                effects::color_wipe(self.underlight_frame, desired_state.underlight_speed, RED)
+            }
+            Rainbow => effects::rainbow(self.underlight_frame, desired_state.underlight_speed),
+            VUMeter => effects::vu_meter(&self.sound_data, RED),
+            x => todo!("unsupported effect {:?}", x),
+        };
+        self.underlight
+            .set_with_filter(
+                &pixels,
+                &mut Brightness(state.underlight_brightness).and(Gamma {}),
+            )
+            .await
     }
 }
 
@@ -278,27 +340,6 @@ impl Actor for Output<'_> {
             Timer::after(Duration::from_secs(1)).await;
         }
     }
-}
-
-async fn underlight_update<const N: usize, T: Instance>(
-    underlight: &mut NeoPixelRgbw<'_, T, N>,
-    desired_state: &DesiredState,
-    state: &ActualState,
-) -> Result<(), pwm::Error> {
-    use crate::Effect::*;
-    let pixels = match desired_state.underlight_effect {
-        ColorWipe => {
-            effects::color_wipe(state.underlight_frame, desired_state.underlight_speed, RED)
-        }
-        Rainbow => effects::rainbow(state.underlight_frame, desired_state.underlight_speed),
-        _ => todo!("unsupported"),
-    };
-    underlight
-        .set_with_filter(
-            &pixels,
-            &mut Brightness(state.underlight_brightness).and(Gamma {}),
-        )
-        .await
 }
 
 //   // Update BLE characteristics
