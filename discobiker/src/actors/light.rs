@@ -1,16 +1,13 @@
-use apds9960::{Apds9960Async, LightData, Error};
-use crate::{STATE, Debug2Format};
+use crate::{Debug2Format, STATE};
+use apds9960::{Apds9960Async, Error, LightData};
 use core::fmt::{self, Debug};
-use dim::si::{
-    f32consts::{LX},
-    Lux,
-};
-use futures::select_biased;
-use futures::FutureExt;
+use dim::si::{f32consts::LX, Lux};
 use dim::traits::Dimensionless;
 use ector::{actor, Actor, Address, Inbox};
 use embassy_time::{Duration, Timer};
 use embedded_hal_async::i2c;
+use futures::select_biased;
+use futures::FutureExt;
 
 trait CalculateIlluminance {
     fn calculate_lux(&self) -> Lux<f32>;
@@ -67,7 +64,8 @@ where
         info!("Enabled");
 
         loop {
-            let color = self.apds9960
+            let color = self
+                .apds9960
                 .read_light()
                 .await
                 .inspect_err(|e| {
@@ -108,7 +106,7 @@ where
                 LightMessage::On => {
                     info!("Light on");
                     self.run_high_power(inbox).await?;
-                },
+                }
                 LightMessage::Off => warn!("Light off while already off"),
             };
         }

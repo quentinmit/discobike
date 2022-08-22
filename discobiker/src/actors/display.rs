@@ -1,7 +1,7 @@
-use crate::{DESIRED_STATE, STATE, CELSIUS_ZERO, Debug2Format};
+use crate::{Debug2Format, CELSIUS_ZERO, DESIRED_STATE, STATE};
 use core::fmt;
 use core::fmt::Write;
-use embassy_time::{Duration, Instant, Timer, Ticker};
+use embassy_time::{Duration, Instant, Ticker, Timer};
 use embassy_util::yield_now;
 use embedded_graphics::prelude::*;
 use embedded_graphics::{
@@ -10,7 +10,7 @@ use embedded_graphics::{
     text::{Baseline, Text},
 };
 use futures::select_biased;
-use futures::{StreamExt, FutureExt};
+use futures::{FutureExt, StreamExt};
 use staticvec::{StaticString, StaticVec};
 
 use embedded_hal_async::i2c;
@@ -24,16 +24,16 @@ use bincode;
 
 extern crate dimensioned as dim;
 use dim::f32prefixes::HECTO;
-use dim::si::f32consts::{A, LX, MPS2, V, PA, K, M, FT};
+use dim::si::f32consts::{A, FT, K, LX, M, MPS2, PA, V};
 use dim::si::Kelvin;
 use dim::traits::{Dimensioned, Dimensionless, Map};
-use physical_constants::STANDARD_ACCELERATION_OF_GRAVITY;
 use num_traits::Float;
+use physical_constants::STANDARD_ACCELERATION_OF_GRAVITY;
 
 use ector::{actor, Actor, Address, Inbox};
 
-const R: Kelvin<f32> = Kelvin::new(5.0/9.0);
-const FAHRENHEIT_ZERO: f32 = CELSIUS_ZERO * 9.0/5.0 - 32.0;
+const R: Kelvin<f32> = Kelvin::new(5.0 / 9.0);
+const FAHRENHEIT_ZERO: f32 = CELSIUS_ZERO * 9.0 / 5.0 - 32.0;
 
 pub struct Display<I2C, SIZE: DisplaySize> {
     // interface, mode, size, addr_mode, rotation
@@ -72,7 +72,8 @@ where
     T: Dimensioned<Value = f32> + core::ops::Div + core::ops::Mul,
     <T as Dimensioned>::Value: PartialOrd<f32> + fmt::Display,
     <T as core::ops::Div>::Output: Dimensionless,
-    <<T as core::ops::Div>::Output as Dimensioned>::Value: core::fmt::Display + Copy + PartialOrd<f32>,
+    <<T as core::ops::Div>::Output as Dimensioned>::Value:
+        core::fmt::Display + Copy + PartialOrd<f32>,
     W: Write,
 {
     fn write_dim(self, w: &mut W, unit: T, width: usize, decimals: usize) -> fmt::Result {
@@ -111,9 +112,9 @@ where
 }
 
 #[cfg(debug_assertions)]
-const DISPLAY_PERIOD: Duration = Duration::from_millis(1000/2);
+const DISPLAY_PERIOD: Duration = Duration::from_millis(1000 / 2);
 #[cfg(not(debug_assertions))]
-const DISPLAY_PERIOD: Duration = Duration::from_millis(1000/10);
+const DISPLAY_PERIOD: Duration = Duration::from_millis(1000 / 10);
 
 // DisplaySize128x64
 impl<I2C, E, SIZE> Display<I2C, SIZE>
@@ -148,7 +149,7 @@ where
 
     async fn run_display_on<MBOX>(&mut self, inbox: &mut MBOX) -> Result<(), Error>
     where
-    MBOX: Inbox<DisplayMessage>,
+        MBOX: Inbox<DisplayMessage>,
     {
         use Error::FormatError;
         self.display.set_display_on(true).await?;
@@ -182,11 +183,20 @@ where
             let start_draw = Instant::now();
             // Line 0: XX.XVext X.XXXA X.XXV
             // vext, current, vbat
-            state.vext.write_dim(&mut buf, V, 4, 1).map_err(|_| FormatError(0))?;
+            state
+                .vext
+                .write_dim(&mut buf, V, 4, 1)
+                .map_err(|_| FormatError(0))?;
             buf.push_str_truncating("Vext ");
-            state.current.write_dim(&mut buf, A, 5, 3).map_err(|_| FormatError(0))?;
+            state
+                .current
+                .write_dim(&mut buf, A, 5, 3)
+                .map_err(|_| FormatError(0))?;
             buf.push_str_truncating("A ");
-            state.vbat.write_dim(&mut buf, V, 4, 2).map_err(|_| FormatError(0))?;
+            state
+                .vbat
+                .write_dim(&mut buf, V, 4, 2)
+                .map_err(|_| FormatError(0))?;
             buf.push_str_truncating(if state.vbus_detected { "V" } else { "v" });
             Text::with_baseline(&buf, Point::zero(), text_style, Baseline::Top)
                 .draw(&mut self.display)?;
@@ -198,8 +208,13 @@ where
             match state.accel_temperature {
                 None => buf.push_str_truncating("---.-°"),
                 Some(temp) => {
-                    trace!("Temp = {}°K ({}°C)", (temp/K).value(), (temp/K).value() - CELSIUS_ZERO);
-                    if let Err(_) = core::write!(&mut buf, "{:5.1}°", (temp / R) - FAHRENHEIT_ZERO){
+                    trace!(
+                        "Temp = {}°K ({}°C)",
+                        (temp / K).value(),
+                        (temp / K).value() - CELSIUS_ZERO
+                    );
+                    if let Err(_) = core::write!(&mut buf, "{:5.1}°", (temp / R) - FAHRENHEIT_ZERO)
+                    {
                         buf.push_str_truncating("ERR");
                     }
                 }
@@ -207,8 +222,13 @@ where
             match state.temperature {
                 None => buf.push_str_truncating("---.-°"),
                 Some(temp) => {
-                    trace!("Temp = {}°K ({}°C)", (temp/K).value(), (temp/K).value() - CELSIUS_ZERO);
-                    if let Err(_) = core::write!(&mut buf, "{:5.1}°", (temp / R) - FAHRENHEIT_ZERO) {
+                    trace!(
+                        "Temp = {}°K ({}°C)",
+                        (temp / K).value(),
+                        (temp / K).value() - CELSIUS_ZERO
+                    );
+                    if let Err(_) = core::write!(&mut buf, "{:5.1}°", (temp / R) - FAHRENHEIT_ZERO)
+                    {
                         buf.push_str_truncating("ERR");
                     }
                 }
@@ -224,12 +244,17 @@ where
             buf.clear();
             // Line 2: XXXX.XXhPa XXX.XX'
             // pressure, altitude
-            state.pressure.write_dim(&mut buf, HECTO * PA, 7, 2).map_err(|_| FormatError(2))?;
+            state
+                .pressure
+                .write_dim(&mut buf, HECTO * PA, 7, 2)
+                .map_err(|_| FormatError(2))?;
             buf.push_str_truncating("hPa ");
-            let altitude = state.pressure.map(|p|
-                44330.0 * M * (1.0 - (p / (1013.0 * HECTO * PA)).map(|v| v.powf(0.1903)))
-            );
-            altitude.write_dim(&mut buf, FT, 6, 2).map_err(|_| FormatError(2))?;
+            let altitude = state
+                .pressure
+                .map(|p| 44330.0 * M * (1.0 - (p / (1013.0 * HECTO * PA)).map(|v| v.powf(0.1903))));
+            altitude
+                .write_dim(&mut buf, FT, 6, 2)
+                .map_err(|_| FormatError(2))?;
             buf.push_str_truncating("'");
             Text::with_baseline(
                 &buf,
@@ -248,7 +273,8 @@ where
                 "{:?} {:02X}",
                 desired_state.underlight_mode,
                 state.underlight_brightness
-            ).map_err(|_| FormatError(3))?;
+            )
+            .map_err(|_| FormatError(3))?;
             Text::with_baseline(
                 &buf,
                 Point::new(0, 3 * line_height as i32),
@@ -260,14 +286,20 @@ where
             buf.clear();
             // Line 4: XXX.XXG    XXXXX lux
             // accel magnitude, lux
-            state.accel_mag.write_dim(
-                &mut buf,
-                STANDARD_ACCELERATION_OF_GRAVITY as f32 * MPS2,
-                6,
-                2,
-            ).map_err(|_| FormatError(4))?;
+            state
+                .accel_mag
+                .write_dim(
+                    &mut buf,
+                    STANDARD_ACCELERATION_OF_GRAVITY as f32 * MPS2,
+                    6,
+                    2,
+                )
+                .map_err(|_| FormatError(4))?;
             buf.push_str_truncating("G    ");
-            state.lux.write_dim(&mut buf, LX, 5, 0).map_err(|_| FormatError(4))?;
+            state
+                .lux
+                .write_dim(&mut buf, LX, 5, 0)
+                .map_err(|_| FormatError(4))?;
             buf.push_str_truncating(" lux");
             Text::with_baseline(
                 &buf,
@@ -287,7 +319,8 @@ where
                 state.headlight_mode,
                 state.headlight_brightness * 100.0,
                 state.move_timer,
-            ).map_err(|_| FormatError(5))?;
+            )
+            .map_err(|_| FormatError(5))?;
             Text::with_baseline(
                 &buf,
                 Point::new(0, 5 * line_height as i32),
@@ -297,10 +330,7 @@ where
             .draw(&mut self.display)?;
             yield_now().await;
             buf.clear();
-            info!(
-                "display.draw took {} µs",
-                start_draw.elapsed().as_micros()
-            );
+            info!("display.draw took {} µs", start_draw.elapsed().as_micros());
             let start_flush = Instant::now();
             self.display.flush().await?;
             info!(

@@ -1,21 +1,19 @@
-use crate::{HeadlightMode, UnderlightMode, ActualState, DesiredState, Debug2Format};
+use crate::{ActualState, Debug2Format, DesiredState, HeadlightMode, UnderlightMode};
 use drogue_device::drivers::led::neopixel::filter::*;
 use drogue_device::drivers::led::neopixel::rgbw::{NeoPixelRgbw, Rgbw8, RED};
-use embassy_time::{Duration, Instant, Ticker, Timer};
+use ector::{actor, Actor, Address, Inbox};
 use embassy_nrf::gpio::{Level, Output as GpioOutput, OutputDrive};
 use embassy_nrf::pac;
 use embassy_nrf::peripherals::{PWM1, PWM2, PWM3};
-use embassy_nrf::pwm::{self, Prescaler, SimplePwm, Instance};
+use embassy_nrf::pwm::{self, Instance, Prescaler, SimplePwm};
 use embassy_nrf::wdt::WatchdogHandle;
+use embassy_time::{Duration, Instant, Ticker, Timer};
 use embedded_hal::digital::blocking::OutputPin;
 use futures::StreamExt;
-use ector::{actor, Actor, Address, Inbox};
 use num_traits::Float;
 extern crate dimensioned as dim;
 use crate::{DESIRED_STATE, STATE};
-use dim::si::{
-    f32consts::{LX, V},
-};
+use dim::si::f32consts::{LX, V};
 
 mod effects;
 
@@ -89,7 +87,8 @@ impl Output<'_> {
         taillight_pwm.set_duty(0, PWM_MAX_TAILLIGHT);
         taillight_pwm.set_duty(1, PWM_MAX_TAILLIGHT);
         taillight_pwm.set_duty(2, PWM_MAX_TAILLIGHT);
-        let mut underlight = NeoPixelRgbw::<'_, _, UNDERLIGHT_PIXELS>::new(pwm1, pin_underlight).unwrap();
+        let mut underlight =
+            NeoPixelRgbw::<'_, _, UNDERLIGHT_PIXELS>::new(pwm1, pin_underlight).unwrap();
         Self {
             wdt_handle,
             power,
@@ -104,7 +103,7 @@ impl Output<'_> {
     where
         M: Inbox<OutputMessage>,
     {
-        let mut ticker = Ticker::every(Duration::from_millis(1000/30));
+        let mut ticker = Ticker::every(Duration::from_millis(1000 / 30));
         loop {
             let now = Instant::now();
 
@@ -113,7 +112,12 @@ impl Output<'_> {
             }
             //   // TODO: Use IMU angle for mode too?
 
-            let vbus_detected = self.power.usbregstatus.read().vbusdetect().is_vbus_present();
+            let vbus_detected = self
+                .power
+                .usbregstatus
+                .read()
+                .vbusdetect()
+                .is_vbus_present();
 
             // info!("vbus detected: {:?}", vbus_detected);
 
@@ -206,8 +210,9 @@ impl Output<'_> {
                     s.headlight_brightness =
                         s.headlight_brightness.step_towards(target_brightness, 0.01);
                     let target_taillight_brightness = if taillight_on { 1.0 } else { 0.0 };
-                    s.taillight_brightness =
-                        s.taillight_brightness.step_towards(target_taillight_brightness, 0.05);
+                    s.taillight_brightness = s
+                        .taillight_brightness
+                        .step_towards(target_taillight_brightness, 0.05);
                     s
                 })
             });
@@ -220,8 +225,8 @@ impl Output<'_> {
                 self.taillight_pwm.set_duty(1, PWM_MAX_TAILLIGHT);
                 self.taillight_pwm.set_duty(2, PWM_MAX_TAILLIGHT);
             } else {
-                let tail_phase =
-                    (now.as_ticks() % TAIL_PERIOD.as_ticks()) as f32 / TAIL_PERIOD.as_ticks() as f32;
+                let tail_phase = (now.as_ticks() % TAIL_PERIOD.as_ticks()) as f32
+                    / TAIL_PERIOD.as_ticks() as f32;
                 let tail_intensity = 2.0
                     * if tail_phase > 0.5 {
                         1.0 - tail_phase
@@ -230,17 +235,26 @@ impl Output<'_> {
                     };
 
                 // TODO: gamma
-                let tail_pwm_1 = (PWM_MAX_TAILLIGHT as f32 * (state.taillight_brightness * tail_intensity).powf(2.8)) as u16;
-                let tail_pwm_2 = (PWM_MAX_TAILLIGHT as f32 * (state.taillight_brightness * (1.0 - tail_intensity)).powf(2.8)) as u16;
+                let tail_pwm_1 = (PWM_MAX_TAILLIGHT as f32
+                    * (state.taillight_brightness * tail_intensity).powf(2.8))
+                    as u16;
+                let tail_pwm_2 = (PWM_MAX_TAILLIGHT as f32
+                    * (state.taillight_brightness * (1.0 - tail_intensity)).powf(2.8))
+                    as u16;
 
-                self.taillight_pwm.set_duty(0, PWM_MAX_TAILLIGHT-tail_pwm_1);
-                self.taillight_pwm.set_duty(1, PWM_MAX_TAILLIGHT-tail_pwm_2);
-                self.taillight_pwm.set_duty(2, PWM_MAX_TAILLIGHT-tail_pwm_2);
+                self.taillight_pwm
+                    .set_duty(0, PWM_MAX_TAILLIGHT - tail_pwm_1);
+                self.taillight_pwm
+                    .set_duty(1, PWM_MAX_TAILLIGHT - tail_pwm_2);
+                self.taillight_pwm
+                    .set_duty(2, PWM_MAX_TAILLIGHT - tail_pwm_2);
             }
 
             if underlight_on {
                 // TODO: Update underlight
-                underlight_update(&mut self.underlight, &desired_state, &state).await.expect("failed")
+                underlight_update(&mut self.underlight, &desired_state, &state)
+                    .await
+                    .expect("failed")
             }
 
             ticker.next().await;
@@ -249,8 +263,7 @@ impl Output<'_> {
 }
 
 #[actor]
-impl Actor for Output<'_>
-{
+impl Actor for Output<'_> {
     type Message<'m> = OutputMessage;
 
     async fn on_mount<M>(&mut self, _: Address<OutputMessage>, mut inbox: M)
@@ -267,14 +280,25 @@ impl Actor for Output<'_>
     }
 }
 
-async fn underlight_update<const N: usize, T: Instance>(underlight: &mut NeoPixelRgbw<'_, T, N>, desired_state: &DesiredState, state: &ActualState) -> Result<(), pwm::Error> {
+async fn underlight_update<const N: usize, T: Instance>(
+    underlight: &mut NeoPixelRgbw<'_, T, N>,
+    desired_state: &DesiredState,
+    state: &ActualState,
+) -> Result<(), pwm::Error> {
     use crate::Effect::*;
     let pixels = match desired_state.underlight_effect {
-        ColorWipe => effects::color_wipe(state.underlight_frame, desired_state.underlight_speed, RED),
+        ColorWipe => {
+            effects::color_wipe(state.underlight_frame, desired_state.underlight_speed, RED)
+        }
         Rainbow => effects::rainbow(state.underlight_frame, desired_state.underlight_speed),
         _ => todo!("unsupported"),
     };
-    underlight.set_with_filter(&pixels, &mut Brightness(state.underlight_brightness).and(Gamma{})).await
+    underlight
+        .set_with_filter(
+            &pixels,
+            &mut Brightness(state.underlight_brightness).and(Gamma {}),
+        )
+        .await
 }
 
 //   // Update BLE characteristics

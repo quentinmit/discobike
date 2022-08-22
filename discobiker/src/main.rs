@@ -12,29 +12,32 @@ use core::convert::TryInto;
 use core::fmt;
 use core::mem;
 use embassy_executor::Spawner;
-use embassy_time::{Duration, Instant, Timer};
 use embassy_nrf as _;
 use embassy_nrf::executor::InterruptExecutor;
 use embassy_nrf::gpio::{Level, Output, OutputDrive};
-use embassy_nrf::interrupt::{self, Priority, InterruptExt};
+use embassy_nrf::interrupt::{self, InterruptExt, Priority};
 use embassy_nrf::peripherals::{SAADC, TWISPI0};
 use embassy_nrf::twim::{self, Twim};
 use embassy_nrf::wdt;
 use embassy_nrf::{pac, saadc};
 use embassy_nrf::{peripherals, Peripherals};
+use embassy_time::{Duration, Instant, Timer};
 use embassy_util::blocking_mutex::ThreadModeMutex;
 use embassy_util::Forever;
 
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice as I2cBusDevice;
-use embassy_util::blocking_mutex::{raw::{CriticalSectionRawMutex, ThreadModeRawMutex}, Mutex as BlockingMutex};
+use embassy_util::blocking_mutex::{
+    raw::{CriticalSectionRawMutex, ThreadModeRawMutex},
+    Mutex as BlockingMutex,
+};
 use embassy_util::mutex::Mutex;
 
 use drogue_device::drivers::led::neopixel::{rgb, rgb::NeoPixelRgb};
 
 #[cfg(feature = "defmt")]
-use defmt_rtt as _;
-#[cfg(feature = "defmt")]
 use defmt::Debug2Format;
+#[cfg(feature = "defmt")]
+use defmt_rtt as _;
 #[allow(non_snake_case)]
 #[cfg(not(feature = "defmt"))]
 fn Debug2Format<'a, T: fmt::Debug>(item: &'a T) -> &'a T {
@@ -60,10 +63,7 @@ use num_traits::float::Float;
 
 #[macro_use]
 extern crate dimensioned as dim;
-use dim::si::{
-    f32consts::{V},
-    Ampere, Lux, MeterPerSecond2, Volt, Pascal, Kelvin,
-};
+use dim::si::{f32consts::V, Ampere, Kelvin, Lux, MeterPerSecond2, Pascal, Volt};
 use dim::Dimensionless;
 
 cfg_if::cfg_if! {
@@ -595,10 +595,7 @@ async fn main(spawner: Spawner) {
 
     info!("Booting!");
     let mut neopixel = unwrap!(NeoPixelRgb::<'_, _, 1>::new(p.PWM0, use_pin_neo_pixel!(p)));
-    if let Err(e) = neopixel
-        .set(&[rgb::BLACK])
-        .await
-    {
+    if let Err(e) = neopixel.set(&[rgb::BLACK]).await {
         error!("failed to set neopixel on boot: {:?}", e);
     }
     info!("neopixel set on boot");
@@ -681,7 +678,9 @@ async fn main(spawner: Spawner) {
         spawner,
         LIGHT,
         actors::light::Light<I2cDevice>,
-        actors::light::Light::new(I2cBusDevice::new(i2c_bus)).await.unwrap()
+        actors::light::Light::new(I2cBusDevice::new(i2c_bus))
+            .await
+            .unwrap()
     );
     light.notify(actors::light::LightMessage::On).await;
 
@@ -704,7 +703,9 @@ async fn main(spawner: Spawner) {
         actors::barometer::Barometer<I2cDevice>,
         actors::barometer::Barometer::new(I2cBusDevice::new(i2c_bus))
     );
-    barometer.notify(actors::barometer::BarometerMessage::On).await;
+    barometer
+        .notify(actors::barometer::BarometerMessage::On)
+        .await;
 
     if BLUETOOTH {
         unwrap!(bluetooth_start_server(sd));

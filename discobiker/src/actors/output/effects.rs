@@ -1,7 +1,7 @@
 use core::cmp::min;
 
-use drogue_device::drivers::led::neopixel::Pixel;
 use drogue_device::drivers::led::neopixel::rgbw::{Rgbw8, BLACK};
+use drogue_device::drivers::led::neopixel::Pixel;
 
 fn color_hsv(hue: u16, sat: u8, val: u8) -> Rgbw8 {
     // Remap 0-65535 to 0-1529. Pure red is CENTERED on the 64K rollover;
@@ -35,19 +35,26 @@ fn color_hsv(hue: u16, sat: u8, val: u8) -> Rgbw8 {
     // the constants below are not the multiples of 256 you might expect.
 
     // Convert hue to R,G,B (nested ifs faster than divide+mod+switch):
-    let (r, g, b) = if hue < 255 { // Red to Yellow-1
+    let (r, g, b) = if hue < 255 {
+        // Red to Yellow-1
         (255, hue as u8, 0)
-    } else if hue < 510 { // Yellow to Green-1
+    } else if hue < 510 {
+        // Yellow to Green-1
         ((510 - hue) as u8, 255, 0)
-    } else if hue < 765 { // Green to Cyan-1
+    } else if hue < 765 {
+        // Green to Cyan-1
         (0, 255, (hue - 510) as u8)
-    } else if hue < 1020 { // Cyan to Blue-1
+    } else if hue < 1020 {
+        // Cyan to Blue-1
         (0, (1020 - hue) as u8, 255)
-    } else if hue < 1275 { // Blue to Magenta-1
+    } else if hue < 1275 {
+        // Blue to Magenta-1
         ((hue - 1020) as u8, 0, 255)
-    } else if hue < 1530 { // Magenta to Red-1
+    } else if hue < 1530 {
+        // Magenta to Red-1
         (255, 0, (1530 - hue) as u8)
-    } else { // Red
+    } else {
+        // Red
         (255, 0, 0)
     };
     // Apply saturation and value to RGB to make RGBW
@@ -65,13 +72,13 @@ pub fn color_wipe<const N: usize>(frame: u32, speed: i16, color: Rgbw8) -> [Rgbw
     let frame = ((frame as i32) * (speed as i32)) as usize;
     // default speed is 1 frame per pixel
     let frame = frame / 256;
-    let frame = frame % (2*N);
+    let frame = frame % (2 * N);
 
     let first = frame.saturating_sub(N);
     let last = min(frame, N);
 
     let mut out = [BLACK; N];
-    for i in first..last+1 {
+    for i in first..last + 1 {
         out[i] = color;
     }
     out
@@ -87,17 +94,18 @@ pub fn rainbow<const N: usize>(frame: u32, speed: i16) -> [Rgbw8; N] {
     // just count from 0 to 5*65536. Adding 256 to firstPixelHue each time
     // means we'll make 5*65536/256 = 1280 passes through this outer loop:
     let mut out = [BLACK; N];
-    for i in 0..N { // For each pixel in strip...
-      // Offset pixel hue by an amount to make one full revolution of the
-      // color wheel (range of 65536) along the length of the strip
-      // (strip.numPixels() steps):
-      let pixel_hue = (first_pixel_hue + (i * 65536 / N)) as u16;
-      // strip.ColorHSV() can take 1 or 3 arguments: a hue (0 to 65535) or
-      // optionally add saturation and value (brightness) (each 0 to 255).
-      // Here we're using just the single-argument hue variant. The result
-      // is passed through strip.gamma32() to provide 'truer' colors
-      // before assigning to each pixel:
-      out[i] = color_hsv(pixel_hue, 255, 255);
+    for i in 0..N {
+        // For each pixel in strip...
+        // Offset pixel hue by an amount to make one full revolution of the
+        // color wheel (range of 65536) along the length of the strip
+        // (strip.numPixels() steps):
+        let pixel_hue = (first_pixel_hue + (i * 65536 / N)) as u16;
+        // strip.ColorHSV() can take 1 or 3 arguments: a hue (0 to 65535) or
+        // optionally add saturation and value (brightness) (each 0 to 255).
+        // Here we're using just the single-argument hue variant. The result
+        // is passed through strip.gamma32() to provide 'truer' colors
+        // before assigning to each pixel:
+        out[i] = color_hsv(pixel_hue, 255, 255);
     }
     out
 }

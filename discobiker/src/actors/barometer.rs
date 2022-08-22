@@ -1,16 +1,16 @@
-use bme280::{Configuration, SensorMode, Error, Oversampling::*, IIRFilter::*, Standby::*, i2c::AsyncBME280};
-use crate::{STATE, CELSIUS_ZERO, Debug2Format};
+use crate::{Debug2Format, CELSIUS_ZERO, STATE};
+use bme280::{
+    i2c::AsyncBME280, Configuration, Error, IIRFilter::*, Oversampling::*, SensorMode, Standby::*,
+};
 use core::fmt;
 use dim::f32prefixes::HECTO;
-use dim::si::{
-    f32consts::{K, PA},
-};
-use futures::select_biased;
-use futures::FutureExt;
+use dim::si::f32consts::{K, PA};
 use dim::traits::Dimensionless;
 use ector::{actor, Actor, Address, Inbox};
-use embassy_time::{Duration, Timer, Delay};
+use embassy_time::{Delay, Duration, Timer};
 use embedded_hal_async::i2c;
+use futures::select_biased;
+use futures::FutureExt;
 
 pub struct Barometer<I2C> {
     bme280: AsyncBME280<I2C>,
@@ -36,17 +36,19 @@ where
     where
         M: Inbox<BarometerMessage>,
     {
-        self.bme280.init_with_config(
-            &mut Delay{},
-            Configuration::default()
-            .with_temperature_oversampling(Oversampling2X)
-            .with_pressure_oversampling(Oversampling16X)
-            .with_iir_filter(Coefficient4)
-            .with_standby_period(Standby62_5MS)
-        ).await?;
+        self.bme280
+            .init_with_config(
+                &mut Delay {},
+                Configuration::default()
+                    .with_temperature_oversampling(Oversampling2X)
+                    .with_pressure_oversampling(Oversampling16X)
+                    .with_iir_filter(Coefficient4)
+                    .with_standby_period(Standby62_5MS),
+            )
+            .await?;
 
         loop {
-            let data = self.bme280.measure(&mut Delay{}).await?;
+            let data = self.bme280.measure(&mut Delay {}).await?;
             let temperature = (data.temperature + CELSIUS_ZERO) * K;
             let pressure = data.pressure * PA;
             STATE.lock(|c| {
@@ -85,7 +87,7 @@ where
                 BarometerMessage::On => {
                     info!("barometer on");
                     self.run_high_power(inbox).await?;
-                },
+                }
                 BarometerMessage::Off => warn!("barometer off while already off"),
             };
         }

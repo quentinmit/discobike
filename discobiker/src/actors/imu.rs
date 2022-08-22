@@ -1,10 +1,14 @@
-use crate::{LSM6DS33_ADDR, STATE, CELSIUS_ZERO, Debug2Format};
+use crate::{Debug2Format, CELSIUS_ZERO, LSM6DS33_ADDR, STATE};
 use core::fmt::{self, Debug};
-use dim::si::{f32consts::{K, MPS2}, MeterPerSecond2};
+use dim::si::{
+    f32consts::{K, MPS2},
+    MeterPerSecond2,
+};
 use dim::typenum::P2;
 use dim::ucum::{
     self,
-    f32consts::{RAD, S}, UCUM,
+    f32consts::{RAD, S},
+    UCUM,
 };
 use dim::{derived, Dimensionless};
 use dim::{typenum::Pow, Sqrt};

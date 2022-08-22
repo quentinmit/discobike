@@ -1,9 +1,7 @@
 use crate::drivers::ina219::{ADCMode, INA219Async, INA219_ADDR};
-use crate::{STATE, Debug2Format};
+use crate::{Debug2Format, STATE};
 use core::fmt;
-use dim::si::{
-    f32consts::{A, OHM, V},
-};
+use dim::si::f32consts::{A, OHM, V};
 use dim::traits::Dimensionless;
 use ector::{actor, Actor, Address, Inbox};
 use embassy_time::{Duration, Timer};

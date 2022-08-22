@@ -247,7 +247,12 @@ where
         let actual_current_lsb: Ampere<f32> = 0.04096 * V / ((cal as f32) * shunt_resistance);
         info!("requested max current = {} A", (max_current / A).value());
         info!("optimal gain setting {:?}", Debug2Format(&desired_gain));
-        info!("calculated desired current LSB {} µA calibration {} actual current LSB {} µA", (desired_current_lsb/(MICRO*A)).value(), cal, (actual_current_lsb/(MICRO*A)).value());
+        info!(
+            "calculated desired current LSB {} µA calibration {} actual current LSB {} µA",
+            (desired_current_lsb / (MICRO * A)).value(),
+            cal,
+            (actual_current_lsb / (MICRO * A)).value()
+        );
         self.modify_config(|c| c.with_shunt_gain(desired_gain))
             .await?;
         self.write_register(Register::Calibration, cal).await?;
