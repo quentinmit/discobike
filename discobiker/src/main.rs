@@ -52,7 +52,6 @@ use ector::spawn_actor;
 
 mod actors;
 mod drivers;
-mod output;
 use ssd1306::size::DisplaySize128x64;
 
 use serde::{Deserialize, Serialize, Serializer};
@@ -712,19 +711,25 @@ async fn main(spawner: Spawner) {
         unwrap!(spawner.spawn(softdevice_task(sd)));
         unwrap!(spawner.spawn(bluetooth_task(spawner, sd)));
     }
-    unwrap!(spawner_high.spawn(output::output_task(
-        wdt_handle,
-        power,
-        p.PWM1,
-        p.PWM2,
-        p.PWM3,
-        use_pin_power_enable!(p),
-        use_pin_headlight_dim!(p),
-        use_pin_tail_l!(p),
-        use_pin_tail_c!(p),
-        use_pin_tail_r!(p),
-        use_pin_underlight!(p),
-    )));
+
+    let output = spawn_actor!(
+        spawner,
+        OUTPUT,
+        actors::output::Output,
+        actors::output::Output::new(
+            wdt_handle,
+            power,
+            p.PWM1,
+            p.PWM2,
+            p.PWM3,
+            use_pin_power_enable!(p),
+            use_pin_headlight_dim!(p),
+            use_pin_tail_l!(p),
+            use_pin_tail_c!(p),
+            use_pin_tail_r!(p),
+            use_pin_underlight!(p),
+        )
+    );
     unwrap!(spawner.spawn(adc_task(saadc, pin_vbat, Duration::from_millis(500))));
     //#[cfg(feature = "mdbt50q")]
     unwrap!(spawner.spawn(blinker(led, Duration::from_millis(300))));
