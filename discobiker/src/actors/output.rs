@@ -344,7 +344,7 @@ impl Output<'_> {
             }
             Rainbow => effects::rainbow(self.underlight_frame, desired_state.underlight_speed),
             VUMeter => effects::vu_meter(&self.sound_data, self.peak_amplitudes.max(), RED),
-            x => todo!("unsupported effect {:?}", x),
+            x => {error!("unsupported effect {:?}", x); [RED; UNDERLIGHT_PIXELS]},
         };
         self.underlight
             .set_with_filter(

@@ -1,5 +1,6 @@
 use core::cmp::min;
 
+use micromath::F32Ext;
 use drogue_device::drivers::led::neopixel::rgbw::{Rgbw8, BLACK};
 use drogue_device::drivers::led::neopixel::Pixel;
 
@@ -113,7 +114,11 @@ pub fn rainbow<const N: usize>(frame: u32, speed: i16) -> [Rgbw8; N] {
 pub(super) fn vu_meter<const N: usize>(data: &Option<super::SoundData>, max: u16, color: Rgbw8) -> [Rgbw8; N] {
     let mut out = [BLACK; N];
     if let Some(data) = data {
-        let n = (data.amplitude as usize * N / max.max(100) as usize).min(N);
+        let num = data.amplitude as f32;
+        let peak = max.max(100) as f32;
+        let min = peak * 0.1; // 20 dB range
+        let frac = (num.ln() - min.ln()) / (peak.ln() - min.ln());
+        let n = ((frac * N as f32) as usize).min(N);
         for i in 0..n {
             out[i] = color;
         }

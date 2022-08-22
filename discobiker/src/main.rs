@@ -4,6 +4,7 @@
 #![feature(generic_associated_types)]
 #![feature(cell_update)]
 #![feature(result_option_inspect)]
+#![feature(int_log)]
 
 mod log;
 
@@ -291,8 +292,8 @@ pub struct DesiredState {
 pub static DESIRED_STATE: BlockingMutex<CriticalSectionRawMutex, Cell<DesiredState>> =
     BlockingMutex::new(Cell::new(DesiredState {
         headlight_mode: HeadlightMode::Auto,
-        underlight_mode: UnderlightMode::Auto,
-        underlight_effect: Effect::Rainbow,
+        underlight_mode: UnderlightMode::ForceOn, //UnderlightMode::Auto,
+        underlight_effect: Effect::VUMeter, //Effect::Rainbow,
         underlight_speed: 1024,
     }));
 
