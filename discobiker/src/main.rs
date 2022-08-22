@@ -276,7 +276,8 @@ enum Effect {
     TheaterChaseRainbow,
     CylonBounce,
     Fire,
-    VUMeter,
+    VuMeter,
+    RgbVuMeter,
 }
 
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -293,7 +294,7 @@ pub static DESIRED_STATE: BlockingMutex<CriticalSectionRawMutex, Cell<DesiredSta
     BlockingMutex::new(Cell::new(DesiredState {
         headlight_mode: HeadlightMode::Auto,
         underlight_mode: UnderlightMode::ForceOn, //UnderlightMode::Auto,
-        underlight_effect: Effect::VUMeter, //Effect::Rainbow,
+        underlight_effect: Effect::RgbVuMeter,       //Effect::Rainbow,
         underlight_speed: 1024,
     }));
 
@@ -744,7 +745,7 @@ async fn main(spawner: Spawner) {
             use_pin_tail_r!(p),
             use_pin_underlight!(p),
             sound,
-        )
+        ),
     );
     unwrap!(spawner.spawn(adc_task(saadc, pin_vbat, Duration::from_millis(500))));
     //#[cfg(feature = "mdbt50q")]

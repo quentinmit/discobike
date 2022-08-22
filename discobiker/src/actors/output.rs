@@ -9,13 +9,13 @@ use embassy_nrf::pwm::{self, Instance, Prescaler, SimplePwm};
 use embassy_nrf::wdt::WatchdogHandle;
 use embassy_time::{Duration, Instant, Ticker, Timer};
 use embedded_hal::digital::blocking::OutputPin;
-use futures::{StreamExt, select_biased, FutureExt};
+use futures::{select_biased, FutureExt, StreamExt};
 use num_traits::Float;
 extern crate dimensioned as dim;
 use crate::{DESIRED_STATE, STATE};
 use dim::si::f32consts::{LX, V};
 
-use super::sound::{SoundMessage, SoundData};
+use super::sound::{SoundData, SoundMessage};
 
 mod effects;
 
@@ -115,7 +115,7 @@ impl Output<'_> {
         pin_tail_c: crate::PinTailC,
         pin_tail_r: crate::PinTailR,
         pin_underlight: crate::PinUnderlight,
-        sound: Address<SoundMessage>
+        sound: Address<SoundMessage>,
     ) -> Self {
         let mut power_enable = GpioOutput::new(pin_power_enable, Level::Low, OutputDrive::Standard);
         let mut headlight_pwm = SimplePwm::new_1ch(pwm3, pin_headlight_dim);
@@ -317,7 +317,8 @@ impl Output<'_> {
 
     fn handle_sound_data(&mut self, data: SoundData) {
         trace!("new sound_data: {}", data);
-        self.peak_amplitudes.set_max(self.underlight_frame as usize / 8, data.amplitude);
+        self.peak_amplitudes
+            .set_max(self.underlight_frame as usize / 8, data.amplitude);
         self.sound_data = Some(data);
     }
 
@@ -328,14 +329,17 @@ impl Output<'_> {
     ) -> Result<(), pwm::Error> {
         use crate::Effect::*;
         let need_sound = match desired_state.underlight_effect {
-            VUMeter => true,
+            VuMeter => true,
+            RgbVuMeter => true,
             _ => false,
         };
         if need_sound != self.need_sound {
-            self.sound.notify(match need_sound {
-                true => SoundMessage::On,
-                false => SoundMessage::Off,
-            }).await;
+            self.sound
+                .notify(match need_sound {
+                    true => SoundMessage::On,
+                    false => SoundMessage::Off,
+                })
+                .await;
             self.need_sound = need_sound;
         }
         let pixels = match desired_state.underlight_effect {
@@ -343,8 +347,12 @@ impl Output<'_> {
                 effects::color_wipe(self.underlight_frame, desired_state.underlight_speed, RED)
             }
             Rainbow => effects::rainbow(self.underlight_frame, desired_state.underlight_speed),
-            VUMeter => effects::vu_meter(&self.sound_data, self.peak_amplitudes.max(), RED),
-            x => {error!("unsupported effect {:?}", x); [RED; UNDERLIGHT_PIXELS]},
+            VuMeter => effects::vu_meter(&self.sound_data, self.peak_amplitudes.max(), RED),
+            RgbVuMeter => effects::rgb_vu_meter(&self.sound_data, self.peak_amplitudes.max()),
+            x => {
+                error!("unsupported effect {:?}", x);
+                [RED; UNDERLIGHT_PIXELS]
+            }
         };
         self.underlight
             .set_with_filter(

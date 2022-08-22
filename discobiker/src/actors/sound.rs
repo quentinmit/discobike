@@ -3,15 +3,15 @@ use crate::{Debug2Format, STATE};
 use core::fmt;
 use core::sync::atomic::{AtomicBool, Ordering};
 use ector::{actor, Actor, Address, Inbox};
-use fixed::types::I7F1;
-use embassy_time::{Duration, Timer};
 use embassy_nrf::interrupt;
+use embassy_nrf::pdm::{Channels, Config, Frequency, Pdm, Ratio, SamplerState};
 use embassy_nrf::peripherals;
-use embassy_nrf::pdm::{Config, Channels, Pdm, SamplerState, Frequency, Ratio};
+use embassy_time::{Duration, Timer};
 use embedded_hal_async::i2c;
-use futures::{select_biased, pin_mut, FutureExt};
-use num_integer::Roots;
+use fixed::types::I7F1;
+use futures::{pin_mut, select_biased, FutureExt};
 use microfft::real::rfft_512;
+use num_integer::Roots;
 
 pub(super) type PdmBuffer = [i16; 512];
 
@@ -31,9 +31,13 @@ pub struct SoundData {
     pub bands: [u16; 8],
 }
 
-impl Sound<'_>
-{
-    pub fn new(p: peripherals::PDM, mut pin_data: crate::PinPdmData, mut pin_clock: crate::PinPdmClock, output: Address<super::output::OutputMessage>) -> Self {
+impl Sound<'_> {
+    pub fn new(
+        p: peripherals::PDM,
+        mut pin_data: crate::PinPdmData,
+        mut pin_clock: crate::PinPdmClock,
+        output: Address<super::output::OutputMessage>,
+    ) -> Self {
         let mut config = Config::default();
         config.frequency = Frequency::_1280K; // 16 kHz sample rate
         config.ratio = Ratio::RATIO80;
@@ -45,9 +49,12 @@ impl Sound<'_>
 
     fn convert_sound_buf(buf: &PdmBuffer) -> SoundData {
         let mean = (buf.iter().map(|v| i32::from(*v)).sum::<i32>() / buf.len() as i32) as i16;
-        let amplitude = (
-            buf.iter().map(|v| i32::from((*v).saturating_sub(mean)).pow(2)).fold(0i32, |a,b| a.saturating_add(b))
-        / buf.len() as i32).sqrt() as u16;
+        let amplitude = (buf
+            .iter()
+            .map(|v| i32::from((*v).saturating_sub(mean)).pow(2))
+            .fold(0i32, |a, b| a.saturating_add(b))
+            / buf.len() as i32)
+            .sqrt() as u16;
 
         let mut f = [0f32; 512];
         for i in 0..buf.len() {
@@ -58,21 +65,18 @@ impl Sound<'_>
         result[0].im = 0.0;
         let mut bands = [0u16; 8];
         for i in 0..bands.len() {
-            let indices = 2usize.pow(i as u32)..2usize.pow((i+1) as u32);
+            let indices = 2usize.pow(i as u32)..2usize.pow((i + 1) as u32);
             let denom = indices.len();
-            bands[i] = ((result[indices]
-                .iter().map(|c| c.norm_sqr())
-                .sum::<f32>() * 32768.0 / denom as f32) as u32).sqrt() as u16;
+            bands[i] = ((result[indices].iter().map(|c| c.norm_sqr()).sum::<f32>() * 32768.0
+                / denom as f32) as u32)
+                .sqrt() as u16;
         }
-        SoundData{
-            amplitude,
-            bands,
-        }
+        SoundData { amplitude, bands }
     }
 
     async fn run_sampler<M>(&mut self, inbox: &mut M)
     where
-        M: Inbox<SoundMessage>
+        M: Inbox<SoundMessage>,
     {
         let mut bufs = [[0; 512]; 2];
 
@@ -80,37 +84,36 @@ impl Sound<'_>
 
         let output = &self.output;
 
-        let sampler_fut = self.pdm
-            .run_task_sampler(
-                &mut bufs,
-                move |buf| {
-                    //let mean = (buf.iter().map(|v| i32::from(*v)).sum::<i32>() / buf.len() as i32) as i16;
-                    /* let (peak_freq_index, peak_mag) = fft_peak_freq(&buf);
-                    let peak_freq = peak_freq_index * 16000 / buf.len();
-                    info!(
-                        "{} samples, min {=i16}, max {=i16}, mean {=i16}, AC RMS {=i16}, peak {} @ {} Hz",
-                        buf.len(),
-                        buf.iter().min().unwrap(),
-                        buf.iter().max().unwrap(),
-                        mean,
-                        (
-                            buf.iter().map(|v| i32::from(*v - mean).pow(2)).fold(0i32, |a,b| a.saturating_add(b))
-                        / buf.len() as i32).sqrt() as i16,
-                        peak_mag, peak_freq,
-                    ); */
-                    if let Err(e) = output.try_notify(
-                        OutputMessage::SoundData(Self::convert_sound_buf(buf))
-                    ) {
-                        warn!("dropped sound frame");
-                    }
-                    match running.load(Ordering::SeqCst) {
-                        true => SamplerState::Sampled,
-                        false => SamplerState::Stopped,
-                    }
-                },
-            ).fuse();
+        let sampler_fut = self
+            .pdm
+            .run_task_sampler(&mut bufs, move |buf| {
+                //let mean = (buf.iter().map(|v| i32::from(*v)).sum::<i32>() / buf.len() as i32) as i16;
+                /* let (peak_freq_index, peak_mag) = fft_peak_freq(&buf);
+                let peak_freq = peak_freq_index * 16000 / buf.len();
+                info!(
+                    "{} samples, min {=i16}, max {=i16}, mean {=i16}, AC RMS {=i16}, peak {} @ {} Hz",
+                    buf.len(),
+                    buf.iter().min().unwrap(),
+                    buf.iter().max().unwrap(),
+                    mean,
+                    (
+                        buf.iter().map(|v| i32::from(*v - mean).pow(2)).fold(0i32, |a,b| a.saturating_add(b))
+                    / buf.len() as i32).sqrt() as i16,
+                    peak_mag, peak_freq,
+                ); */
+                if let Err(e) =
+                    output.try_notify(OutputMessage::SoundData(Self::convert_sound_buf(buf)))
+                {
+                    warn!("dropped sound frame");
+                }
+                match running.load(Ordering::SeqCst) {
+                    true => SamplerState::Sampled,
+                    false => SamplerState::Stopped,
+                }
+            })
+            .fuse();
         pin_mut!(sampler_fut);
-        
+
         loop {
             select_biased! {
                 message = inbox.next().fuse() => {
@@ -142,8 +145,7 @@ impl Sound<'_>
 }
 
 #[actor]
-impl Actor for Sound<'_>
-{
+impl Actor for Sound<'_> {
     type Message<'m> = SoundMessage;
 
     async fn on_mount<M>(&mut self, _: Address<SoundMessage>, mut inbox: M)

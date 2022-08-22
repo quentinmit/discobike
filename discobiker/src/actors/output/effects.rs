@@ -1,8 +1,9 @@
 use core::cmp::min;
+use core::ops::Range;
 
-use micromath::F32Ext;
 use drogue_device::drivers::led::neopixel::rgbw::{Rgbw8, BLACK};
 use drogue_device::drivers::led::neopixel::Pixel;
+use micromath::F32Ext;
 
 fn color_hsv(hue: u16, sat: u8, val: u8) -> Rgbw8 {
     // Remap 0-65535 to 0-1529. Pure red is CENTERED on the 64K rollover;
@@ -111,7 +112,11 @@ pub fn rainbow<const N: usize>(frame: u32, speed: i16) -> [Rgbw8; N] {
     out
 }
 
-pub(super) fn vu_meter<const N: usize>(data: &Option<super::SoundData>, max: u16, color: Rgbw8) -> [Rgbw8; N] {
+pub(super) fn vu_meter<const N: usize>(
+    data: &Option<super::SoundData>,
+    max: u16,
+    color: Rgbw8,
+) -> [Rgbw8; N] {
     let mut out = [BLACK; N];
     if let Some(data) = data {
         let num = data.amplitude as f32;
@@ -121,6 +126,42 @@ pub(super) fn vu_meter<const N: usize>(data: &Option<super::SoundData>, max: u16
         let n = ((frac * N as f32) as usize).min(N);
         for i in 0..n {
             out[i] = color;
+        }
+    }
+    out
+}
+
+pub(super) fn rgb_vu_meter<const N: usize>(
+    data: &Option<super::SoundData>,
+    max: u16,
+) -> [Rgbw8; N] {
+    let mut out = [BLACK; N];
+    if let Some(data) = data {
+        let num = data.amplitude as f32;
+        let peak = max.max(100) as f32;
+        let min = peak * 0.1; // 20 dB range
+        let offset = min.ln();
+        let denom = (peak.ln() - offset);
+
+        let calc_n = |slice: Range<usize>| {
+            let n = slice.len() as f32;
+            (
+                ((data.bands[slice].iter().sum::<u16>() as f32 / n).ln() - offset) / denom * N as f32
+            ) as usize
+        };
+
+        let red = calc_n(0..3);
+        let green = calc_n(3..5);
+        let blue = calc_n(4..8);
+
+        info!("red {}. green {}, blue {}", red, green, blue);
+        for i in 0..out.len() {
+            out[i] = Rgbw8::new(
+                if i < red { 255 } else { 0 },
+                if i < green { 255 } else { 0 },
+                if i < blue { 255 } else { 0 },
+                0,
+            );
         }
     }
     out
