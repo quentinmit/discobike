@@ -110,10 +110,10 @@ pub fn rainbow<const N: usize>(frame: u32, speed: i16) -> [Rgbw8; N] {
     out
 }
 
-pub(super) fn vu_meter<const N: usize>(data: &Option<super::SoundData>, color: Rgbw8) -> [Rgbw8; N] {
+pub(super) fn vu_meter<const N: usize>(data: &Option<super::SoundData>, max: u16, color: Rgbw8) -> [Rgbw8; N] {
     let mut out = [BLACK; N];
     if let Some(data) = data {
-        let n = (data.amplitude as usize * N / 32768).min(N);
+        let n = (data.amplitude as usize * N / max.max(100) as usize).min(N);
         for i in 0..n {
             out[i] = color;
         }

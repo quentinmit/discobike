@@ -27,7 +27,7 @@ pub enum SoundMessage {
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[derive(Debug)]
 pub struct SoundData {
-    pub amplitude: i16,
+    pub amplitude: u16,
     pub bands: [u16; 8],
 }
 
@@ -47,7 +47,7 @@ impl Sound<'_>
         let mean = (buf.iter().map(|v| i32::from(*v)).sum::<i32>() / buf.len() as i32) as i16;
         let amplitude = (
             buf.iter().map(|v| i32::from((*v).saturating_sub(mean)).pow(2)).fold(0i32, |a,b| a.saturating_add(b))
-        / buf.len() as i32).sqrt() as i16;
+        / buf.len() as i32).sqrt() as u16;
 
         let mut f = [0f32; 512];
         for i in 0..buf.len() {

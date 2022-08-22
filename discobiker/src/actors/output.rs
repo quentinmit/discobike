@@ -53,6 +53,34 @@ const PWM_MAX_TAILLIGHT: u16 = 255;
 
 const UNDERLIGHT_PIXELS: usize = 35;
 
+struct PeakRingBuffer<Item, const CAPACITY: usize> {
+    items: [Item; CAPACITY],
+    last_idx: usize,
+}
+
+impl<Item, const CAPACITY: usize> PeakRingBuffer<Item, CAPACITY>
+where
+    Item: Copy + Default + Ord,
+{
+    fn new() -> Self {
+        Self {
+            items: [Default::default(); CAPACITY],
+            last_idx: 0,
+        }
+    }
+    fn set_max(&mut self, idx: usize, value: Item) {
+        let idx = idx % self.items.len();
+        if idx != self.last_idx {
+            self.items[idx] = Default::default();
+            self.last_idx = idx;
+        }
+        self.items[idx] = self.items[idx].max(value);
+    }
+    fn max(&self) -> Item {
+        self.items.iter().fold(Default::default(), |a, b| a.max(*b))
+    }
+}
+
 pub struct Output<'a> {
     wdt_handle: Option<WatchdogHandle>,
     power: pac::POWER,
@@ -65,6 +93,7 @@ pub struct Output<'a> {
     underlight_frame: u32,
     need_sound: bool,
     sound_data: Option<SoundData>,
+    peak_amplitudes: PeakRingBuffer<u16, 8>,
 }
 
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -113,6 +142,7 @@ impl Output<'_> {
             underlight_frame: 0,
             need_sound: false,
             sound_data: None,
+            peak_amplitudes: PeakRingBuffer::new(),
         }
     }
 
@@ -287,6 +317,7 @@ impl Output<'_> {
 
     fn handle_sound_data(&mut self, data: SoundData) {
         trace!("new sound_data: {}", data);
+        self.peak_amplitudes.set_max(self.underlight_frame as usize / 8, data.amplitude);
         self.sound_data = Some(data);
     }
 
@@ -312,7 +343,7 @@ impl Output<'_> {
                 effects::color_wipe(self.underlight_frame, desired_state.underlight_speed, RED)
             }
             Rainbow => effects::rainbow(self.underlight_frame, desired_state.underlight_speed),
-            VUMeter => effects::vu_meter(&self.sound_data, RED),
+            VUMeter => effects::vu_meter(&self.sound_data, self.peak_amplitudes.max(), RED),
             x => todo!("unsupported effect {:?}", x),
         };
         self.underlight
