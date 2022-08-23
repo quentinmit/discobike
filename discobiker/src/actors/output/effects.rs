@@ -143,16 +143,15 @@ pub(super) fn rgb_vu_meter<const N: usize>(
         let offset = min.ln();
         let denom = (peak.ln() - offset);
 
-        let calc_n = |slice: Range<usize>| {
-            let n = slice.len() as f32;
+        let calc_n = |slice: Range<usize>, div: f32| {
             (
-                ((data.bands[slice].iter().sum::<u16>() as f32 / n).ln() - offset) / denom * N as f32
+                ((data.bands[slice].iter().sum::<u16>() as f32 / div).ln() - offset) / denom * N as f32
             ) as usize
         };
 
-        let red = calc_n(0..3);
-        let green = calc_n(3..5);
-        let blue = calc_n(4..8);
+        let red = calc_n(0..3, 2.0);
+        let green = calc_n(3..5, 1.0);
+        let blue = calc_n(4..8, 1.0);
 
         info!("red {}. green {}, blue {}", red, green, blue);
         for i in 0..out.len() {

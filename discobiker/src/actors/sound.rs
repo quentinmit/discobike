@@ -42,7 +42,7 @@ impl Sound<'_> {
         config.frequency = Frequency::_1280K; // 16 kHz sample rate
         config.ratio = Ratio::RATIO80;
         config.channels = Channels::Mono;
-        config.gain_left = I7F1::from_bits(20); // 10 dB gain
+        config.gain_left = I7F1::from_bits(40); // 20 dB gain
         let pdm = Pdm::new(p, interrupt::take!(PDM), pin_data, pin_clock, config);
         Sound { pdm, output }
     }

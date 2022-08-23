@@ -318,7 +318,7 @@ impl Output<'_> {
     fn handle_sound_data(&mut self, data: SoundData) {
         trace!("new sound_data: {}", data);
         self.peak_amplitudes
-            .set_max(self.underlight_frame as usize / 8, data.amplitude);
+            .set_max(self.underlight_frame as usize / 16, data.amplitude);
         self.sound_data = Some(data);
     }
 
