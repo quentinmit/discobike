@@ -16,7 +16,7 @@ defmt = [
     "embassy-executor/defmt",
     "embassy-time/defmt",
     "embassy-time/defmt-timestamp-uptime",
-    "embassy-util/defmt",
+    "embassy-sync/defmt",
     "embassy-hal-common/defmt",
     "embassy-nrf/defmt",
     "nrf-softdevice/defmt",
@@ -97,9 +97,10 @@ opt-level = 3
 #overflow-checks = false
 
 [dependencies]
-embassy-executor = { version = "0.1.0", features = ["nightly", "integrated-timers"]}
-embassy-time = { version = "0.1.0", features = ["nightly", "unstable-traits"]}
-embassy-util = { version = "0.1.0", features = ["nightly", ]}
+embassy-executor = { version = "0.1.0", features = ["nightly", "integrated-timers"] }
+embassy-time = { version = "0.1.0", features = ["nightly", "unstable-traits"] }
+embassy-sync = { version = "0.1.0", features = ["nightly"] }
+embassy-futures = { version = "0.1.0", features = [] }
 embassy-hal-common = { version = "0.1.0", features = [] }
 embassy-nrf = { version = "0.1.0", features = ["nightly", "nrf52840", "gpiote", "time-driver-rtc1", "unstable-traits", "unstable-pac"]}
 embassy-embedded-hal = "0.1.0"
@@ -148,6 +149,7 @@ cfg-if = "1.0.0"
 num-integer = { version = "0.1.45", default-features = false }
 microfft = "0.5.0"
 micromath = "2.0.0"
+static_cell = "1.0.0"
 
 [patch.crates-io]
 #embassy-executor = { git = "https://github.com/embassy-rs/embassy" }
@@ -157,15 +159,15 @@ micromath = "2.0.0"
 #embassy-nrf = { git = "https://github.com/embassy-rs/embassy" }
 #embassy-macros = { git = "https://github.com/embassy-rs/embassy" }
 #embassy-embedded-hal = { git = "https://github.com/embassy-rs/embassy" }
-nrf-softdevice = { git = "https://github.com/embassy-rs/nrf-softdevice" }
-nrf-softdevice-s140 = { git = "https://github.com/embassy-rs/nrf-softdevice" }
+#nrf-softdevice = { git = "https://github.com/embassy-rs/nrf-softdevice" }
+#nrf-softdevice-s140 = { git = "https://github.com/embassy-rs/nrf-softdevice" }
 apds9960 = { git = "https://github.com/quentinmit/apds9960-rs", branch = "async" }
 uom = { git = "https://github.com/quentinmit/uom", branch = "photometric" }
 #drogue-device = { git = "https://github.com/drogue-iot/drogue-device" }
 drogue-device = { path = "/Users/quentin/Software/drogue-device/device" }
 reqwless = { git = "https://github.com/drogue-iot/reqwless" }
-#ector = { git = "https://github.com/drogue-iot/ector.git" }
-ector = { git = "https://github.com/quentinmit/ector.git", branch = "embassy-split-time" }
+ector = { git = "https://github.com/drogue-iot/ector.git" }
+#ector = { git = "https://github.com/quentinmit/ector.git", branch = "embassy-split-time" }
 #ssd1306 = { git = "https://github.com/simmsb/ssd1306" }
 ssd1306 = { path = "/Users/quentin/Software/ssd1306" }
 display-interface = { git = "https://github.com/simmsb/display-interface" }
@@ -180,8 +182,11 @@ embassy-executor = { path = "/Users/quentin/Software/embassy/embassy-executor" }
 embassy-time = { path = "/Users/quentin/Software/embassy/embassy-time" }
 embassy-macros = { path = "/Users/quentin/Software/embassy/embassy-macros" }
 embassy-nrf = { path = "/Users/quentin/Software/embassy/embassy-nrf" }
-embassy-util = { path = "/Users/quentin/Software/embassy/embassy-util" }
+embassy-sync = { path = "/Users/quentin/Software/embassy/embassy-sync" }
+embassy-futures = { path = "/Users/quentin/Software/embassy/embassy-futures" }
 embassy-hal-common = { path = "/Users/quentin/Software/embassy/embassy-hal-common" }
 embassy-embedded-hal = { path = "/Users/quentin/Software/embassy/embassy-embedded-hal" }
-rtos-trace = { path = "/Users/quentin/Software/rtos-trace/rtos_trace" }
-systemview-target = { path = "/Users/quentin/Software/rtos-trace/systemview_target" }
+nrf-softdevice = { path = "/Users/quentin/Software/nrf-softdevice/nrf-softdevice" }
+nrf-softdevice-s140 = { path = "/Users/quentin/Software/nrf-softdevice/nrf-softdevice-s140" }
+#rtos-trace = { path = "/Users/quentin/Software/rtos-trace/rtos_trace" }
+#systemview-target = { path = "/Users/quentin/Software/rtos-trace/systemview_target" }

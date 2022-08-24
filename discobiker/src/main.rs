@@ -23,15 +23,15 @@ use embassy_nrf::wdt;
 use embassy_nrf::{pac, saadc};
 use embassy_nrf::{peripherals, Peripherals};
 use embassy_time::{Duration, Instant, Timer};
-use embassy_util::blocking_mutex::ThreadModeMutex;
-use embassy_util::Forever;
+use embassy_sync::blocking_mutex::ThreadModeMutex;
+use static_cell::StaticCell;
 
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice as I2cBusDevice;
-use embassy_util::blocking_mutex::{
+use embassy_sync::blocking_mutex::{
     raw::{CriticalSectionRawMutex, ThreadModeRawMutex},
     Mutex as BlockingMutex,
 };
-use embassy_util::mutex::Mutex;
+use embassy_sync::mutex::Mutex;
 
 use drogue_device::drivers::led::neopixel::{rgb, rgb::NeoPixelRgb};
 
@@ -207,7 +207,7 @@ async fn softdevice_task(sd: &'static Softdevice) {
 }
 
 static SERVER: ThreadModeMutex<RefCell<Option<&Server>>> = ThreadModeMutex::new(RefCell::new(None));
-static SERVER_FOREVER: Forever<Server> = Forever::new();
+static SERVER_FOREVER: StaticCell<Server> = StaticCell::new();
 
 #[derive(Copy, Clone)]
 pub struct EventTimer {
@@ -347,7 +347,7 @@ pub static STATE: BlockingMutex<CriticalSectionRawMutex, Cell<ActualState>> =
     }));
 
 fn bluetooth_start_server(sd: &mut Softdevice) -> Result<(), gatt_server::RegisterError> {
-    let server: &Server = SERVER_FOREVER.put(Server::new(sd)?);
+    let server: &Server = SERVER_FOREVER.init(Server::new(sd)?);
 
     let v = unwrap!(server.bas.battery_level_get());
     info!("Initial battery level: {}", v);
@@ -579,7 +579,7 @@ fn config() -> embassy_nrf::config::Config {
 const BLUETOOTH: bool = true;
 const WDT: bool = false;
 
-static EXECUTOR_HIGH: Forever<InterruptExecutor<interrupt::SWI0_EGU0>> = Forever::new();
+static EXECUTOR_HIGH: StaticCell<InterruptExecutor<interrupt::SWI0_EGU0>> = StaticCell::new();
 
 #[embassy_executor::main()]
 async fn main(spawner: Spawner) {
@@ -593,7 +593,7 @@ async fn main(spawner: Spawner) {
 
     let irq = interrupt::take!(SWI0_EGU0);
     irq.set_priority(interrupt::Priority::P7);
-    let executor = EXECUTOR_HIGH.put(InterruptExecutor::new(irq));
+    let executor = EXECUTOR_HIGH.init(InterruptExecutor::new(irq));
     let spawner_high = executor.start();
 
     info!("Booting!");
@@ -664,9 +664,9 @@ async fn main(spawner: Spawner) {
     let irq = interrupt::take!(SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0);
     let i2c = Twim::new(p.TWISPI0, irq, use_pin_sda!(p), use_pin_scl!(p), twimconfig);
 
-    static I2C_BUS: Forever<Mutex<ThreadModeRawMutex, Twim<TWISPI0>>> = Forever::new();
+    static I2C_BUS: StaticCell<Mutex<ThreadModeRawMutex, Twim<TWISPI0>>> = StaticCell::new();
     let i2c_bus = Mutex::<ThreadModeRawMutex, _>::new(i2c);
-    let i2c_bus = I2C_BUS.put(i2c_bus);
+    let i2c_bus = I2C_BUS.init(i2c_bus);
 
     info!("Peripherals initialized, starting actors");
 

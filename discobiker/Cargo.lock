@@ -569,10 +569,11 @@ dependencies = [
  "ector",
  "embassy-embedded-hal",
  "embassy-executor",
+ "embassy-futures",
  "embassy-hal-common",
  "embassy-nrf",
+ "embassy-sync",
  "embassy-time",
- "embassy-util",
  "embedded-graphics",
  "embedded-hal 1.0.0-alpha.8",
  "embedded-hal-async",
@@ -600,6 +601,7 @@ dependencies = [
  "serde",
  "serde_cbor",
  "ssd1306",
+ "static_cell",
  "staticvec",
  "systemview-target",
  "uom",
@@ -638,10 +640,11 @@ dependencies = [
  "ector",
  "embassy-embedded-hal",
  "embassy-executor",
+ "embassy-futures",
  "embassy-hal-common",
  "embassy-nrf",
+ "embassy-sync",
  "embassy-time",
- "embassy-util",
  "embedded-hal 0.2.7",
  "embedded-hal 1.0.0-alpha.8",
  "embedded-hal-async",
@@ -657,6 +660,7 @@ dependencies = [
  "heapless",
  "rand_core",
  "reqwless",
+ "static_cell",
 ]
 
 [[package]]
@@ -674,22 +678,23 @@ dependencies = [
 [[package]]
 name = "ector"
 version = "0.1.0"
-source = "git+https://github.com/quentinmit/ector.git?branch=embassy-split-time#493aa864a086b7489d7113fdfbf77c9ce13226dd"
+source = "git+https://github.com/drogue-iot/ector.git#108928941935b90df7d9d8d4fc30b8a78e5f4e98"
 dependencies = [
  "atomic-polyfill 0.1.8",
  "ector-macros",
  "embassy-executor",
- "embassy-util",
+ "embassy-sync",
  "embedded-hal 0.2.7",
  "embedded-hal 1.0.0-alpha.8",
  "embedded-hal-async",
  "futures",
+ "static_cell",
 ]
 
 [[package]]
 name = "ector-macros"
 version = "0.1.0"
-source = "git+https://github.com/quentinmit/ector.git?branch=embassy-split-time#493aa864a086b7489d7113fdfbf77c9ce13226dd"
+source = "git+https://github.com/drogue-iot/ector.git#108928941935b90df7d9d8d4fc30b8a78e5f4e98"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -727,7 +732,7 @@ dependencies = [
  "embassy-executor",
  "embassy-hal-common",
  "embassy-macros",
- "embassy-util",
+ "embassy-sync",
 ]
 
 [[package]]
@@ -735,7 +740,7 @@ name = "embassy-embedded-hal"
 version = "0.1.0"
 dependencies = [
  "defmt",
- "embassy-util",
+ "embassy-sync",
  "embedded-hal 0.2.7",
  "embedded-hal 1.0.0-alpha.8",
  "embedded-hal-async",
@@ -756,6 +761,14 @@ dependencies = [
  "embassy-time",
  "futures-util",
  "rtos-trace",
+ "static_cell",
+]
+
+[[package]]
+name = "embassy-futures"
+version = "0.1.0"
+dependencies = [
+ "defmt",
 ]
 
 [[package]]
@@ -789,9 +802,9 @@ dependencies = [
  "embassy-embedded-hal",
  "embassy-executor",
  "embassy-hal-common",
+ "embassy-sync",
  "embassy-time",
  "embassy-usb",
- "embassy-util",
  "embedded-hal 0.2.7",
  "embedded-hal 1.0.0-alpha.8",
  "embedded-hal-async",
@@ -802,6 +815,19 @@ dependencies = [
  "futures",
  "nrf52840-pac",
  "rand_core",
+]
+
+[[package]]
+name = "embassy-sync"
+version = "0.1.0"
+dependencies = [
+ "atomic-polyfill 1.0.1",
+ "cfg-if",
+ "critical-section 1.1.0",
+ "defmt",
+ "embedded-io",
+ "futures-util",
+ "heapless",
 ]
 
 [[package]]
@@ -824,20 +850,7 @@ name = "embassy-usb"
 version = "0.1.0"
 dependencies = [
  "defmt",
- "embassy-util",
- "heapless",
-]
-
-[[package]]
-name = "embassy-util"
-version = "0.1.0"
-dependencies = [
- "atomic-polyfill 1.0.1",
- "cfg-if",
- "critical-section 1.1.0",
- "defmt",
- "embedded-io",
- "futures-util",
+ "embassy-futures",
  "heapless",
 ]
 
@@ -1402,13 +1415,13 @@ dependencies = [
 [[package]]
 name = "nrf-softdevice"
 version = "0.1.0"
-source = "git+https://github.com/embassy-rs/nrf-softdevice#ab0ad770c729b4f034bf0a085b50347a3e6b2ea9"
 dependencies = [
  "cortex-m",
  "cortex-m-rt",
  "critical-section 0.2.7",
+ "critical-section 1.1.0",
  "defmt",
- "embassy-util",
+ "embassy-sync",
  "embedded-storage",
  "embedded-storage-async",
  "fixed",
@@ -1418,12 +1431,12 @@ dependencies = [
  "nrf-softdevice-s140",
  "nrf52840-pac",
  "num_enum",
+ "static_cell",
 ]
 
 [[package]]
 name = "nrf-softdevice-macro"
 version = "0.1.0"
-source = "git+https://github.com/embassy-rs/nrf-softdevice#ab0ad770c729b4f034bf0a085b50347a3e6b2ea9"
 dependencies = [
  "Inflector",
  "darling 0.10.2",
@@ -1436,7 +1449,6 @@ dependencies = [
 [[package]]
 name = "nrf-softdevice-s140"
 version = "0.1.1"
-source = "git+https://github.com/embassy-rs/nrf-softdevice#ab0ad770c729b4f034bf0a085b50347a3e6b2ea9"
 
 [[package]]
 name = "nrf52840-pac"
@@ -1775,6 +1787,8 @@ dependencies = [
 [[package]]
 name = "rtos-trace"
 version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cdb6bcec3374f2049b3979112fa2e6c49b2a37f08de9b9759c6aa76531fb8097"
 
 [[package]]
 name = "rust-ini"
@@ -1958,6 +1972,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
+name = "static_cell"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e4c37c250d21f53fa7165e76e5401d7e6539c211a8d2cf449e3962956a5cc2ce"
+dependencies = [
+ "atomic-polyfill 1.0.1",
+]
+
+[[package]]
 name = "staticvec"
 version = "0.11.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1994,7 +2017,9 @@ dependencies = [
 
 [[package]]
 name = "systemview-target"
-version = "0.1.1"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fac27f629c45bad9dbd40481a3dc6cdc633e8f4ddf6d1bad2cf9ad8af4e3e92b"
 dependencies = [
  "bindgen",
  "cc",

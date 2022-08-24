@@ -2,7 +2,7 @@ use crate::{Debug2Format, CELSIUS_ZERO, DESIRED_STATE, STATE};
 use core::fmt;
 use core::fmt::Write;
 use embassy_time::{Duration, Instant, Ticker, Timer};
-use embassy_util::yield_now;
+use embassy_futures::yield_now;
 use embedded_graphics::prelude::*;
 use embedded_graphics::{
     mono_font::{iso_8859_1::FONT_6X10, MonoTextStyleBuilder},
