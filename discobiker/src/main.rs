@@ -5,6 +5,7 @@
 #![feature(cell_update)]
 #![feature(result_option_inspect)]
 #![feature(int_log)]
+#![feature(trace_macros)]
 
 mod log;
 
