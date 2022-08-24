@@ -144,9 +144,8 @@ pub(super) fn rgb_vu_meter<const N: usize>(
         let denom = (peak.ln() - offset);
 
         let calc_n = |slice: Range<usize>, div: f32| {
-            (
-                ((data.bands[slice].iter().sum::<u16>() as f32 / div).ln() - offset) / denom * N as f32
-            ) as usize
+            (((data.bands[slice].iter().sum::<u16>() as f32 / div).ln() - offset) / denom
+                * N as f32) as usize
         };
 
         let red = calc_n(0..3, 2.0);

@@ -18,6 +18,7 @@ use dim::si::f32consts::{LX, V};
 use super::sound::{SoundData, SoundMessage};
 
 mod effects;
+mod volume;
 
 trait StepTowards {
     fn step_towards(self, target: Self, step: Self) -> Self;
@@ -94,6 +95,7 @@ pub struct Output<'a> {
     need_sound: bool,
     sound_data: Option<SoundData>,
     peak_amplitudes: PeakRingBuffer<u16, 8>,
+    volume_tracker: volume::VolumeTracker,
 }
 
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -143,6 +145,7 @@ impl Output<'_> {
             need_sound: false,
             sound_data: None,
             peak_amplitudes: PeakRingBuffer::new(),
+            volume_tracker: volume::VolumeTracker::new(),
         }
     }
 
@@ -316,9 +319,14 @@ impl Output<'_> {
     }
 
     fn handle_sound_data(&mut self, data: SoundData) {
-        trace!("new sound_data: {}", data);
         self.peak_amplitudes
             .set_max(self.underlight_frame as usize / 16, data.amplitude);
+        self.volume_tracker.update(data.amplitude as f32);
+        trace!(
+            "new sound_data: {}, stats: {:?}",
+            data,
+            &self.volume_tracker
+        );
         self.sound_data = Some(data);
     }
 
