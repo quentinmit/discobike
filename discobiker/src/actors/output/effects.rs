@@ -219,21 +219,23 @@ macro_rules! palettes {
             Rgbw8::new($r, $g, $b, 0)
         }
     };
+    (@size ( $r:expr, $g:expr, $b:expr ) ) => { 255 };
     (@case $i:ident, $rule:tt, $($tail:tt),+) => {
-        if $i >= (0 $(+ palettes!(@size $tail))+) {
+        if $i < palettes!(@size $rule) {
             palettes!(@color $i, $rule)
         } else {
+            let $i = $i - palettes!(@size $rule);
             palettes!(@case $i, $($tail),+)
         }
     };
     (@case $i:ident, $rule:tt) => {
         palettes!(@color $i, $rule)
     };
-    (@size ( $r:expr, $g:expr, $b:expr ) ) => { 255 };
-    (@impl $i:ident, $name:ident: { $($rule:tt),+ }) => {
+    (@impl $i:ident, $name:ident: { $($rule:tt),+ $(,)? }) => {
         pub struct $name {}
         impl ColorPalette for $name {
             fn convert(&self, $i: u16) -> Rgbw8 {
+                let $i = $i % self.max();
                 palettes!(@case $i, $($rule),+)
             }
             fn max(&self) -> u16 {
@@ -241,97 +243,57 @@ macro_rules! palettes {
             }
         }
     };
-    ($i:ident, $($name:ident: $body:tt),*) => {
+    ($i:ident, $($name:ident: $body:tt),* $(,)?) => {
         pub enum Palette {
             $($name),*
         }
         $(palettes!(@impl $i, $name: $body);)*
-        //palettes!(@enum_body ( $($tail)* ) -> ());
-        //palettes!(@impl $i, $($tail)*);
     };
 }
 
-palettes!{i,
+palettes!{
+    i,
     Rainbow: {
-        (255, 0, 255 - i), // violet -> red
-        (i, 0, 255), // blue -> violet
-        (0, 255 - i, 255), // aqua -> blue
-        (0, 255, i), // green -> aqua
+        (255, i, 0),       // red -> yellow
         (255 - i, 255, 0), // yellow -> green
-        (255, i, 0) // red -> yellow
+        (0, 255, i),       // green -> aqua
+        (0, 255 - i, 255), // aqua -> blue
+        (i, 0, 255),       // blue -> violet
+        (255, 0, 255 - i)  // violet -> red
     },
     Sunset: {
-        (i, 0, 255 - i), // blue -> red
-        (255 - i, 0, 255), // purple -> blue
+        (255, i / 2, 0),       // red -> orange
         (255, 128 - i / 2, i), // orange -> purple
-        (255, i / 2, 0) // red -> orange
-    }
+        (255 - i, 0, 255),     // purple -> blue
+        (i, 0, 255 - i)        // blue -> red
+    },
+    Ocean: {
+        (0, 255, i),       // green -> aqua
+        (0, 255 - i, 255), // aqua -> blue
+        (0, i, 255 - i)    // blue -> green
+    },
+    PinaColada: {
+        (128 + i / 2, 128 + i / 2, 128 - i / 2), // half white -> yellow
+        (255, 255 - i, 0),                       // yellow -> red
+        (255 - i / 2, i / 2, i / 2)              // red -> half white
+    },
+    Sulfur: {
+        (255 - i, 255, 0), // yellow -> green
+        (0, 255, i),       // green -> aqua
+        (i, 255, 255 - i), // aqua -> yellow
+    },
+    NoGreen: {
+        (255, i, 0),       // red -> yellow
+        (255 - i, 255, i), // yellow -> aqua
+        (0, 255 - i, 255), // aqua -> blue
+        (i, 0, 255),       // blue -> violet
+        (255, 0, 255 - i), // violet -> red
+    },
+    USA: {
+        (255, 0, 0),     // red
+        (128, 128, 128), // white
+        (0, 0, 255),     // blue
+    },
 }
 
 trace_macros!(false);
-
-/* pub struct Rainbow{}
-
-impl ColorPalette for Rainbow {
-    fn convert(&self, i: u16) -> Rgbw8 {
-        let i = i % 1530;
-        if (i > 1274) { Rgbw8::new(255, 0, 255 - (i % 255)) }   //violet -> red
-        if (i > 1019) { Rgbw8::new((i % 255), 0, 255) }         //blue -> violet
-        if (i > 764) { Rgbw8::new(0, 255 - (i % 255), 255) }    //aqua -> blue
-        if (i > 509) { Rgbw8::new(0, 255, (i % 255)) }          //green -> aqua
-        if (i > 255) { Rgbw8::new(255 - (i % 255), 255, 0) }    //yellow -> green
-        else { Rgbw8::new(255, i, 0) }                               //red -> yellow
-  }
-
-  fn max(&self) -> u16 {
-    1530
-  } */
-  
-/*   uint32_t Sunset(unsigned int i) {
-    if (i > 1019) return Sunset(i % 1020);
-    if (i > 764) { Rgbw8::new((i % 255), 0, 255 - (i % 255)) }          //blue -> red
-    if (i > 509) { Rgbw8::new(255 - (i % 255), 0, 255) }                //purple -> blue
-    if (i > 255) { Rgbw8::new(255, 128 - (i % 255) / 2, (i % 255)) }    //orange -> purple
-    { Rgbw8::new(255, i / 2, 0) }                                       //red -> orange
-  }
-  
-  uint32_t Ocean(unsigned int i) {
-    if (i > 764) return Ocean(i % 765);
-    if (i > 509) { Rgbw8::new(0, i % 255, 255 - (i % 255)) }  //blue -> green
-    if (i > 255) { Rgbw8::new(0, 255 - (i % 255), 255) }      //aqua -> blue
-    { Rgbw8::new(0, 255, i) }                                 //green -> aqua
-  }
-  
-  uint32_t PinaColada(unsigned int i) {
-    if (i > 764) return PinaColada(i % 765);
-    if (i > 509) { Rgbw8::new(255 - (i % 255) / 2, (i % 255) / 2, (i % 255) / 2) }  // red -> half white
-    if (i > 255) { Rgbw8::new(255, 255 - (i % 255), 0) }                            //yellow -> red
-    { Rgbw8::new(128 + (i / 2), 128 + (i / 2), 128 - i / 2) }                       // half white -> yellow
-  }
-  
-  uint32_t Sulfur(unsigned int i) {
-    if (i > 764) return Sulfur(i % 765);
-    if (i > 509) { Rgbw8::new(i % 255, 255, 255 - (i % 255)) }   //aqua -> yellow
-    if (i > 255) { Rgbw8::new(0, 255, i % 255) }                 //green -> aqua
-    { Rgbw8::new(255 - i, 255, 0) }                              //yellow -> green
-  }
-  
-  uint32_t NoGreen(unsigned int i) {
-    if (i > 1274) return NoGreen(i % 1275);
-    if (i > 1019) { Rgbw8::new(255, 0, 255 - (i % 255)) }         //violet -> red
-    if (i > 764) { Rgbw8::new((i % 255), 0, 255) }                //blue -> violet
-    if (i > 509) { Rgbw8::new(0, 255 - (i % 255), 255) }          //aqua -> blue
-    if (i > 255) { Rgbw8::new(255 - (i % 255), 255, i % 255) }    //yellow -> aqua
-    { Rgbw8::new(255, i, 0) }                                     //red -> yellow
-  }
-  
-  //NOTE: This is an example of a non-gradient palette: you will get straight red, white, or blue
-  //      This works fine, but there is no gradient effect, this was merely included as an example.
-  //      If you wish to include it, put it in the switch-case in ColorPalette() and add its
-  //      threshold (764) to thresholds[] at the top.
-  uint32_t USA(unsigned int i) {
-    if (i > 764) return USA(i % 765);
-    if (i > 509) { Rgbw8::new(0, 0 } 255);      //blue
-    if (i > 255) { Rgbw8::new(128, 12 }, 128);  //white
-    { Rgbw8::new(255, 0 } 0);                   //red
-  } */
