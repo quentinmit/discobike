@@ -22,8 +22,8 @@ use embassy_nrf::twim::{self, Twim};
 use embassy_nrf::wdt;
 use embassy_nrf::{pac, saadc};
 use embassy_nrf::{peripherals, Peripherals};
-use embassy_time::{Duration, Instant, Timer};
 use embassy_sync::blocking_mutex::ThreadModeMutex;
+use embassy_time::{Duration, Instant, Timer};
 use static_cell::StaticCell;
 
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice as I2cBusDevice;
@@ -294,7 +294,7 @@ pub static DESIRED_STATE: BlockingMutex<CriticalSectionRawMutex, Cell<DesiredSta
     BlockingMutex::new(Cell::new(DesiredState {
         headlight_mode: HeadlightMode::Auto,
         underlight_mode: UnderlightMode::ForceOn, //UnderlightMode::Auto,
-        underlight_effect: Effect::RgbVuMeter,       //Effect::Rainbow,
+        underlight_effect: Effect::RgbVuMeter,    //Effect::Rainbow,
         underlight_speed: 1024,
     }));
 
