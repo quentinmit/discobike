@@ -33,7 +33,8 @@ impl VolumeTracker {
         //Sets a threshold for volume.
         //  In practice I've found noise can get up to 15, so if it's lower, the visual thinks it's silent.
         //  Also if the volume is less than average volume / 2 (essentially an average with 0), it's considered silent.
-        if volume < 15.0 { // volume < (self.avgVol / 2.0) || 
+        if volume < 15.0 {
+            // volume < (self.avgVol / 2.0) ||
             volume = 0.0;
         } else {
             self.avgVol = (self.avgVol + volume) / 2.0; //If non-zeo, take an "average" of volumes.

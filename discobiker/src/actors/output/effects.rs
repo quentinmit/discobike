@@ -187,7 +187,7 @@ pub struct Pulse<const N: usize> {
     gradient: u16,
 }
 
-impl <const N: usize> Pulse<N> {
+impl<const N: usize> Pulse<N> {
     pub fn run(&mut self, volume_tracker: &super::volume::VolumeTracker) -> [Rgbw8; N] {
         fade(&mut self.last, 0.75);
         /* if volume_tracker.bump {
@@ -251,7 +251,7 @@ macro_rules! palettes {
     };
 }
 
-palettes!{
+palettes! {
     i,
     Rainbow: {
         (255, i, 0),       // red -> yellow
