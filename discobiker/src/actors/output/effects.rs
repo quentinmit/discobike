@@ -1,8 +1,10 @@
 use core::cmp::min;
+use core::f32::consts::PI;
 use core::ops::Range;
 
 use drogue_device::drivers::led::neopixel::rgbw::{Rgbw8, BLACK};
 use drogue_device::drivers::led::neopixel::Pixel;
+use embassy_time::Instant;
 use micromath::F32Ext;
 use trait_enum::trait_enum;
 
@@ -182,17 +184,68 @@ pub(super) fn rgb_vu_meter<const N: usize>(
     out
 }
 
+trait Color {
+    fn brightness(&self) -> u8;
+}
+
+impl Color for Rgbw8 {
+    fn brightness(&self) -> u8 {
+        let mut sum = 0u16;
+        for c in 0..4 {
+            sum += self.get(c).unwrap_or(0) as u16;
+        }
+        (sum / 4) as u8
+    }
+}
+
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[derive(Debug)]
 pub struct Pulse<const N: usize> {
     last: [Rgbw8; N],
+    lastBump: Instant,
     gradient: u16,
+    palette: Palette,
+}
+
+impl <const N: usize> Default for Pulse<N> {
+    fn default() -> Self {
+        Self { last: [BLACK; N], lastBump: Instant::MIN, gradient: 0, palette: Palette::Rainbow }
+    }
 }
 
 impl<const N: usize> Pulse<N> {
     pub fn run(&mut self, volume_tracker: &super::volume::VolumeTracker) -> [Rgbw8; N] {
         fade(&mut self.last, 0.75);
-        /* if volume_tracker.bump {
+        if volume_tracker.lastBumpTime > self.lastBump {
+            self.gradient += self.palette.len() / 24;
+            self.lastBump = volume_tracker.lastBumpTime;
+        }
+        if volume_tracker.lastVol > 0.0 {
+            let knob = 0.9;
+            let color = self.palette.convert(self.gradient);
+            let ratio = volume_tracker.lastVol / volume_tracker.maxVol;
 
-        } */
+            let led_half = N / 2;
+            let start = led_half - (led_half as f32 * ratio) as usize;
+            let finish = led_half + (led_half as f32 * ratio) as usize + N % 2;
+
+            for i in start..finish {
+                let damp = ((i-start) as f32 * PI / (finish - start) as f32).sin();
+                let damp = damp.powi(2);
+
+                let mut color = color;
+                for k in 0..Rgbw8::CHANNELS {
+                    let _ = color.set(
+                        k,
+                        (color.get(k).unwrap_or(0) as f32 * damp * knob * ratio.powi(2)) as u8,
+                    );
+                }
+
+                if color.brightness() > self.last[i].brightness() {
+                    self.last[i] = color;
+                }
+            }
+        }
         self.last
     }
 }
@@ -204,10 +257,49 @@ fn fade<const N: usize, P: Pixel<C>, const C: usize>(pixels: &mut [P; N], damper
         }
     }
 }
-
-pub trait ColorPalette {
-    fn convert(&self, i: u16) -> Rgbw8;
-    fn max(&self) -> u16;
+macro_rules! replace_expr {
+    ($_t:tt $sub:expr) => {$sub};
+}
+macro_rules! effects {
+    (@match $name:ident $type:ty) => {
+        Self::$name(_)
+    };
+    (@match $name:ident) => {
+        Self::$name
+    };
+    ($($name:ident $(($type:ty))?),+ $(,)?) => {
+        #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+        #[derive(Debug)]
+        pub enum Effect<const N: usize> {
+            $($name $(($type))?),+
+        }
+        impl <const N: usize> Effect<N> {
+            pub fn set_from_desired_state(&mut self, desired_state: &crate::DesiredState) {
+                match desired_state.underlight_effect {
+                    $(crate::Effect::$name => {
+                        match self {
+                            effects!(@match $name $($type)?) => (),
+                            _ => {
+                                *self = Self::$name $((<$type>::default()))?;
+                            }
+                        }
+                    }),+
+                }
+            }
+        }
+    }
+}
+effects! {
+    Solid,
+    ColorWipe,
+    TheaterChase,
+    Rainbow,
+    TheaterChaseRainbow,
+    CylonBounce,
+    Fire,
+    VuMeter,
+    RgbVuMeter,
+    Pulse(Pulse<N>),
 }
 
 trace_macros!(true);
@@ -234,23 +326,26 @@ macro_rules! palettes {
     (@case $i:ident, $rule:tt) => {
         palettes!(@color $i, $rule)
     };
-    (@impl $i:ident, $name:ident: { $($rule:tt),+ $(,)? }) => {
-        pub struct $name {}
-        impl ColorPalette for $name {
-            fn convert(&self, $i: u16) -> Rgbw8 {
-                let $i = $i % self.max();
-                palettes!(@case $i, $($rule),+)
-            }
-            fn max(&self) -> u16 {
-                0 $(+ palettes!(@size $rule))+
-            }
-        }
-    };
-    ($i:ident, $($name:ident: $body:tt),* $(,)?) => {
+    ($i:ident, $($name:ident: { $($rule:tt),+ $(,)? }),* $(,)?) => {
+        #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+        #[derive(Debug)]
         pub enum Palette {
             $($name),*
         }
-        $(palettes!(@impl $i, $name: $body);)*
+        impl Palette {
+            pub const fn convert(&self, $i: u16) -> Rgbw8 {
+                let $i = $i % self.len();
+                match self {
+                    $(Self::$name => palettes!(@case $i, $($rule),+)),*
+                }
+            }
+            pub const fn len(&self) -> u16 {
+                match self {
+                    $(Self::$name => 0 $(+ palettes!(@size $rule))+),*
+                }
+            }
+        }
+        //$(palettes!(@impl $i, $name: $body);)*
     };
 }
 

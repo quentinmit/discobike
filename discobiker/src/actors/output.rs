@@ -96,6 +96,7 @@ pub struct Output<'a> {
     sound_data: Option<SoundData>,
     peak_amplitudes: PeakRingBuffer<u16, 8>,
     volume_tracker: volume::VolumeTracker,
+    current_underlight_effect: effects::Effect<UNDERLIGHT_PIXELS>,
 }
 
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -146,6 +147,7 @@ impl Output<'_> {
             sound_data: None,
             peak_amplitudes: PeakRingBuffer::new(),
             volume_tracker: volume::VolumeTracker::new(),
+            current_underlight_effect: effects::Effect::Solid,
         }
     }
 
@@ -335,10 +337,12 @@ impl Output<'_> {
         desired_state: &DesiredState,
         state: &ActualState,
     ) -> Result<(), pwm::Error> {
-        use crate::Effect::*;
-        let need_sound = match desired_state.underlight_effect {
+        use effects::Effect::*;
+        self.current_underlight_effect.set_from_desired_state(desired_state);
+        let need_sound = match self.current_underlight_effect {
             VuMeter => true,
             RgbVuMeter => true,
+            Pulse(_) => true,
             _ => false,
         };
         if need_sound != self.need_sound {
@@ -350,13 +354,14 @@ impl Output<'_> {
                 .await;
             self.need_sound = need_sound;
         }
-        let pixels = match desired_state.underlight_effect {
+        let pixels = match &mut self.current_underlight_effect {
             ColorWipe => {
                 effects::color_wipe(self.underlight_frame, desired_state.underlight_speed, RED)
             }
             Rainbow => effects::rainbow(self.underlight_frame, desired_state.underlight_speed),
             VuMeter => effects::vu_meter(&self.sound_data, self.peak_amplitudes.max(), RED),
             RgbVuMeter => effects::rgb_vu_meter(&self.sound_data, self.peak_amplitudes.max()),
+            Pulse(ref mut pulse) => pulse.run(&self.volume_tracker),
             x => {
                 error!("unsupported effect {:?}", x);
                 [RED; UNDERLIGHT_PIXELS]

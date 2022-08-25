@@ -279,6 +279,7 @@ enum Effect {
     Fire,
     VuMeter,
     RgbVuMeter,
+    Pulse,
 }
 
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -295,7 +296,7 @@ pub static DESIRED_STATE: BlockingMutex<CriticalSectionRawMutex, Cell<DesiredSta
     BlockingMutex::new(Cell::new(DesiredState {
         headlight_mode: HeadlightMode::Auto,
         underlight_mode: UnderlightMode::ForceOn, //UnderlightMode::Auto,
-        underlight_effect: Effect::RgbVuMeter,    //Effect::Rainbow,
+        underlight_effect: Effect::Pulse,    //Effect::Rainbow,
         underlight_speed: 1024,
     }));
 
