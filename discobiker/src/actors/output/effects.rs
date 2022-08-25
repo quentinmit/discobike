@@ -213,13 +213,16 @@ pub trait ColorPalette {
 trace_macros!(true);
 
 macro_rules! palettes {
-    (@color $i:ident, ( $r:expr, $g:expr, $b:expr ) ) => {
+    (@color $i:ident, ( $r:expr, $g:expr, $b:expr, $w:expr ) ) => {
         {
             let $i = $i as u8;
-            Rgbw8::new($r, $g, $b, 0)
+            Rgbw8::new($r, $g, $b, $w)
         }
     };
-    (@size ( $r:expr, $g:expr, $b:expr ) ) => { 255 };
+    (@color $i:ident, ( $r:expr, $g:expr, $b:expr ) ) => {
+        palettes!(@color $i, ($r, $g, $b, 0))
+    };
+    (@size ( $r:expr, $g:expr, $b:expr $(, $w:expr)? ) ) => { 255 };
     (@case $i:ident, $rule:tt, $($tail:tt),+) => {
         if $i < palettes!(@size $rule) {
             palettes!(@color $i, $rule)
@@ -259,23 +262,23 @@ palettes! {
         (0, 255, i),       // green -> aqua
         (0, 255 - i, 255), // aqua -> blue
         (i, 0, 255),       // blue -> violet
-        (255, 0, 255 - i)  // violet -> red
+        (255, 0, 255 - i), // violet -> red
     },
     Sunset: {
         (255, i / 2, 0),       // red -> orange
         (255, 128 - i / 2, i), // orange -> purple
         (255 - i, 0, 255),     // purple -> blue
-        (i, 0, 255 - i)        // blue -> red
+        (i, 0, 255 - i),       // blue -> red
     },
     Ocean: {
         (0, 255, i),       // green -> aqua
         (0, 255 - i, 255), // aqua -> blue
-        (0, i, 255 - i)    // blue -> green
+        (0, i, 255 - i),   // blue -> green
     },
     PinaColada: {
-        (128 + i / 2, 128 + i / 2, 128 - i / 2), // half white -> yellow
-        (255, 255 - i, 0),                       // yellow -> red
-        (255 - i / 2, i / 2, i / 2)              // red -> half white
+        (i, i, 0, 128 - i / 2), // half white -> yellow
+        (255, 255 - i, 0),      // yellow -> red
+        (255 - i, 0, 0, i / 2), // red -> half white
     },
     Sulfur: {
         (255 - i, 255, 0), // yellow -> green
