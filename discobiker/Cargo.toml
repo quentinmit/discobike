@@ -151,6 +151,7 @@ microfft = "0.5.0"
 micromath = "2.0.0"
 static_cell = "1.0.0"
 trait_enum = { version = "0.5.0", default-features = false }
+replace_with = { version = "0.1.7", default-features = false }
 
 [patch.crates-io]
 #embassy-executor = { git = "https://github.com/embassy-rs/embassy" }

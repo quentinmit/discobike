@@ -6,6 +6,8 @@
 #![feature(result_option_inspect)]
 #![feature(int_log)]
 #![feature(trace_macros)]
+#![feature(generic_arg_infer)]
+#![feature(mixed_integer_ops)]
 
 mod log;
 
@@ -280,6 +282,7 @@ enum Effect {
     VuMeter,
     RgbVuMeter,
     Pulse,
+    Traffic,
 }
 
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -296,7 +299,7 @@ pub static DESIRED_STATE: BlockingMutex<CriticalSectionRawMutex, Cell<DesiredSta
     BlockingMutex::new(Cell::new(DesiredState {
         headlight_mode: HeadlightMode::Auto,
         underlight_mode: UnderlightMode::ForceOn, //UnderlightMode::Auto,
-        underlight_effect: Effect::Pulse,    //Effect::Rainbow,
+        underlight_effect: Effect::Traffic,    //Effect::Rainbow,
         underlight_speed: 1024,
     }));
 

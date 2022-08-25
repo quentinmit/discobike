@@ -597,6 +597,7 @@ dependencies = [
  "panic-probe",
  "paste",
  "physical_constants",
+ "replace_with",
  "rtos-trace",
  "serde",
  "serde_cbor",
@@ -1742,6 +1743,12 @@ name = "regex-syntax"
 version = "0.6.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a3f87b73ce11b1619a3c6332f45341e0047173771e8b8b73f87bfeefb7b56244"
+
+[[package]]
+name = "replace_with"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e3a8614ee435691de62bcffcf4a66d91b3594bf1428a5722e79103249a095690"
 
 [[package]]
 name = "reqwless"

@@ -6,6 +6,7 @@ use drogue_device::drivers::led::neopixel::rgbw::{Rgbw8, BLACK};
 use drogue_device::drivers::led::neopixel::Pixel;
 use embassy_time::Instant;
 use micromath::F32Ext;
+use replace_with::replace_with_or_default;
 use trait_enum::trait_enum;
 
 fn color_hsv(hue: u16, sat: u8, val: u8) -> Rgbw8 {
@@ -186,6 +187,7 @@ pub(super) fn rgb_vu_meter<const N: usize>(
 
 trait Color {
     fn brightness(&self) -> u8;
+    fn scale(&self, ratio: f32) -> Self;
 }
 
 impl Color for Rgbw8 {
@@ -195,6 +197,17 @@ impl Color for Rgbw8 {
             sum += self.get(c).unwrap_or(0) as u16;
         }
         (sum / 4) as u8
+    }
+
+    fn scale(&self, ratio: f32) -> Self {
+        let mut out = *self;
+        for k in 0..Self::CHANNELS {
+            let _ = out.set(
+                k,
+                (self.get(k).unwrap_or(0) as f32 * ratio) as u8,
+            );
+        }
+        out
     }
 }
 
@@ -233,17 +246,60 @@ impl<const N: usize> Pulse<N> {
                 let damp = ((i-start) as f32 * PI / (finish - start) as f32).sin();
                 let damp = damp.powi(2);
 
-                let mut color = color;
-                for k in 0..Rgbw8::CHANNELS {
-                    let _ = color.set(
-                        k,
-                        (color.get(k).unwrap_or(0) as f32 * damp * knob * ratio.powi(2)) as u8,
-                    );
-                }
+                let color = color.scale(damp * knob * ratio.powi(2));
 
                 if color.brightness() > self.last[i].brightness() {
                     self.last[i] = color;
                 }
+            }
+        }
+        self.last
+    }
+}
+
+const DOTS: usize = 32;
+
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[derive(Debug)]
+pub struct Traffic<const N: usize> {
+    last: [Rgbw8; N],
+    lastBump: Instant,
+    gradient: u16,
+    palette: Palette,
+    dots: [Option<(usize, Rgbw8)>; DOTS],
+}
+
+impl <const N: usize> Default for Traffic<N> {
+    fn default() -> Self {
+        Self { last: [BLACK; N], lastBump: Instant::MIN, gradient: 0, palette: Palette::Rainbow, dots: [None; _] }
+    }
+}
+
+impl<const N: usize> Traffic<N> {
+    pub fn run(&mut self, volume_tracker: &super::volume::VolumeTracker) -> [Rgbw8; N] {
+        //fade() actually creates the trail behind each dot here, so it's important to include.
+        fade(&mut self.last, 0.8);
+
+        if volume_tracker.lastBumpTime > self.lastBump {
+            self.dots.iter().position(|d| d == &None).map(|slot| {
+                let pos = if slot % 2 == 0 { 0 } else { N-1 };
+                self.dots[slot] = Some((pos, self.palette.convert(self.gradient)));
+                self.gradient += self.palette.len() / 24;
+            });
+
+            self.lastBump = volume_tracker.lastBumpTime;
+        }
+        if volume_tracker.lastVol > 0.0 {
+            let knob = 0.9;
+            let ratio = (volume_tracker.lastVol / volume_tracker.maxVol).powi(2) * knob;
+
+            let last = &mut self.last;
+
+            for slot in 0..self.dots.len() {
+                replace_with_or_default(&mut self.dots[slot], |v| v.and_then(|(pos, color)| {
+                    last[pos] = color.scale(ratio);
+                    pos.checked_add_signed(if slot % 2 == 0 { 1 } else { -1 }).filter(|pos| *pos < N).map(|pos| (pos, color))
+                }))
             }
         }
         self.last
@@ -257,9 +313,7 @@ fn fade<const N: usize, P: Pixel<C>, const C: usize>(pixels: &mut [P; N], damper
         }
     }
 }
-macro_rules! replace_expr {
-    ($_t:tt $sub:expr) => {$sub};
-}
+
 macro_rules! effects {
     (@match $name:ident $type:ty) => {
         Self::$name(_)
@@ -300,6 +354,7 @@ effects! {
     VuMeter,
     RgbVuMeter,
     Pulse(Pulse<N>),
+    Traffic(Traffic<N>),
 }
 
 trace_macros!(true);

@@ -343,6 +343,7 @@ impl Output<'_> {
             VuMeter => true,
             RgbVuMeter => true,
             Pulse(_) => true,
+            Traffic(_) => true,
             _ => false,
         };
         if need_sound != self.need_sound {
@@ -362,6 +363,7 @@ impl Output<'_> {
             VuMeter => effects::vu_meter(&self.sound_data, self.peak_amplitudes.max(), RED),
             RgbVuMeter => effects::rgb_vu_meter(&self.sound_data, self.peak_amplitudes.max()),
             Pulse(ref mut pulse) => pulse.run(&self.volume_tracker),
+            Traffic(ref mut traffic) => traffic.run(&self.volume_tracker),
             x => {
                 error!("unsupported effect {:?}", x);
                 [RED; UNDERLIGHT_PIXELS]
