@@ -84,27 +84,19 @@ impl Sound<'_> {
 
         let output = &self.output;
 
+        let mut skipped = 3usize;
+
         let sampler_fut = self
             .pdm
             .run_task_sampler(&mut bufs, move |buf| {
-                //let mean = (buf.iter().map(|v| i32::from(*v)).sum::<i32>() / buf.len() as i32) as i16;
-                /* let (peak_freq_index, peak_mag) = fft_peak_freq(&buf);
-                let peak_freq = peak_freq_index * 16000 / buf.len();
-                info!(
-                    "{} samples, min {=i16}, max {=i16}, mean {=i16}, AC RMS {=i16}, peak {} @ {} Hz",
-                    buf.len(),
-                    buf.iter().min().unwrap(),
-                    buf.iter().max().unwrap(),
-                    mean,
-                    (
-                        buf.iter().map(|v| i32::from(*v - mean).pow(2)).fold(0i32, |a,b| a.saturating_add(b))
-                    / buf.len() as i32).sqrt() as i16,
-                    peak_mag, peak_freq,
-                ); */
-                if let Err(e) =
-                    output.try_notify(OutputMessage::SoundData(Self::convert_sound_buf(buf)))
-                {
-                    warn!("dropped sound frame");
+                if skipped > 0 {
+                    skipped -= 1;
+                } else {
+                    if let Err(e) =
+                        output.try_notify(OutputMessage::SoundData(Self::convert_sound_buf(buf)))
+                    {
+                        warn!("dropped sound frame");
+                    }
                 }
                 match running.load(Ordering::SeqCst) {
                     true => SamplerState::Sampled,
