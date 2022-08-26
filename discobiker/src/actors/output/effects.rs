@@ -74,18 +74,6 @@ fn color_hsv(hue: u16, sat: u8, val: u8) -> Rgbw8 {
     )
 }
 
-/* trait_enum!{
-    pub enum Effect: Default {
-        ColorWipe,
-        Rainbow,
-        VUMeter,
-        RGBVUMeter,
-    }
-} */
-
-#[derive(Default)]
-pub struct ColorWipe {}
-
 pub fn color_wipe<const N: usize>(frame: u32, speed: i16, color: Rgbw8) -> [Rgbw8; N] {
     let frame = ((frame as i32) * (speed as i32)) as usize;
     // default speed is 1 frame per pixel
@@ -128,8 +116,6 @@ pub fn rainbow<const N: usize>(frame: u32, speed: i16) -> [Rgbw8; N] {
     out
 }
 
-#[derive(Default)]
-pub struct VUMeter {}
 pub(super) fn vu_meter<const N: usize>(
     data: &Option<super::SoundData>,
     max: u16,
@@ -149,8 +135,6 @@ pub(super) fn vu_meter<const N: usize>(
     out
 }
 
-#[derive(Default)]
-pub struct RGBVUMeter {}
 pub(super) fn rgb_vu_meter<const N: usize>(
     data: &Option<super::SoundData>,
     max: u16,
@@ -231,6 +215,7 @@ impl<const N: usize> Pulse<N> {
         fade(&mut self.last, 0.75);
         if volume_tracker.lastBumpTime > self.lastBump {
             self.gradient += self.palette.len() / 24;
+            self.gradient %= self.palette.len();
             self.lastBump = volume_tracker.lastBumpTime;
         }
         if volume_tracker.lastVol > 0.0 {
