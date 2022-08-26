@@ -25,7 +25,6 @@ use embassy_nrf::twim::{self, Twim};
 use embassy_nrf::wdt;
 use embassy_nrf::{pac, saadc};
 use embassy_nrf::{peripherals, Peripherals};
-use embassy_nrf::rng::Rng;
 use embassy_sync::blocking_mutex::{ThreadModeMutex, CriticalSectionMutex};
 use embassy_time::{Duration, Instant, Timer};
 use static_cell::StaticCell;
@@ -587,7 +586,6 @@ const WDT: bool = false;
 
 static EXECUTOR_HIGH: StaticCell<InterruptExecutor<interrupt::SWI0_EGU0>> = StaticCell::new();
 
-static RNG: CriticalSectionMutex<RefCell<Option<Rng>>> = CriticalSectionMutex::new(RefCell::new(None));
 
 #[embassy_executor::main()]
 async fn main(spawner: Spawner) {
@@ -616,9 +614,6 @@ async fn main(spawner: Spawner) {
         None
     };
     info!("WDT started");
-
-    //let mut rng = Rng::new(p.RNG, interrupt::take!(RNG));
-    //RNG.lock(|c| c.replace(Some(rng)));
 
     let sdconfig = nrf_softdevice::Config {
         clock: Some(raw::nrf_clock_lf_cfg_t {

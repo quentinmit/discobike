@@ -376,6 +376,7 @@ impl Output<'_> {
             CylonBounce => {
                 effects::cylon_bounce(self.underlight_frame, desired_state.underlight_speed, color)
             }
+            Fire(ref mut fire) => fire.run(self.underlight_frame, desired_state.underlight_speed),
             VuMeter => effects::vu_meter(&self.sound_data, self.peak_amplitudes.max(), color),
             RgbVuMeter => effects::rgb_vu_meter(&self.sound_data, self.peak_amplitudes.max()),
             Pulse(ref mut pulse) => pulse.run(&self.volume_tracker),

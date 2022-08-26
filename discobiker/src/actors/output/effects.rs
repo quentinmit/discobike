@@ -6,9 +6,10 @@ use drogue_device::drivers::led::neopixel::rgbw::{Rgbw8, BLACK};
 use drogue_device::drivers::led::neopixel::Pixel;
 use embassy_time::Instant;
 use micromath::F32Ext;
+use nrf_softdevice::{Softdevice, random_bytes};
 use replace_with::replace_with_or_default;
 use trait_enum::trait_enum;
-use rand::Rng;
+use nanorand::{Rng, WyRand};
 
 fn color_hsv(hue: u16, sat: u8, val: u8) -> Rgbw8 {
     // Remap 0-65535 to 0-1529. Pure red is CENTERED on the 64K rollover;
@@ -171,18 +172,34 @@ pub fn cylon_bounce<const N: usize>(frame: u32, speed: i16, color: Rgbw8) -> [Rg
     out
 }
 
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[derive(Debug)]
 pub struct Fire<const N: usize> {
     heat: [u8; N],
     last_frame: usize,
+    rng: WyRand,
+}
+
+impl <const N: usize> defmt::Format for Fire<N> {
+    fn format(&self, f: defmt::Formatter) {
+        defmt::write!(
+            f,
+            "Fire<{}> {{ heat: {:?}, last_frame: {:?} }}",
+            N, self.heat, self.last_frame,
+        )
+    }
 }
 
 impl<const N: usize> Default for Fire<N> {
     fn default() -> Self {
+        let mut seed = [0u8; 8];
+        let sd = unsafe { Softdevice::steal() };
+        if let Err(e) = random_bytes(sd, &mut seed) {
+            error!("Failed to fetch random seed: {:?}", e);
+        }
         Self {
             heat: [0; _],
             last_frame: 0,
+            rng: WyRand::new_seed(u64::from_ne_bytes(seed)),
         }
     }
 }
@@ -191,7 +208,7 @@ impl<const N: usize> Fire<N> {
     pub fn run(&mut self, frame: u32, speed: i16) -> [Rgbw8; N] {
         let Cooling: usize = 55;
         let Sparking: u8 = 120;
-      
+
         let upside_down = (speed < 0);
         let frame = ((frame as i32) * (speed as i32)) as usize;
         if ((self.last_frame - frame) > 256 || (self.last_frame < frame)) {
@@ -200,7 +217,7 @@ impl<const N: usize> Fire<N> {
 
             // Step 1.  Cool down every cell a little
             for i in 0..N {
-                let cooldown = crate::RNG.lock(|c| c.borrow_mut().as_mut().map_or(0, |rng| rng.gen_range(0..(((Cooling * 10) / N) as u8) + 2)));
+                let cooldown = self.rng.generate_range(0..(((Cooling * 10) / N) as u8) + 2);
                 self.heat[i] = self.heat[i].saturating_sub(cooldown);
             }
 
@@ -208,11 +225,11 @@ impl<const N: usize> Fire<N> {
             for i in (2..N).rev() {
                 self.heat[i] = (self.heat[i-1] + 2*self.heat[i-2]) / 3;
             }
-        
+
             // Step 3.  Randomly ignite new 'sparks' near the bottom
-            if( crate::RNG.lock(|c| c.borrow_mut().as_mut().map_or(0, |rng| rng.gen_range(0..255))) < Sparking ) {
-                let y = crate::RNG.lock(|c| c.borrow_mut().as_mut().map_or(0, |rng| rng.gen_range(0..7)));
-                self.heat[y] = self.heat[y] + crate::RNG.lock(|c| c.borrow_mut().as_mut().map_or(0, |rng| rng.gen_range(160..255)));
+            if self.rng.generate_range(0..255) < Sparking {
+                let y = self.rng.generate_range(0..7);
+                self.heat[y] = self.heat[y] + self.rng.generate_range(160..255);
             }
         }
         // Step 4.  Convert heat to LED colors
@@ -470,7 +487,7 @@ effects! {
     Rainbow,
     TheaterChaseRainbow,
     CylonBounce,
-    Fire,
+    Fire(Fire<N>),
     VuMeter,
     RgbVuMeter,
     Pulse(Pulse<N>),
