@@ -53,7 +53,8 @@ impl VolumeTracker {
         }
 
         //If there is a decent change in volume since the last pass, average it into "avgBump"
-        if (volume - self.lastVol) > 10.0 {
+        //if (volume - self.lastVol) > 10.0 {
+        if (volume / self.lastVol) > 1.3 {
             self.avgBump = (self.avgBump + (volume - self.lastVol)) / 2.0;
         }
 
