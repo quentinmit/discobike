@@ -9,7 +9,7 @@ use embassy_nrf::pwm::{self, Instance, Prescaler, SimplePwm};
 use embassy_nrf::wdt::WatchdogHandle;
 use embassy_time::{Duration, Instant, Ticker, Timer};
 use embedded_hal::digital::blocking::OutputPin;
-use futures::{select_biased, FutureExt, StreamExt};
+use futures::{select_biased, FutureExt, StreamExt, pin_mut};
 use num_traits::Float;
 extern crate dimensioned as dim;
 use crate::{DESIRED_STATE, STATE};
@@ -309,14 +309,18 @@ impl Output<'_> {
                     .expect("failed")
             }
 
-            select_biased! {
+            let next_tick = ticker.next().fuse();
+            pin_mut!(next_tick);
+
+            while select_biased! {
                 message = inbox.next().fuse() => {
                     match message {
                         OutputMessage::SoundData(data) => self.handle_sound_data(data),
                     }
+                    true
                 },
-                _ = ticker.next().fuse() => (),
-            };
+                _ = next_tick => false,
+            } {}
         }
     }
 
@@ -324,8 +328,8 @@ impl Output<'_> {
         self.peak_amplitudes
             .set_max(self.underlight_frame as usize / 16, data.amplitude);
         self.volume_tracker.update(data.amplitude as f32);
-        trace!(
-            "new sound_data: {}, stats: {:?}",
+        debug!(
+            "new sound_data: {:?}, stats: {:?}",
             data,
             &self.volume_tracker
         );
@@ -369,6 +373,7 @@ impl Output<'_> {
                 [RED; UNDERLIGHT_PIXELS]
             }
         };
+        trace!("painting neopixels");
         self.underlight
             .set_with_filter(
                 &pixels,
