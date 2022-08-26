@@ -8,6 +8,7 @@ use embassy_time::Instant;
 use micromath::F32Ext;
 use replace_with::replace_with_or_default;
 use trait_enum::trait_enum;
+use rand::Rng;
 
 fn color_hsv(hue: u16, sat: u8, val: u8) -> Rgbw8 {
     // Remap 0-65535 to 0-1529. Pure red is CENTERED on the 64K rollover;
@@ -81,10 +82,23 @@ pub fn color_wipe<const N: usize>(frame: u32, speed: i16, color: Rgbw8) -> [Rgbw
     let frame = frame % (2 * N);
 
     let first = frame.saturating_sub(N);
-    let last = min(frame, N);
+    let last = min(frame + 1, N);
 
     let mut out = [BLACK; N];
-    for i in first..last + 1 {
+    for i in first..last {
+        out[i] = color;
+    }
+    out
+}
+
+pub fn theater_chase<const N: usize>(frame: u32, speed: i16, color: Rgbw8) -> [Rgbw8; N] {
+    let frame = ((frame as i32) * (speed as i32)) as usize;
+    // default speed is 4 frames per pixel
+    let frame = frame / 1024;
+    let b = frame % 3;
+
+    let mut out = [BLACK; N];
+    for i in (b..N).step_by(3) {
         out[i] = color;
     }
     out
@@ -114,6 +128,115 @@ pub fn rainbow<const N: usize>(frame: u32, speed: i16) -> [Rgbw8; N] {
         out[i] = color_hsv(pixel_hue, 255, 255);
     }
     out
+}
+
+pub fn theater_chase_rainbow<const N: usize>(frame: u32, speed: i16) -> [Rgbw8; N] {
+    let frame = ((frame as i32) * (speed as i32)) as usize;
+    let frame = frame / 256;
+    let firstPixelHue = (65536 / 90) * (frame % 90); // One cycle of color wheel over 90 frames / 3 seconds
+    let frame = frame >> 2; // 4 frames per move
+    let b = frame % 3;
+
+    let mut out = [BLACK; N];
+    for i in (b..N).step_by(3) {
+        let hue = firstPixelHue + i * 65536 / N;
+        out[i] = color_hsv(hue as u16, 255, 255);
+    }
+    out
+}
+
+pub fn cylon_bounce<const N: usize>(frame: u32, speed: i16, color: Rgbw8) -> [Rgbw8; N] {
+    let frame = ((frame as i32) * (speed as i32)) as usize;
+    let frame = frame / 256;
+
+    let EyeSize = 4;
+    let ReturnDelay = 5;
+  
+    let steps = N-EyeSize-2;
+    let frames = 2 * (steps + ReturnDelay);
+    let frame = frames % frame;
+
+    let i = if frame > steps + ReturnDelay { (2*steps).saturating_sub(frame + ReturnDelay) } else { frame.min(steps) };
+
+    let mut out = [BLACK; N];
+    out[i] = color.scale(0.1);
+    for j in i+1..i+EyeSize {
+        if j < out.len() {
+            out[j] = color;
+        }
+    }
+    if i+EyeSize+1 < out.len() {
+        out[i+EyeSize+1] = color.scale(0.1);
+    }
+    out
+}
+
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[derive(Debug)]
+pub struct Fire<const N: usize> {
+    heat: [u8; N],
+    last_frame: usize,
+}
+
+impl<const N: usize> Default for Fire<N> {
+    fn default() -> Self {
+        Self {
+            heat: [0; _],
+            last_frame: 0,
+        }
+    }
+}
+
+impl<const N: usize> Fire<N> {
+    pub fn run(&mut self, frame: u32, speed: i16) -> [Rgbw8; N] {
+        let Cooling: usize = 55;
+        let Sparking: u8 = 120;
+      
+        let upside_down = (speed < 0);
+        let frame = ((frame as i32) * (speed as i32)) as usize;
+        if ((self.last_frame - frame) > 256 || (self.last_frame < frame)) {
+            // Skip frames to control speed
+            self.last_frame = frame;
+
+            // Step 1.  Cool down every cell a little
+            for i in 0..N {
+                let cooldown = crate::RNG.lock(|c| c.borrow_mut().as_mut().map_or(0, |rng| rng.gen_range(0..(((Cooling * 10) / N) as u8) + 2)));
+                self.heat[i] = self.heat[i].saturating_sub(cooldown);
+            }
+
+            // Step 2.  Heat from each cell drifts 'up' and diffuses a little
+            for i in (2..N).rev() {
+                self.heat[i] = (self.heat[i-1] + 2*self.heat[i-2]) / 3;
+            }
+        
+            // Step 3.  Randomly ignite new 'sparks' near the bottom
+            if( crate::RNG.lock(|c| c.borrow_mut().as_mut().map_or(0, |rng| rng.gen_range(0..255))) < Sparking ) {
+                let y = crate::RNG.lock(|c| c.borrow_mut().as_mut().map_or(0, |rng| rng.gen_range(0..7)));
+                self.heat[y] = self.heat[y] + crate::RNG.lock(|c| c.borrow_mut().as_mut().map_or(0, |rng| rng.gen_range(160..255)));
+            }
+        }
+        // Step 4.  Convert heat to LED colors
+        let mut out = [BLACK; N];
+        for i in 0..N {
+            out[i] = self.heat_color(self.heat[i]);
+        }
+        out
+    }
+
+    fn heat_color(&self, temperature: u8) -> Rgbw8 {
+        // Scale 'heat' down from 0-255 to 0-191
+        let t192 = ((temperature as usize)/255)*191;
+
+        let heatramp = ((t192 & 0x3F) << 2) as u8; // 0..252
+
+        if t192 > 0x80 {
+            Rgbw8::new(255, 255, heatramp, 0)
+        } else if t192 > 0x40 {
+            Rgbw8::new(255, heatramp, 0, 0)
+        } else {
+            Rgbw8::new(heatramp, 0, 0, 0)
+        }
+    }
 }
 
 pub(super) fn vu_meter<const N: usize>(

@@ -359,12 +359,24 @@ impl Output<'_> {
                 .await;
             self.need_sound = need_sound;
         }
+        let color = RED;
         let pixels = match &mut self.current_underlight_effect {
+            Solid => [color; UNDERLIGHT_PIXELS],
             ColorWipe => {
-                effects::color_wipe(self.underlight_frame, desired_state.underlight_speed, RED)
+                effects::color_wipe(self.underlight_frame, desired_state.underlight_speed, color)
+            }
+            TheaterChase => {
+                effects::theater_chase(self.underlight_frame, desired_state.underlight_speed, color)
             }
             Rainbow => effects::rainbow(self.underlight_frame, desired_state.underlight_speed),
-            VuMeter => effects::vu_meter(&self.sound_data, self.peak_amplitudes.max(), RED),
+            TheaterChaseRainbow => effects::theater_chase_rainbow(
+                self.underlight_frame,
+                desired_state.underlight_speed,
+            ),
+            CylonBounce => {
+                effects::cylon_bounce(self.underlight_frame, desired_state.underlight_speed, color)
+            }
+            VuMeter => effects::vu_meter(&self.sound_data, self.peak_amplitudes.max(), color),
             RgbVuMeter => effects::rgb_vu_meter(&self.sound_data, self.peak_amplitudes.max()),
             Pulse(ref mut pulse) => pulse.run(&self.volume_tracker),
             Traffic(ref mut traffic) => traffic.run(&self.volume_tracker),
