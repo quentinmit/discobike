@@ -9,7 +9,7 @@ use embassy_nrf::pwm::{self, Instance, Prescaler, SimplePwm};
 use embassy_nrf::wdt::WatchdogHandle;
 use embassy_time::{Duration, Instant, Ticker, Timer};
 use embedded_hal::digital::blocking::OutputPin;
-use futures::{select_biased, FutureExt, StreamExt, pin_mut};
+use futures::{pin_mut, select_biased, FutureExt, StreamExt};
 use num_traits::Float;
 extern crate dimensioned as dim;
 use crate::{DESIRED_STATE, STATE};
@@ -330,8 +330,7 @@ impl Output<'_> {
         self.volume_tracker.update(data.amplitude as f32);
         debug!(
             "new sound_data: {:?}, stats: {:?}",
-            data,
-            &self.volume_tracker
+            data, &self.volume_tracker
         );
         self.sound_data = Some(data);
     }
@@ -342,7 +341,8 @@ impl Output<'_> {
         state: &ActualState,
     ) -> Result<(), pwm::Error> {
         use effects::Effect::*;
-        self.current_underlight_effect.set_from_desired_state(desired_state);
+        self.current_underlight_effect
+            .set_from_desired_state(desired_state);
         let need_sound = match self.current_underlight_effect {
             VuMeter => true,
             RgbVuMeter => true,

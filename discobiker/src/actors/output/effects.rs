@@ -186,10 +186,7 @@ impl Color for Rgbw8 {
     fn scale(&self, ratio: f32) -> Self {
         let mut out = *self;
         for k in 0..Self::CHANNELS {
-            let _ = out.set(
-                k,
-                (self.get(k).unwrap_or(0) as f32 * ratio) as u8,
-            );
+            let _ = out.set(k, (self.get(k).unwrap_or(0) as f32 * ratio) as u8);
         }
         out
     }
@@ -204,9 +201,14 @@ pub struct Pulse<const N: usize> {
     palette: Palette,
 }
 
-impl <const N: usize> Default for Pulse<N> {
+impl<const N: usize> Default for Pulse<N> {
     fn default() -> Self {
-        Self { last: [BLACK; N], lastBump: Instant::MIN, gradient: 0, palette: Palette::Rainbow }
+        Self {
+            last: [BLACK; N],
+            lastBump: Instant::MIN,
+            gradient: 0,
+            palette: Palette::Rainbow,
+        }
     }
 }
 
@@ -228,7 +230,7 @@ impl<const N: usize> Pulse<N> {
             let finish = led_half + (led_half as f32 * ratio) as usize + N % 2;
 
             for i in start..finish {
-                let damp = ((i-start) as f32 * PI / (finish - start) as f32).sin();
+                let damp = ((i - start) as f32 * PI / (finish - start) as f32).sin();
                 let damp = damp.powi(2);
 
                 let color = color.scale(damp * knob * ratio.powi(2));
@@ -254,9 +256,15 @@ pub struct Traffic<const N: usize> {
     dots: [Option<(usize, Rgbw8)>; DOTS],
 }
 
-impl <const N: usize> Default for Traffic<N> {
+impl<const N: usize> Default for Traffic<N> {
     fn default() -> Self {
-        Self { last: [BLACK; N], lastBump: Instant::MIN, gradient: 0, palette: Palette::Rainbow, dots: [None; _] }
+        Self {
+            last: [BLACK; N],
+            lastBump: Instant::MIN,
+            gradient: 0,
+            palette: Palette::Rainbow,
+            dots: [None; _],
+        }
     }
 }
 
@@ -267,7 +275,7 @@ impl<const N: usize> Traffic<N> {
 
         if volume_tracker.lastBumpTime > self.lastBump {
             self.dots.iter().position(|d| d == &None).map(|slot| {
-                let pos = if slot % 2 == 0 { 0 } else { N-1 };
+                let pos = if slot % 2 == 0 { 0 } else { N - 1 };
                 self.dots[slot] = Some((pos, self.palette.convert(self.gradient)));
                 self.gradient += self.palette.len() / 24;
             });
@@ -281,10 +289,14 @@ impl<const N: usize> Traffic<N> {
             let last = &mut self.last;
 
             for slot in 0..self.dots.len() {
-                replace_with_or_default(&mut self.dots[slot], |v| v.and_then(|(pos, color)| {
-                    last[pos] = color.scale(ratio);
-                    pos.checked_add_signed(if slot % 2 == 0 { 1 } else { -1 }).filter(|pos| *pos < N).map(|pos| (pos, color))
-                }))
+                replace_with_or_default(&mut self.dots[slot], |v| {
+                    v.and_then(|(pos, color)| {
+                        last[pos] = color.scale(ratio);
+                        pos.checked_add_signed(if slot % 2 == 0 { 1 } else { -1 })
+                            .filter(|pos| *pos < N)
+                            .map(|pos| (pos, color))
+                    })
+                })
             }
         }
         self.last
