@@ -148,30 +148,21 @@ pub fn theater_chase_rainbow<const N: usize>(frame: u32, speed: i16) -> [Rgbw8; 
 }
 
 pub fn cylon_bounce<const N: usize>(frame: u32, speed: i16, color: Rgbw8) -> [Rgbw8; N] {
-    let frame = ((frame as i32) * (speed as i32)) as usize;
+    let EyeSize = 4.0;
+    let anim = pareen::ease_in_out::<pareen::easer::functions::Cubic, f32>(EyeSize/2.0, (N as f32) - EyeSize, 1.0);
+    // TODO: Make pareen::ease_in_out Clone
+    let anim2 = pareen::ease_in_out::<pareen::easer::functions::Cubic, f32>(EyeSize/2.0, (N as f32) - EyeSize, 1.0);
+    let anim = anim.seq(1.0, anim2.backwards(1.0)).repeat(2.0);
+    let anim = anim.squeeze(0.0..=(speed as f32)/256.0);
 
-    let EyeSize = 4;
-    let ReturnDelay = 5;
-  
-    let steps = N-EyeSize-2;
-    let duration = 30 * 256;
-    let polarity = (frame / duration) % 2 == 1;
-
-    let mut tween = CubicInOut::new(0..=steps, duration);
-    let mut i = tween.run(frame % duration);
-    if polarity {
-        i = steps - i - 1;
-    }
+    let center = anim.eval(frame as f32 / 30.0);
 
     let mut out = [BLACK; N];
-    out[i] = color.scale(0.1);
-    for j in i+1..i+EyeSize {
-        if j < out.len() {
-            out[j] = color;
-        }
-    }
-    if i+EyeSize+1 < out.len() {
-        out[i+EyeSize+1] = color.scale(0.1);
+
+    let brightness = pareen::constant(1.0).seq_ease_in(EyeSize/2.0, pareen::easer::functions::Quad, 1.0, pareen::constant(0.0)).map_time(|t: f32| t.abs()).shift_time(center);
+
+    for j in 0..N {
+        out[j] = color.scale(brightness.eval(j as f32));
     }
     out
 }

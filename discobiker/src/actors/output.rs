@@ -105,6 +105,8 @@ pub enum OutputMessage {
     SoundData(SoundData),
 }
 
+const FPS: u64 = 30;
+
 impl Output<'_> {
     pub fn new(
         wdt_handle: Option<WatchdogHandle>,
@@ -155,7 +157,7 @@ impl Output<'_> {
     where
         M: Inbox<OutputMessage>,
     {
-        let mut ticker = Ticker::every(Duration::from_millis(1000 / 30));
+        let mut ticker = Ticker::every(Duration::from_millis(1000 / FPS));
         loop {
             let now = Instant::now();
 

@@ -596,6 +596,7 @@ dependencies = [
  "num-traits",
  "num_enum",
  "panic-probe",
+ "pareen",
  "paste",
  "physical_constants",
  "replace_with",
@@ -677,6 +678,13 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "easer"
+version = "0.2.1"
+dependencies = [
+ "num-traits",
 ]
 
 [[package]]
@@ -1570,6 +1578,14 @@ checksum = "3ab1f00eac22bd18f8e5cae9555f2820b3a0c166b5b556ee3e203746ea6dcf3a"
 dependencies = [
  "cortex-m",
  "defmt",
+]
+
+[[package]]
+name = "pareen"
+version = "0.3.0-alpha1"
+dependencies = [
+ "easer",
+ "num-traits",
 ]
 
 [[package]]
