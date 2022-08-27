@@ -607,6 +607,7 @@ dependencies = [
  "staticvec",
  "systemview-target",
  "trait_enum",
+ "tween",
  "uom",
 ]
 
@@ -2079,6 +2080,15 @@ name = "trait_enum"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "130dd741d3c71f76d031e58caffff3624eaaa2db9bd8c4b05406a71885300fc7"
+
+[[package]]
+name = "tween"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "63e9aab86b1958c0ff7f3d18d04abd6d8e583d237f92e88191ce5c7bf481c5ec"
+dependencies = [
+ "libm",
+]
 
 [[package]]
 name = "typenum"

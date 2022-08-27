@@ -153,6 +153,7 @@ static_cell = "1.0.0"
 trait_enum = { version = "0.5.0", default-features = false }
 replace_with = { version = "0.1.7", default-features = false }
 nanorand = { version = "0.7.0", default-features = false, features = ["wyrand"] }
+tween = { version = "1.0.1", default-features = false, features = ["libm"] }
 
 [patch.crates-io]
 #embassy-executor = { git = "https://github.com/embassy-rs/embassy" }

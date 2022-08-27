@@ -10,6 +10,7 @@ use nrf_softdevice::{Softdevice, random_bytes};
 use replace_with::replace_with_or_default;
 use trait_enum::trait_enum;
 use nanorand::{Rng, WyRand};
+use tween::{Tween, CubicInOut};
 
 fn color_hsv(hue: u16, sat: u8, val: u8) -> Rgbw8 {
     // Remap 0-65535 to 0-1529. Pure red is CENTERED on the 64K rollover;
@@ -148,20 +149,19 @@ pub fn theater_chase_rainbow<const N: usize>(frame: u32, speed: i16) -> [Rgbw8; 
 
 pub fn cylon_bounce<const N: usize>(frame: u32, speed: i16, color: Rgbw8) -> [Rgbw8; N] {
     let frame = ((frame as i32) * (speed as i32)) as usize;
-    let frame = frame / 256;
 
     let EyeSize = 4;
     let ReturnDelay = 5;
   
     let steps = N-EyeSize-2;
-    let frames = 2 * (steps + ReturnDelay);
-    let frame = frame % frames;
+    let duration = 30 * 256;
+    let polarity = (frame / duration) % 2 == 1;
 
-    let i = if frame > steps + ReturnDelay {
-        (2*steps).saturating_sub(frame - ReturnDelay)
-    } else {
-        frame.min(steps)
-    };
+    let mut tween = CubicInOut::new(0..=steps, duration);
+    let mut i = tween.run(frame % duration);
+    if polarity {
+        i = steps - i - 1;
+    }
 
     let mut out = [BLACK; N];
     out[i] = color.scale(0.1);
