@@ -9,4 +9,7 @@
     "rust-analyzer.imports.granularity.group": "module",
     "rust-analyzer.cargo.buildScripts.enable": true,
     "rust-analyzer.procMacro.attributes.enable": false,
+    "rust-analyzer.cargo.features": [
+        "defmt"
+    ],
 }
