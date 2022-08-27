@@ -320,6 +320,9 @@ impl Color for Rgbw8 {
     }
 
     fn scale(&self, ratio: f32) -> Self {
+        if ratio == 0.0 {
+            return BLACK;
+        }
         let mut out = *self;
         for k in 0..Self::CHANNELS {
             let _ = out.set(k, (self.get(k).unwrap_or(0) as f32 * ratio) as u8);
