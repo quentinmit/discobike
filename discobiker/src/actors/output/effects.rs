@@ -107,8 +107,8 @@ pub fn theater_chase<const N: usize>(frame: u32, speed: i16, color: Rgbw8) -> [R
 
 pub fn rainbow<const N: usize>(frame: u32, speed: i16) -> [Rgbw8; N] {
     let frame = ((frame as i32) * (speed as i32)) as usize;
-    // default speed is 512 frames (4.2 seconds) per loop
-    let frame = frame / 512;
+    // default speed is 32 frames (4.2 seconds) per loop
+    let frame = frame / 32;
     let first_pixel_hue = (256 * frame) % 65536;
     // Hue of first pixel runs 5 complete loops through the color wheel.
     // Color wheel has a range of 65536 but it's OK if we roll over, so
@@ -228,7 +228,7 @@ impl<const N: usize> Fire<N> {
 
             // Step 2.  Heat from each cell drifts 'up' and diffuses a little
             for i in (2..N).rev() {
-                self.heat[i] = (self.heat[i-1] + 2*self.heat[i-2]) / 3;
+                self.heat[i] = ((self.heat[i-1] as usize + 2*(self.heat[i-2] as usize)) / 3) as u8;
             }
 
             // Step 3.  Randomly ignite new 'sparks' near the bottom
@@ -247,7 +247,7 @@ impl<const N: usize> Fire<N> {
 
     fn heat_color(&self, temperature: u8) -> Rgbw8 {
         // Scale 'heat' down from 0-255 to 0-191
-        let t192 = ((temperature as usize)/255)*191;
+        let t192 = (temperature as usize) * 191 / 255;
 
         let heatramp = ((t192 & 0x3F) << 2) as u8; // 0..252
 

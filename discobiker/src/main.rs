@@ -299,7 +299,7 @@ pub static DESIRED_STATE: BlockingMutex<CriticalSectionRawMutex, Cell<DesiredSta
     BlockingMutex::new(Cell::new(DesiredState {
         headlight_mode: HeadlightMode::Auto,
         underlight_mode: UnderlightMode::ForceOn, //UnderlightMode::Auto,
-        underlight_effect: Effect::CylonBounce,       //Effect::Rainbow,
+        underlight_effect: Effect::Rainbow,
         underlight_speed: 256,
     }));
 
