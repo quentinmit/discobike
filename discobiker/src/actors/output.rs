@@ -386,7 +386,7 @@ impl Output<'_> {
                 [RED; UNDERLIGHT_PIXELS]
             }
         };
-        trace!("painting neopixels");
+        trace!("painting neopixels: {:?}", self.current_underlight_effect);
         self.underlight
             .set_with_filter(
                 &pixels,

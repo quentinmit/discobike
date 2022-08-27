@@ -107,8 +107,8 @@ pub fn theater_chase<const N: usize>(frame: u32, speed: i16, color: Rgbw8) -> [R
 
 pub fn rainbow<const N: usize>(frame: u32, speed: i16) -> [Rgbw8; N] {
     let frame = ((frame as i32) * (speed as i32)) as usize;
-    // default speed is 128 frames (4.2 seconds) per loop
-    let frame = frame / 128;
+    // default speed is 512 frames (4.2 seconds) per loop
+    let frame = frame / 512;
     let first_pixel_hue = (256 * frame) % 65536;
     // Hue of first pixel runs 5 complete loops through the color wheel.
     // Color wheel has a range of 65536 but it's OK if we roll over, so
@@ -155,9 +155,13 @@ pub fn cylon_bounce<const N: usize>(frame: u32, speed: i16, color: Rgbw8) -> [Rg
   
     let steps = N-EyeSize-2;
     let frames = 2 * (steps + ReturnDelay);
-    let frame = frames % frame;
+    let frame = frame % frames;
 
-    let i = if frame > steps + ReturnDelay { (2*steps).saturating_sub(frame + ReturnDelay) } else { frame.min(steps) };
+    let i = if frame > steps + ReturnDelay {
+        (2*steps).saturating_sub(frame - ReturnDelay)
+    } else {
+        frame.min(steps)
+    };
 
     let mut out = [BLACK; N];
     out[i] = color.scale(0.1);
@@ -179,6 +183,7 @@ pub struct Fire<const N: usize> {
     rng: WyRand,
 }
 
+#[cfg(feature = "defmt")]
 impl <const N: usize> defmt::Format for Fire<N> {
     fn format(&self, f: defmt::Formatter) {
         defmt::write!(
