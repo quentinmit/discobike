@@ -26,7 +26,8 @@ use embassy_nrf::wdt;
 use embassy_nrf::{pac, saadc};
 use embassy_nrf::{peripherals, Peripherals};
 use embassy_sync::blocking_mutex::{ThreadModeMutex, CriticalSectionMutex};
-use embassy_time::{Duration, Instant, Timer};
+use embassy_time::{Duration, Instant, Timer, Ticker};
+use futures::StreamExt;
 use static_cell::StaticCell;
 
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice as I2cBusDevice;
@@ -298,8 +299,8 @@ pub struct DesiredState {
 pub static DESIRED_STATE: BlockingMutex<CriticalSectionRawMutex, Cell<DesiredState>> =
     BlockingMutex::new(Cell::new(DesiredState {
         headlight_mode: HeadlightMode::Auto,
-        underlight_mode: UnderlightMode::ForceOn, //UnderlightMode::Auto,
-        underlight_effect: Effect::CylonBounce,//Effect::Rainbow,
+        underlight_mode: UnderlightMode::Auto,
+        underlight_effect: Effect::Rainbow,
         underlight_speed: 256,
     }));
 
@@ -541,7 +542,9 @@ async fn adc_task(psaadc: SAADC, pin_vbat: PinVbat, interval: Duration) {
 #[embassy_executor::task]
 async fn blinker(mut led: Output<'static, PinLed>, interval: Duration) {
     loop {
-        led.set_high();
+        if STATE.lock(|c| c.get().display_on) {
+            led.set_high();
+        }
         Timer::after(interval).await;
         led.set_low();
         Timer::after(interval).await;
@@ -756,4 +759,19 @@ async fn main(spawner: Spawner) {
     unwrap!(spawner.spawn(adc_task(saadc, pin_vbat, Duration::from_millis(500))));
     //#[cfg(feature = "mdbt50q")]
     unwrap!(spawner.spawn(blinker(led, Duration::from_millis(300))));
+    let mut ticker = Ticker::every(Duration::from_millis(100));
+    let mut last_display_on = false;
+    loop {
+        let display_on = STATE.lock(|c| c.get().display_on);
+        if display_on != last_display_on {
+            futures::join!(
+                power_actor.notify(display_on.into()),
+                barometer.notify(display_on.into()),
+                display.notify(display_on.into()),
+                light.notify(display_on.into()),
+            );
+            last_display_on = display_on;
+        }
+        ticker.next().await;
+    }
 }

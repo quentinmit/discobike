@@ -41,6 +41,16 @@ pub enum LightMessage {
     Off,
 }
 
+impl From<bool> for LightMessage {
+    fn from(b: bool) -> Self {
+        if b {
+            Self::On
+        } else {
+            Self::Off
+        }
+    }
+}
+
 const POLL_HIGH_EVERY: Duration = Duration::from_millis(1000 / 5);
 
 impl<I2C, E> Light<I2C>

@@ -21,6 +21,16 @@ pub enum BarometerMessage {
     Off,
 }
 
+impl From<bool> for BarometerMessage {
+    fn from(b: bool) -> Self {
+        if b {
+            Self::On
+        } else {
+            Self::Off
+        }
+    }
+}
+
 const POLL_HIGH_EVERY: Duration = Duration::from_millis(1000 / 5);
 
 impl<I2C, E> Barometer<I2C>

@@ -6,6 +6,7 @@ use dim::traits::Dimensionless;
 use ector::{actor, Actor, Address, Inbox};
 use embassy_time::{Duration, Timer};
 use embedded_hal_async::i2c;
+use futures::{select_biased, FutureExt};
 
 pub struct Power<I2C> {
     ina219: INA219Async<I2C>,
@@ -14,6 +15,16 @@ pub struct Power<I2C> {
 pub enum PowerMessage {
     DisplayOn,
     DisplayOff,
+}
+
+impl From<bool> for PowerMessage {
+    fn from(b: bool) -> Self {
+        if b {
+            Self::DisplayOn
+        } else {
+            Self::DisplayOff
+        }
+    }
 }
 
 const POLL_HIGH_EVERY: Duration = Duration::from_millis(1000 / 30);
@@ -28,12 +39,15 @@ where
         Power { ina219 }
     }
 
-    async fn run_high_power(&mut self) -> Result<(), E> {
+    async fn run_high_power<M>(&mut self, inbox: &mut M) -> Result<(), E>
+    where
+        M: Inbox<PowerMessage>,
+    {
         self.ina219.continuous_sample(true, true).await?;
         loop {
             let vext = self.ina219.get_bus_voltage().await?;
             let current = self.ina219.get_current().await?;
-            let state = STATE.lock(|c| {
+            STATE.lock(|c| {
                 c.update(|s| {
                     let mut s = s;
                     s.vext = Some(vext);
@@ -47,13 +61,21 @@ where
                 (vext / V).value(),
                 current.map(|v| *(v / A).value()),
             );
-            if !state.display_on {
-                return Ok(());
-            }
-            Timer::after(POLL_HIGH_EVERY).await;
+            select_biased! {
+                message = inbox.next().fuse() => {
+                    match message {
+                        PowerMessage::DisplayOn => warn!("Power on while already on"),
+                        PowerMessage::DisplayOff => return Ok(()),
+                    }
+                },
+                _ = Timer::after(POLL_HIGH_EVERY).fuse() => (),
+            };
         }
     }
-    async fn run_low_power(&mut self) -> Result<(), E> {
+    async fn run_low_power<M>(&mut self, inbox: &mut M) -> Result<(), E>
+    where
+        M: Inbox<PowerMessage>,
+    {
         loop {
             self.ina219.trigger_sample(true, false).await?;
             let vext = self.ina219.get_bus_voltage().await?;
@@ -68,13 +90,18 @@ where
                 })
             });
             trace!("Vext = {:?}", Debug2Format(&vext));
-            if state.display_on {
-                return Ok(());
-            }
-            Timer::after(POLL_LOW_EVERY).await;
+            select_biased! {
+                message = inbox.next().fuse() => {
+                    match message {
+                        PowerMessage::DisplayOn => return Ok(()),
+                        PowerMessage::DisplayOff => warn!("Power off while already off"),
+                    }
+                },
+                _ = Timer::after(POLL_LOW_EVERY).fuse() => (),
+            };
         }
     }
-    async fn run_power<M>(&mut self, _inbox: &mut M) -> Result<(), E>
+    async fn run_power<M>(&mut self, inbox: &mut M) -> Result<(), E>
     where
         M: Inbox<PowerMessage>,
     {
@@ -83,11 +110,8 @@ where
         self.ina219.set_current_range(3.2 * A, 0.1 * OHM).await?;
         info!("ina219 initialized");
         loop {
-            let state = STATE.lock(|c| c.get());
-            match state.display_on {
-                true => self.run_high_power().await?,
-                false => self.run_low_power().await?,
-            }
+            self.run_low_power(inbox).await?;
+            self.run_high_power(inbox).await?;
         }
     }
 }

@@ -45,6 +45,16 @@ pub enum DisplayMessage {
     Off,
 }
 
+impl From<bool> for DisplayMessage {
+    fn from(b: bool) -> Self {
+        if b {
+            Self::On
+        } else {
+            Self::Off
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum Error {
     DisplayError(DisplayError),
@@ -167,16 +177,18 @@ where
             let mut buf = StaticString::<COLS>::new();
             let desired_state = DESIRED_STATE.lock(|c| c.get());
 
-            let mut x = StaticVec::<u8, 128>::filled_with(|| 0);
-            match bincode::serde::encode_into_slice(
-                &state,
-                x.as_mut_slice(),
-                bincode::config::standard(),
-            ) {
-                Err(e) => error!("serializing state: {}", Debug2Format(&e)),
-                Ok(n) => {
-                    x.truncate(n);
-                    info!("current state: {:?}", x.as_slice());
+            if false {
+                let mut x = StaticVec::<u8, 128>::filled_with(|| 0);
+                match bincode::serde::encode_into_slice(
+                    &state,
+                    x.as_mut_slice(),
+                    bincode::config::standard(),
+                ) {
+                    Err(e) => error!("serializing state: {}", Debug2Format(&e)),
+                    Ok(n) => {
+                        x.truncate(n);
+                        info!("current state: {:?}", x.as_slice());
+                    }
                 }
             }
 
