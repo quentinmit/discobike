@@ -11,6 +11,7 @@
 
 mod log;
 
+use core::sync::atomic::{AtomicU8, Ordering};
 use core::cell::{Cell, RefCell};
 use core::convert::TryInto;
 use core::fmt;
@@ -60,6 +61,9 @@ use ector::{spawn_actor, ActorContext};
 
 mod actors;
 mod drivers;
+mod atomic_counter;
+use atomic_counter::Counter;
+
 use ssd1306::size::DisplaySize128x64;
 
 use serde::{Deserialize, Serialize, Serializer};
@@ -395,8 +399,11 @@ async fn bluetooth_task(spawner: Spawner, sd: &'static Softdevice) {
     }
 }
 
+static CONNECTION_COUNT: AtomicU8 = AtomicU8::new(0);
+
 #[embassy_executor::task(pool_size = "4")]
 pub async fn gatt_server_task(sd: &'static Softdevice, conn: Connection, server: &'static Server) {
+    let _counter = CONNECTION_COUNT.count_raii();
     // Run the GATT server on the connection. This returns when the connection gets disconnected.
     let res = gatt_server::run(&conn, server, |e| match e {
         ServerEvent::Bas(_) => {}
@@ -546,7 +553,9 @@ async fn blinker(mut led: Output<'static, PinLed>, interval: Duration) {
             led.set_high();
         }
         Timer::after(interval).await;
-        led.set_low();
+        if !STATE.lock(|c| c.get().display_on) || CONNECTION_COUNT.load(Ordering::Relaxed) == 0 {
+            led.set_low();
+        }
         Timer::after(interval).await;
     }
 }
@@ -696,13 +705,11 @@ async fn main(spawner: Spawner) {
             .await
             .unwrap()
     );
-    light.notify(actors::light::LightMessage::On).await;
 
     let display = spawn_actor!(
         spawner, DISPLAY, actors::display::Display<I2cDevice, DisplaySize128x64>,
         actors::display::Display::new(I2cBusDevice::new(i2c_bus), DisplaySize128x64)
     );
-    display.notify(actors::display::DisplayMessage::On).await;
 
     let imu = spawn_actor!(
         spawner,
@@ -717,9 +724,6 @@ async fn main(spawner: Spawner) {
         actors::barometer::Barometer<I2cDevice>,
         actors::barometer::Barometer::new(I2cBusDevice::new(i2c_bus))
     );
-    barometer
-        .notify(actors::barometer::BarometerMessage::On)
-        .await;
 
     if BLUETOOTH {
         unwrap!(bluetooth_start_server(sd));
@@ -758,7 +762,7 @@ async fn main(spawner: Spawner) {
     );
     unwrap!(spawner.spawn(adc_task(saadc, pin_vbat, Duration::from_millis(500))));
     //#[cfg(feature = "mdbt50q")]
-    unwrap!(spawner.spawn(blinker(led, Duration::from_millis(300))));
+    unwrap!(spawner.spawn(blinker(led, Duration::from_millis(500))));
     let mut ticker = Ticker::every(Duration::from_millis(100));
     let mut last_display_on = false;
     loop {
