@@ -1,11 +1,11 @@
-use crate::{ActualState, Debug2Format, DesiredState, HeadlightMode, UnderlightMode};
+use crate::{ActualState, Debug2Format, DesiredState, UnderlightMode};
 use drogue_device::drivers::led::neopixel::filter::*;
-use drogue_device::drivers::led::neopixel::rgbw::{NeoPixelRgbw, Rgbw8, RED};
+use drogue_device::drivers::led::neopixel::rgbw::{NeoPixelRgbw, RED};
 use ector::{actor, Actor, Address, Inbox};
 use embassy_nrf::gpio::{Level, Output as GpioOutput, OutputDrive};
 use embassy_nrf::pac;
 use embassy_nrf::peripherals::{PWM1, PWM2, PWM3};
-use embassy_nrf::pwm::{self, Instance, Prescaler, SimplePwm};
+use embassy_nrf::pwm::{self, Prescaler, SimplePwm};
 use embassy_nrf::wdt::WatchdogHandle;
 use embassy_time::{Duration, Instant, Ticker, Timer};
 use embedded_hal::digital::blocking::OutputPin;
@@ -122,7 +122,7 @@ impl Output<'_> {
         pin_underlight: crate::PinUnderlight,
         sound: Address<SoundMessage>,
     ) -> Self {
-        let mut power_enable = GpioOutput::new(pin_power_enable, Level::Low, OutputDrive::Standard);
+        let power_enable = GpioOutput::new(pin_power_enable, Level::Low, OutputDrive::Standard);
         let mut headlight_pwm = SimplePwm::new_1ch(pwm3, pin_headlight_dim);
         headlight_pwm.set_prescaler(Prescaler::Div128); // Div128 == 125kHz
         headlight_pwm.set_max_duty(PWM_MAX_HEADLIGHT);
@@ -133,7 +133,7 @@ impl Output<'_> {
         taillight_pwm.set_duty(0, PWM_MAX_TAILLIGHT);
         taillight_pwm.set_duty(1, PWM_MAX_TAILLIGHT);
         taillight_pwm.set_duty(2, PWM_MAX_TAILLIGHT);
-        let mut underlight =
+        let underlight =
             NeoPixelRgbw::<'_, _, UNDERLIGHT_PIXELS>::new(pwm1, pin_underlight).unwrap();
         Self {
             wdt_handle,
