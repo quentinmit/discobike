@@ -158,13 +158,13 @@ pub fn rainbow<const N: usize>(frame: u32, speed: i16) -> [Rgbw8; N] {
 pub fn theater_chase_rainbow<const N: usize>(frame: u32, speed: i16) -> [Rgbw8; N] {
     let frame = ((frame as i32) * (speed as i32)) as usize;
     let frame = frame / 256;
-    let firstPixelHue = (65536 / 90) * (frame % 90); // One cycle of color wheel over 90 frames / 3 seconds
+    let first_pixel_hue = (65536 / 90) * (frame % 90); // One cycle of color wheel over 90 frames / 3 seconds
     let frame = frame >> 2; // 4 frames per move
     let b = frame % 3;
 
     let mut out = [BLACK; N];
     for i in (b..N).step_by(3) {
-        let hue = firstPixelHue + i * 65536 / N;
+        let hue = first_pixel_hue + i * 65536 / N;
         out[i] = color_hsv(hue as u16, 255, 255);
     }
     out

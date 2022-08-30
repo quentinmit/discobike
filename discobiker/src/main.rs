@@ -16,6 +16,7 @@ use core::cell::{Cell, RefCell};
 use core::convert::TryInto;
 use core::fmt;
 use core::mem;
+use drogue_device::drivers::led::neopixel::rgbw::{Rgbw8, RED};
 use embassy_executor::Spawner;
 use embassy_nrf as _;
 use embassy_nrf::executor::InterruptExecutor;
@@ -297,7 +298,7 @@ pub struct DesiredState {
     underlight_mode: UnderlightMode,
     underlight_effect: Effect,
     underlight_speed: i16,
-    // underlight_color
+    underlight_color: Rgbw8,
 }
 
 pub static DESIRED_STATE: BlockingMutex<CriticalSectionRawMutex, Cell<DesiredState>> =
@@ -306,6 +307,7 @@ pub static DESIRED_STATE: BlockingMutex<CriticalSectionRawMutex, Cell<DesiredSta
         underlight_mode: UnderlightMode::Auto,
         underlight_effect: Effect::Rainbow,
         underlight_speed: 256,
+        underlight_color: RED,
     }));
 
 #[derive(Copy, Clone, Serialize)]
@@ -434,21 +436,22 @@ pub async fn gatt_server_task(sd: &'static Softdevice, conn: Connection, server:
                 });
             }
             UnderlightServiceEvent::UnderlightEffectWrite(val) => {
-                DESIRED_STATE.lock(|c| {
-                    c.update(|s| {
-                        let mut s = s;
-                        if let Ok(val) = val.try_into() {
+                if let Ok(val) = val.try_into() {
+                    DESIRED_STATE.lock(|c| {
+                        c.update(|s| {
+                            let mut s = s;
                             s.underlight_effect = val;
-                        }
-                        s
-                    })
-                });
+                            s
+                        })
+                    });
+                }
             }
             UnderlightServiceEvent::UnderlightColorWrite(val) => {
+                let color = Rgbw8::new(val[0], val[1], val[2], val[3]);
                 DESIRED_STATE.lock(|c| {
                     c.update(|s| {
                         let mut s = s;
-                        //TODO: s.underlight_color = val;
+                        s.underlight_color = color;
                         s
                     })
                 });

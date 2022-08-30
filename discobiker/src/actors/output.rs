@@ -361,7 +361,7 @@ impl Output<'_> {
                 .await;
             self.need_sound = need_sound;
         }
-        let color = RED;
+        let color = desired_state.underlight_color;
         let pixels = match &mut self.current_underlight_effect {
             Solid => [color; UNDERLIGHT_PIXELS],
             ColorWipe => {
