@@ -1,16 +1,39 @@
 use core::cmp::min;
 use core::f32::consts::PI;
-use core::ops::Range;
+use core::ops::{Range, Add, Sub};
 
 use drogue_device::drivers::led::neopixel::rgbw::{Rgbw8, BLACK};
 use drogue_device::drivers::led::neopixel::Pixel;
 use embassy_time::Instant;
 use micromath::F32Ext;
 use nrf_softdevice::{Softdevice, random_bytes};
+use num_traits::{Euclid, One, Zero};
+use pareen::{Anim, Fun};
 use replace_with::replace_with_or_default;
-use trait_enum::trait_enum;
+
 use nanorand::{Rng, WyRand};
 use tween::{Tween, CubicInOut};
+
+
+// Can't be a trait because impl Trait can't be used in trait methods.
+// https://github.com/rust-lang/impl-trait-initiative
+fn bounce<T, V>(anim: Anim<impl Fun<T = T, V = V>>, duration: T) -> Anim<impl Fun<T = T, V = V>>
+where
+    T: Euclid + One + Zero + Sub<Output = T> + Add<Output = T> + PartialOrd + Copy,
+{
+    let zero = <T as Zero>::zero();
+    let one = <T as One>::one();
+    let two = one.add(one);
+    return anim.map_time(move |t: T| {
+        let direction = t.div_euclid(&duration).rem_euclid(&two);
+        let phase = t.rem_euclid(&duration);
+        if direction > zero {
+            duration.sub(phase)
+        } else {
+            phase
+        }
+    })
+}
 
 fn color_hsv(hue: u16, sat: u8, val: u8) -> Rgbw8 {
     // Remap 0-65535 to 0-1529. Pure red is CENTERED on the 64K rollover;
@@ -151,8 +174,9 @@ pub fn cylon_bounce<const N: usize>(frame: u32, speed: i16, color: Rgbw8) -> [Rg
     let EyeSize = 4.0;
     let anim = pareen::ease_in_out::<pareen::easer::functions::Cubic, f32>(EyeSize/2.0, (N as f32) - EyeSize, 1.0);
     // TODO: Make pareen::ease_in_out Clone
-    let anim2 = pareen::ease_in_out::<pareen::easer::functions::Cubic, f32>(EyeSize/2.0, (N as f32) - EyeSize, 1.0);
-    let anim = anim.seq(1.0, anim2.backwards(1.0)).repeat(2.0);
+    //let anim2 = pareen::ease_in_out::<pareen::easer::functions::Cubic, f32>(EyeSize/2.0, (N as f32) - EyeSize, 1.0);
+    //let anim = anim.seq(1.0, anim2.backwards(1.0)).repeat(2.0);
+    let anim = bounce(anim, 1.0);
     let anim = anim.squeeze(0.0..=(speed as f32)/256.0);
 
     let center = anim.eval(frame as f32 / 30.0);
