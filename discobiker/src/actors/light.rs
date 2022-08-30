@@ -2,7 +2,6 @@ use crate::{Debug2Format, STATE};
 use apds9960::{Apds9960Async, Error, LightData};
 use core::fmt::{self, Debug};
 use dim::si::{f32consts::LX, Lux};
-use dim::traits::Dimensionless;
 use ector::{actor, Actor, Address, Inbox};
 use embassy_time::{Duration, Timer};
 use embedded_hal_async::i2c;

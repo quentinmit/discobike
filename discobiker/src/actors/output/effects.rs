@@ -1,19 +1,16 @@
 use core::cmp::min;
 use core::f32::consts::PI;
-use core::ops::{Range, Add, Sub};
+use core::ops::{Add, Range, Sub};
 
 use drogue_device::drivers::led::neopixel::rgbw::{Rgbw8, BLACK};
 use drogue_device::drivers::led::neopixel::Pixel;
 use embassy_time::Instant;
 use micromath::F32Ext;
-use nrf_softdevice::{Softdevice, random_bytes};
+use nanorand::{Rng, WyRand};
+use nrf_softdevice::{random_bytes, Softdevice};
 use num_traits::{Euclid, One, Zero};
 use pareen::{Anim, Fun};
 use replace_with::replace_with_or_default;
-
-use nanorand::{Rng, WyRand};
-use tween::{Tween, CubicInOut};
-
 
 // Can't be a trait because impl Trait can't be used in trait methods.
 // https://github.com/rust-lang/impl-trait-initiative
@@ -32,7 +29,7 @@ where
         } else {
             phase
         }
-    })
+    });
 }
 
 fn color_hsv(hue: u16, sat: u8, val: u8) -> Rgbw8 {
@@ -171,19 +168,31 @@ pub fn theater_chase_rainbow<const N: usize>(frame: u32, speed: i16) -> [Rgbw8; 
 }
 
 pub fn cylon_bounce<const N: usize>(frame: u32, speed: i16, color: Rgbw8) -> [Rgbw8; N] {
-    let EyeSize = 4.0;
-    let anim = pareen::ease_in_out::<pareen::easer::functions::Cubic, f32>(EyeSize/2.0, (N as f32) - EyeSize, 1.0);
+    let eye_size = 4.0;
+    let anim = pareen::ease_in_out::<pareen::easer::functions::Cubic, f32>(
+        eye_size / 2.0,
+        (N as f32) - eye_size,
+        1.0,
+    );
     // TODO: Make pareen::ease_in_out Clone
     //let anim2 = pareen::ease_in_out::<pareen::easer::functions::Cubic, f32>(EyeSize/2.0, (N as f32) - EyeSize, 1.0);
     //let anim = anim.seq(1.0, anim2.backwards(1.0)).repeat(2.0);
     let anim = bounce(anim, 1.0);
-    let anim = anim.squeeze(0.0..=(speed as f32)/256.0);
+    let anim = anim.squeeze(0.0..=(speed as f32) / 256.0);
 
     let center = anim.eval(frame as f32 / 30.0);
 
     let mut out = [BLACK; N];
 
-    let brightness = pareen::constant(1.0).seq_ease_in(EyeSize/2.0, pareen::easer::functions::Quad, 1.0, pareen::constant(0.0)).map_time(|t: f32| t.abs()).shift_time(center);
+    let brightness = pareen::constant(1.0)
+        .seq_ease_in(
+            eye_size / 2.0,
+            pareen::easer::functions::Quad,
+            1.0,
+            pareen::constant(0.0),
+        )
+        .map_time(|t: f32| t.abs())
+        .shift_time(center);
 
     for j in 0..N {
         out[j] = color.scale(brightness.eval(j as f32));
@@ -199,12 +208,14 @@ pub struct Fire<const N: usize> {
 }
 
 #[cfg(feature = "defmt")]
-impl <const N: usize> defmt::Format for Fire<N> {
+impl<const N: usize> defmt::Format for Fire<N> {
     fn format(&self, f: defmt::Formatter) {
         defmt::write!(
             f,
             "Fire<{}> {{ heat: {:?}, last_frame: {:?} }}",
-            N, self.heat, self.last_frame,
+            N,
+            self.heat,
+            self.last_frame,
         )
     }
 }
@@ -226,28 +237,29 @@ impl<const N: usize> Default for Fire<N> {
 
 impl<const N: usize> Fire<N> {
     pub fn run(&mut self, frame: u32, speed: i16) -> [Rgbw8; N] {
-        let Cooling: usize = 55;
-        let Sparking: u8 = 120;
+        let cooling: usize = 55;
+        let sparking: u8 = 120;
 
-        let upside_down = (speed < 0);
-        let frame = ((frame as i32) * (speed as i32)) as usize;
-        if ((self.last_frame - frame) > 256 || (self.last_frame < frame)) {
+        let upside_down = speed < 0;
+        let frame = ((frame as i32) * (speed.abs() as i32)) as usize;
+        if (self.last_frame - frame) > 256 || (self.last_frame < frame) {
             // Skip frames to control speed
             self.last_frame = frame;
 
             // Step 1.  Cool down every cell a little
             for i in 0..N {
-                let cooldown = self.rng.generate_range(0..(((Cooling * 10) / N) as u8) + 2);
+                let cooldown = self.rng.generate_range(0..(((cooling * 10) / N) as u8) + 2);
                 self.heat[i] = self.heat[i].saturating_sub(cooldown);
             }
 
             // Step 2.  Heat from each cell drifts 'up' and diffuses a little
             for i in (2..N).rev() {
-                self.heat[i] = ((self.heat[i-1] as usize + 2*(self.heat[i-2] as usize)) / 3) as u8;
+                self.heat[i] =
+                    ((self.heat[i - 1] as usize + 2 * (self.heat[i - 2] as usize)) / 3) as u8;
             }
 
             // Step 3.  Randomly ignite new 'sparks' near the bottom
-            if self.rng.generate_range(0..255) < Sparking {
+            if self.rng.generate_range(0..255) < sparking {
                 let y = self.rng.generate_range(0..7);
                 self.heat[y] = self.heat[y] + self.rng.generate_range(160..255);
             }
@@ -255,7 +267,13 @@ impl<const N: usize> Fire<N> {
         // Step 4.  Convert heat to LED colors
         let mut out = [BLACK; N];
         for i in 0..N {
-            out[i] = self.heat_color(self.heat[i]);
+            out[i] = self.heat_color(
+                self.heat[if upside_down {
+                    self.heat.len() - i - 1
+                } else {
+                    i
+                }],
+            );
         }
         out
     }
@@ -301,11 +319,10 @@ pub(super) fn rgb_vu_meter<const N: usize>(
 ) -> [Rgbw8; N] {
     let mut out = [BLACK; N];
     if let Some(data) = data {
-        let num = data.amplitude as f32;
         let peak = max.max(100) as f32;
         let min = peak * 0.1; // 20 dB range
         let offset = min.ln();
-        let denom = (peak.ln() - offset);
+        let denom = peak.ln() - offset;
 
         let calc_n = |slice: Range<usize>, div: f32| {
             (((data.bands[slice].iter().sum::<u16>() as f32 / div).ln() - offset) / denom
@@ -359,7 +376,7 @@ impl Color for Rgbw8 {
 #[derive(Debug)]
 pub struct Pulse<const N: usize> {
     last: [Rgbw8; N],
-    lastBump: Instant,
+    last_bump_time: Instant,
     gradient: u16,
     palette: Palette,
 }
@@ -368,7 +385,7 @@ impl<const N: usize> Default for Pulse<N> {
     fn default() -> Self {
         Self {
             last: [BLACK; N],
-            lastBump: Instant::MIN,
+            last_bump_time: Instant::MIN,
             gradient: 0,
             palette: Palette::Rainbow,
         }
@@ -378,15 +395,15 @@ impl<const N: usize> Default for Pulse<N> {
 impl<const N: usize> Pulse<N> {
     pub fn run(&mut self, volume_tracker: &super::volume::VolumeTracker) -> [Rgbw8; N] {
         fade(&mut self.last, 0.75);
-        if volume_tracker.lastBumpTime > self.lastBump {
+        if volume_tracker.last_bump_time > self.last_bump_time {
             self.gradient += self.palette.len() / 24;
             self.gradient %= self.palette.len();
-            self.lastBump = volume_tracker.lastBumpTime;
+            self.last_bump_time = volume_tracker.last_bump_time;
         }
-        if volume_tracker.lastVol > 0.0 {
+        if volume_tracker.last_volume > 0.0 {
             let knob = 0.9;
             let color = self.palette.convert(self.gradient);
-            let ratio = volume_tracker.lastVol / volume_tracker.maxVol;
+            let ratio = volume_tracker.last_volume / volume_tracker.max_volume;
 
             let led_half = N / 2;
             let start = led_half - (led_half as f32 * ratio) as usize;
@@ -413,7 +430,7 @@ const DOTS: usize = 32;
 #[derive(Debug)]
 pub struct Traffic<const N: usize> {
     last: [Rgbw8; N],
-    lastBump: Instant,
+    last_bump_time: Instant,
     gradient: u16,
     palette: Palette,
     dots: [Option<(usize, Rgbw8)>; DOTS],
@@ -423,7 +440,7 @@ impl<const N: usize> Default for Traffic<N> {
     fn default() -> Self {
         Self {
             last: [BLACK; N],
-            lastBump: Instant::MIN,
+            last_bump_time: Instant::MIN,
             gradient: 0,
             palette: Palette::Rainbow,
             dots: [None; _],
@@ -436,18 +453,18 @@ impl<const N: usize> Traffic<N> {
         //fade() actually creates the trail behind each dot here, so it's important to include.
         fade(&mut self.last, 0.8);
 
-        if volume_tracker.lastBumpTime > self.lastBump {
+        if volume_tracker.last_bump_time > self.last_bump_time {
             self.dots.iter().position(|d| d == &None).map(|slot| {
                 let pos = if slot % 2 == 0 { 0 } else { N - 1 };
                 self.dots[slot] = Some((pos, self.palette.convert(self.gradient)));
                 self.gradient += self.palette.len() / 24;
             });
 
-            self.lastBump = volume_tracker.lastBumpTime;
+            self.last_bump_time = volume_tracker.last_bump_time;
         }
-        if volume_tracker.lastVol > 0.0 {
+        if volume_tracker.last_volume > 0.0 {
             let knob = 0.9;
-            let ratio = (volume_tracker.lastVol / volume_tracker.maxVol).powi(2) * knob;
+            let ratio = (volume_tracker.last_volume / volume_tracker.max_volume).powi(2) * knob;
 
             let last = &mut self.last;
 

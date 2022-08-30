@@ -11,24 +11,24 @@
 
 mod log;
 
-use core::sync::atomic::{AtomicU8, Ordering};
 use core::cell::{Cell, RefCell};
 use core::convert::TryInto;
 use core::fmt;
 use core::mem;
+use core::sync::atomic::{AtomicU8, Ordering};
 use drogue_device::drivers::led::neopixel::rgbw::{Rgbw8, RED};
 use embassy_executor::Spawner;
 use embassy_nrf as _;
 use embassy_nrf::executor::InterruptExecutor;
 use embassy_nrf::gpio::{Level, Output, OutputDrive};
 use embassy_nrf::interrupt::{self, InterruptExt, Priority};
+use embassy_nrf::peripherals;
 use embassy_nrf::peripherals::{SAADC, TWISPI0};
 use embassy_nrf::twim::{self, Twim};
 use embassy_nrf::wdt;
 use embassy_nrf::{pac, saadc};
-use embassy_nrf::{peripherals, Peripherals};
-use embassy_sync::blocking_mutex::{ThreadModeMutex, CriticalSectionMutex};
-use embassy_time::{Duration, Instant, Timer, Ticker};
+use embassy_sync::blocking_mutex::ThreadModeMutex;
+use embassy_time::{Duration, Instant, Ticker, Timer};
 use futures::StreamExt;
 use static_cell::StaticCell;
 
@@ -61,8 +61,8 @@ use paste::paste;
 use ector::{spawn_actor, ActorContext};
 
 mod actors;
-mod drivers;
 mod atomic_counter;
+mod drivers;
 use atomic_counter::Counter;
 
 use ssd1306::size::DisplaySize128x64;
@@ -600,7 +600,6 @@ const BLUETOOTH: bool = true;
 const WDT: bool = false;
 
 static EXECUTOR_HIGH: StaticCell<InterruptExecutor<interrupt::SWI0_EGU0>> = StaticCell::new();
-
 
 #[embassy_executor::main()]
 async fn main(spawner: Spawner) {

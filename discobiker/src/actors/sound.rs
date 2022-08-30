@@ -1,13 +1,11 @@
 use super::output::OutputMessage;
-use crate::{Debug2Format, STATE};
-use core::fmt;
+use crate::Debug2Format;
 use core::sync::atomic::{AtomicBool, Ordering};
 use ector::{actor, Actor, Address, Inbox};
 use embassy_nrf::interrupt;
 use embassy_nrf::pdm::{Channels, Config, Frequency, Pdm, Ratio, SamplerState};
 use embassy_nrf::peripherals;
 use embassy_time::{Duration, Timer};
-use embedded_hal_async::i2c;
 use fixed::types::I7F1;
 use futures::{pin_mut, select_biased, FutureExt};
 use microfft::real::rfft_512;
@@ -34,8 +32,8 @@ pub struct SoundData {
 impl Sound<'_> {
     pub fn new(
         p: peripherals::PDM,
-        mut pin_data: crate::PinPdmData,
-        mut pin_clock: crate::PinPdmClock,
+        pin_data: crate::PinPdmData,
+        pin_clock: crate::PinPdmClock,
         output: Address<super::output::OutputMessage>,
     ) -> Self {
         let mut config = Config::default();
@@ -80,7 +78,7 @@ impl Sound<'_> {
     {
         let mut bufs = [[0; 512]; 2];
 
-        let mut running = &AtomicBool::new(true);
+        let running = &AtomicBool::new(true);
 
         let output = &self.output;
 
@@ -92,7 +90,7 @@ impl Sound<'_> {
                 if skipped > 0 {
                     skipped -= 1;
                 } else {
-                    if let Err(e) =
+                    if let Err(_) =
                         output.try_notify(OutputMessage::SoundData(Self::convert_sound_buf(buf)))
                     {
                         warn!("dropped sound frame");

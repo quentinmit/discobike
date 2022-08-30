@@ -80,7 +80,7 @@ where
             self.ina219.trigger_sample(true, false).await?;
             let vext = self.ina219.get_bus_voltage().await?;
             self.ina219.power_down().await?;
-            let state = STATE.lock(|c| {
+            STATE.lock(|c| {
                 c.update(|s| {
                     let mut s = s;
                     s.vext = Some(vext);

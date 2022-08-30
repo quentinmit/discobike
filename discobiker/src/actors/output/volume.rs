@@ -5,27 +5,34 @@ use embassy_time::{Duration, Instant};
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[derive(Clone, Copy, Debug)]
 pub struct VolumeTracker {
-    pub maxVol: f32,
-    pub lastVol: f32,
-    pub lastVolTime: Instant,
-    pub lastBumpTime: Instant,
-    pub avgBump: f32,
-    pub avgVol: f32,
-    pub avgTime: Duration,
-    adjTime: Instant,
+    pub max_volume: f32,
+    pub last_volume: f32,
+    /// The last time that volume was non-zero.
+    pub last_volume_time: Instant,
+    /// The last time the volume bumped.
+    pub last_bump_time: Instant,
+    /// The average change in volume for a bump.
+    pub average_bump_delta: f32,
+    /// A moving average of the volume.
+    pub average_volume: f32,
+    /// A moving average of the time between bumps.
+    pub average_bump_interval: Duration,
+
+    /// The time since the max_volume was last lowered.
+    max_adjust_time: Instant,
 }
 
 impl VolumeTracker {
     pub fn new() -> Self {
         Self {
-            maxVol: 0.0,
-            lastVol: 0.0,
-            lastVolTime: Instant::MIN,
-            lastBumpTime: Instant::MIN,
-            avgBump: 0.0,
-            avgVol: 0.0,
-            avgTime: Duration::MIN,
-            adjTime: Instant::MIN,
+            max_volume: 0.0,
+            last_volume: 0.0,
+            last_volume_time: Instant::MIN,
+            last_bump_time: Instant::MIN,
+            average_bump_delta: 0.0,
+            average_volume: 0.0,
+            average_bump_interval: Duration::MIN,
+            max_adjust_time: Instant::MIN,
         }
     }
     pub fn update(&mut self, mut volume: f32) {
@@ -37,35 +44,36 @@ impl VolumeTracker {
             // volume < (self.avgVol / 2.0) ||
             volume = 0.0;
         } else {
-            self.avgVol = (self.avgVol + volume) / 2.0; //If non-zeo, take an "average" of volumes.
-            self.lastVolTime = now;
+            self.average_volume = (self.average_volume + volume) / 2.0; //If non-zeo, take an "average" of volumes.
+            self.last_volume_time = now;
         }
         //If the current volume is larger than the loudest value recorded, overwrite
-        if volume > self.maxVol {
-            self.maxVol = volume;
+        if volume > self.max_volume {
+            self.max_volume = volume;
         }
         //Everytime a palette gets completed is a good time to readjust "maxVol," just in case
         //  the song gets quieter; we also don't want to lose brightness intensity permanently
         //  because of one stray loud sound.
-        if now.duration_since(self.adjTime).as_secs() > 10 {
-            self.adjTime = now;
-            self.maxVol = (self.maxVol + volume) / 2.0;
+        if now.duration_since(self.max_adjust_time).as_secs() > 10 {
+            self.max_adjust_time = now;
+            self.max_volume = (self.max_volume + volume) / 2.0;
         }
 
         //If there is a decent change in volume since the last pass, average it into "avgBump"
         //if (volume - self.lastVol) > 10.0 {
-        if (volume / self.lastVol) > 1.3 {
-            self.avgBump = (self.avgBump + (volume - self.lastVol)) / 2.0;
+        if (volume / self.last_volume) > 1.3 {
+            self.average_bump_delta = (self.average_bump_delta + (volume - self.last_volume)) / 2.0;
         }
 
         //If there is a notable change in volume, trigger a "bump"
         //  avgbump is lowered just a little for comparing to make the visual slightly more sensitive to a beat.
-        let bump = volume - self.lastVol > self.avgBump * 0.9;
+        let bump = volume - self.last_volume > self.average_bump_delta * 0.9;
         if bump {
             let now = Instant::now();
-            self.avgTime = (now.duration_since(self.lastBumpTime) + self.avgTime) / 2;
-            self.lastBumpTime = now;
+            self.average_bump_interval =
+                (now.duration_since(self.last_bump_time) + self.average_bump_interval) / 2;
+            self.last_bump_time = now;
         }
-        self.lastVol = volume;
+        self.last_volume = volume;
     }
 }
