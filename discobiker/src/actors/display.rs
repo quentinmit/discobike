@@ -1,4 +1,4 @@
-use crate::{Debug2Format, CELSIUS_ZERO, DESIRED_STATE, STATE};
+use crate::{Debug2Format, CELSIUS_ZERO, Global, DesiredState, ActualState};
 use core::fmt;
 use core::fmt::Write;
 use embassy_futures::yield_now;
@@ -35,9 +35,11 @@ use ector::{actor, Actor, Address, Inbox};
 const R: Kelvin<f32> = Kelvin::new(5.0 / 9.0);
 const FAHRENHEIT_ZERO: f32 = CELSIUS_ZERO * 9.0 / 5.0 - 32.0;
 
-pub struct Display<I2C, SIZE: DisplaySize> {
+pub struct Display<'d, I2C, SIZE: DisplaySize> {
     // interface, mode, size, addr_mode, rotation
     display: Ssd1306<I2CInterface<I2C>, SIZE, BufferedGraphicsMode<SIZE>>,
+    state: &'d Global<ActualState>,
+    desired_state: &'d Global<DesiredState>,
 }
 
 pub enum DisplayMessage {
@@ -127,17 +129,17 @@ const DISPLAY_PERIOD: Duration = Duration::from_millis(1000 / 2);
 const DISPLAY_PERIOD: Duration = Duration::from_millis(1000 / 10);
 
 // DisplaySize128x64
-impl<I2C, E, SIZE> Display<I2C, SIZE>
+impl<'d, I2C, E, SIZE> Display<'d, I2C, SIZE>
 where
     I2C: i2c::I2c<Error = E>,
     SIZE: DisplaySize,
 {
-    pub fn new(i2c: I2C, size: SIZE) -> Self {
+    pub fn new(state: &'d Global<ActualState>, desired_state: &'d Global<DesiredState>, i2c: I2C, size: SIZE) -> Self {
         let interface = I2CDisplayInterface::new(i2c);
 
         let display =
             Ssd1306::new(interface, size, DisplayRotation::Rotate180).into_buffered_graphics_mode();
-        Self { display }
+        Self { display, state, desired_state }
     }
 
     async fn run_display<MBOX>(&mut self, inbox: &mut MBOX) -> Result<(), Error>
@@ -172,10 +174,10 @@ where
         let line_height = text_style.font.character_size.height;
         let mut ticker = Ticker::every(DISPLAY_PERIOD);
         loop {
-            let state = STATE.lock(|c| c.get());
+            let state = self.state.lock(|c| c.get());
             self.display.clear();
             let mut buf = StaticString::<COLS>::new();
-            let desired_state = DESIRED_STATE.lock(|c| c.get());
+            let desired_state = self.desired_state.lock(|c| c.get());
 
             if false {
                 let mut x = StaticVec::<u8, 128>::filled_with(|| 0);
@@ -368,7 +370,7 @@ where
 }
 
 #[actor]
-impl<I2C, E, SIZE> Actor for Display<I2C, SIZE>
+impl<I2C, E, SIZE> Actor for Display<'_, I2C, SIZE>
 where
     I2C: i2c::I2c<Error = E>,
     SIZE: DisplaySize,

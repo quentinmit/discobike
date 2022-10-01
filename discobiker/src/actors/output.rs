@@ -1,4 +1,4 @@
-use crate::{ActualState, Debug2Format, DesiredState, UnderlightMode};
+use crate::{Global, ActualState, Debug2Format, DesiredState, UnderlightMode};
 use drogue_device::drivers::led::neopixel::filter::*;
 use drogue_device::drivers::led::neopixel::rgbw::{NeoPixelRgbw, RED};
 use ector::{actor, Actor, Address, Inbox};
@@ -12,7 +12,6 @@ use embedded_hal::digital::blocking::OutputPin;
 use futures::{pin_mut, select_biased, FutureExt, StreamExt};
 use num_traits::Float;
 extern crate dimensioned as dim;
-use crate::{DESIRED_STATE, STATE};
 use dim::si::f32consts::{LX, V};
 
 use super::sound::{SoundData, SoundMessage};
@@ -83,6 +82,8 @@ where
 }
 
 pub struct Output<'a> {
+    state: &'a Global<ActualState>,
+    desired_state: &'a Global<DesiredState>,
     wdt_handle: Option<WatchdogHandle>,
     power: pac::POWER,
     power_enable: GpioOutput<'a, crate::PinPowerEnable>,
@@ -107,8 +108,10 @@ pub enum OutputMessage {
 
 const FPS: u64 = 30;
 
-impl Output<'_> {
+impl<'a> Output<'a> {
     pub fn new(
+        state: &'a Global<ActualState>,
+        desired_state: &'a Global<DesiredState>,
         wdt_handle: Option<WatchdogHandle>,
         power: pac::POWER,
         pwm1: PWM1,
@@ -136,6 +139,8 @@ impl Output<'_> {
         let underlight =
             NeoPixelRgbw::<'_, _, UNDERLIGHT_PIXELS>::new(pwm1, pin_underlight).unwrap();
         Self {
+            state,
+            desired_state,
             wdt_handle,
             power,
             power_enable,
@@ -175,7 +180,7 @@ impl Output<'_> {
 
             // info!("vbus detected: {:?}", vbus_detected);
 
-            let state = STATE.lock(|c| {
+            let state = self.state.lock(|c| {
                 c.update(|s| {
                     let mut s = s;
                     s.vbus_detected = vbus_detected;
@@ -186,7 +191,7 @@ impl Output<'_> {
                 })
             });
 
-            let desired_state = DESIRED_STATE.lock(|c| c.get());
+            let desired_state = self.desired_state.lock(|c| c.get());
 
             // Update underlight
             let mut underlight_on = state.vbus_detected;
@@ -206,7 +211,7 @@ impl Output<'_> {
                 }
                 UnderlightMode::Off => (),
             }
-            let state = STATE.lock(|c| {
+            let state = self.state.lock(|c| {
                 c.update(|s| {
                     let mut s = s;
                     s.underlight_brightness = s
@@ -230,7 +235,7 @@ impl Output<'_> {
             };
 
             let mut taillight_on = false;
-            let state = STATE.lock(|c| {
+            let state = self.state.lock(|c| {
                 c.update(|s| {
                     let mut s = s;
                     use crate::HeadlightMode::*;

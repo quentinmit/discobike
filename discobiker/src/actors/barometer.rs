@@ -1,4 +1,4 @@
-use crate::{Debug2Format, CELSIUS_ZERO, STATE};
+use crate::{Debug2Format, CELSIUS_ZERO, ActualState, Global};
 use bme280::{
     i2c::AsyncBME280, Configuration, Error, IIRFilter::*, Oversampling::*, SensorMode, Standby::*,
 };
@@ -12,8 +12,9 @@ use embedded_hal_async::i2c;
 use futures::select_biased;
 use futures::FutureExt;
 
-pub struct Barometer<I2C> {
+pub struct Barometer<'d, I2C> {
     bme280: AsyncBME280<I2C>,
+    state: &'d Global<ActualState>,
 }
 
 pub enum BarometerMessage {
@@ -33,13 +34,13 @@ impl From<bool> for BarometerMessage {
 
 const POLL_HIGH_EVERY: Duration = Duration::from_millis(1000 / 5);
 
-impl<I2C, E> Barometer<I2C>
+impl<'d, I2C, E> Barometer<'d, I2C>
 where
     I2C: i2c::I2c<Error = E>,
 {
-    pub fn new(i2c: I2C) -> Self {
+    pub fn new(state: &'d Global<ActualState>, i2c: I2C) -> Self {
         let bme280 = AsyncBME280::new_secondary(i2c);
-        Self { bme280 }
+        Self { bme280, state }
     }
 
     async fn run_high_power<M>(&mut self, inbox: &mut M) -> Result<(), Error<E>>
@@ -61,7 +62,7 @@ where
             let data = self.bme280.measure(&mut Delay {}).await?;
             let temperature = (data.temperature + CELSIUS_ZERO) * K;
             let pressure = data.pressure * PA;
-            STATE.lock(|c| {
+            self.state.lock(|c| {
                 c.update(|s| {
                     let mut s = s;
                     s.temperature = Some(temperature);
@@ -105,7 +106,7 @@ where
 }
 
 #[actor]
-impl<I2C, E> Actor for Barometer<I2C>
+impl<I2C, E> Actor for Barometer<'_, I2C>
 where
     I2C: i2c::I2c<Error = E>,
     E: fmt::Debug,

@@ -4,6 +4,7 @@
 #[cfg(all(feature = "defmt", feature = "log"))]
 compile_error!("You may not enable both `defmt` and `log` features.");
 
+#[macro_export]
 macro_rules! assert {
     ($($x:tt)*) => {
         {
@@ -15,6 +16,7 @@ macro_rules! assert {
     };
 }
 
+#[macro_export]
 macro_rules! assert_eq {
     ($($x:tt)*) => {
         {
@@ -26,6 +28,7 @@ macro_rules! assert_eq {
     };
 }
 
+#[macro_export]
 macro_rules! assert_ne {
     ($($x:tt)*) => {
         {
@@ -37,6 +40,7 @@ macro_rules! assert_ne {
     };
 }
 
+#[macro_export]
 macro_rules! debug_assert {
     ($($x:tt)*) => {
         {
@@ -48,6 +52,7 @@ macro_rules! debug_assert {
     };
 }
 
+#[macro_export]
 macro_rules! debug_assert_eq {
     ($($x:tt)*) => {
         {
@@ -59,6 +64,7 @@ macro_rules! debug_assert_eq {
     };
 }
 
+#[macro_export]
 macro_rules! debug_assert_ne {
     ($($x:tt)*) => {
         {
@@ -70,6 +76,7 @@ macro_rules! debug_assert_ne {
     };
 }
 
+#[macro_export]
 macro_rules! todo {
     ($($x:tt)*) => {
         {
@@ -81,6 +88,7 @@ macro_rules! todo {
     };
 }
 
+#[macro_export]
 macro_rules! unreachable {
     ($($x:tt)*) => {
         {
@@ -92,6 +100,7 @@ macro_rules! unreachable {
     };
 }
 
+#[macro_export]
 macro_rules! panic {
     ($($x:tt)*) => {
         {
@@ -103,6 +112,7 @@ macro_rules! panic {
     };
 }
 
+#[macro_export]
 macro_rules! trace {
     ($s:literal $(, $x:expr)* $(,)?) => {
         {
@@ -116,6 +126,7 @@ macro_rules! trace {
     };
 }
 
+#[macro_export]
 macro_rules! debug {
     ($s:literal $(, $x:expr)* $(,)?) => {
         {
@@ -129,6 +140,7 @@ macro_rules! debug {
     };
 }
 
+#[macro_export]
 macro_rules! info {
     ($s:literal $(, $x:expr)* $(,)?) => {
         {
@@ -142,6 +154,7 @@ macro_rules! info {
     };
 }
 
+#[macro_export]
 macro_rules! warn {
     ($s:literal $(, $x:expr)* $(,)?) => {
         {
@@ -155,6 +168,7 @@ macro_rules! warn {
     };
 }
 
+#[macro_export]
 macro_rules! error {
     ($s:literal $(, $x:expr)* $(,)?) => {
         {
@@ -168,6 +182,7 @@ macro_rules! error {
     };
 }
 
+#[macro_export]
 #[cfg(feature = "defmt")]
 macro_rules! unwrap {
     ($($x:tt)*) => {
@@ -175,6 +190,7 @@ macro_rules! unwrap {
     };
 }
 
+#[macro_export]
 #[cfg(not(feature = "defmt"))]
 macro_rules! unwrap {
     ($arg:expr) => {

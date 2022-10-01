@@ -1,4 +1,4 @@
-use crate::{Debug2Format, STATE};
+use crate::{Debug2Format, Global, ActualState};
 use apds9960::{Apds9960Async, Error, LightData};
 use core::fmt::{self, Debug};
 use dim::si::{f32consts::LX, Lux};
@@ -31,8 +31,9 @@ pub fn max<T: PartialOrd>(a: T, b: T) -> T {
     }
 }
 
-pub struct Light<I2C> {
+pub struct Light<'d, I2C> {
     apds9960: Apds9960Async<I2C>,
+    state: &'d Global<ActualState>,
 }
 
 pub enum LightMessage {
@@ -52,15 +53,15 @@ impl From<bool> for LightMessage {
 
 const POLL_HIGH_EVERY: Duration = Duration::from_millis(1000 / 5);
 
-impl<I2C, E> Light<I2C>
+impl<'d, I2C, E> Light<'d, I2C>
 where
     I2C: i2c::I2c<Error = E>,
     E: Debug,
 {
-    pub async fn new(i2c: I2C) -> Result<Self, Error<E>> {
+    pub async fn new(state: &'d Global<ActualState>, i2c: I2C) -> Result<Light<'d, I2C>, Error<E>> {
         let mut apds9960 = Apds9960Async::new(i2c);
         info!("APDS9960 ID: {}", apds9960.read_device_id().await?);
-        Ok(Self { apds9960 })
+        Ok(Self { apds9960, state })
     }
 
     async fn run_high_power<M>(&mut self, inbox: &mut M) -> Result<(), Error<E>>
@@ -85,7 +86,7 @@ where
             let lux_value =
                 color.map(|color| max(color.calculate_lux(), color.clear as f32 / (3.5 / LX))); // If C is overloaded, use RGB
 
-            STATE.lock(|c| {
+            self.state.lock(|c| {
                 c.update(|s| {
                     let mut s = s;
                     s.lux = lux_value;
@@ -123,7 +124,7 @@ where
 }
 
 #[actor]
-impl<I2C, E> Actor for Light<I2C>
+impl<I2C, E> Actor for Light<'_, I2C>
 where
     I2C: i2c::I2c<Error = E>,
     E: fmt::Debug,

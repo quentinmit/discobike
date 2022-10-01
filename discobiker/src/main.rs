@@ -1,5 +1,6 @@
 #![no_std]
 #![no_main]
+
 #![feature(type_alias_impl_trait)]
 #![feature(generic_associated_types)]
 #![feature(cell_update)]
@@ -8,8 +9,6 @@
 #![feature(trace_macros)]
 #![feature(generic_arg_infer)]
 #![feature(mixed_integer_ops)]
-
-mod log;
 
 use core::cell::{Cell, RefCell};
 use core::convert::TryInto;
@@ -22,11 +21,12 @@ use embassy_nrf as _;
 use embassy_nrf::executor::InterruptExecutor;
 use embassy_nrf::gpio::{Level, Output, OutputDrive};
 use embassy_nrf::interrupt::{self, InterruptExt, Priority};
-use embassy_nrf::peripherals;
 use embassy_nrf::peripherals::{SAADC, TWISPI0};
 use embassy_nrf::twim::{self, Twim};
 use embassy_nrf::wdt;
-use embassy_nrf::{pac, saadc};
+use embassy_nrf::saadc;
+use embassy_nrf::pac;
+use embassy_nrf::peripherals;
 use embassy_sync::blocking_mutex::ThreadModeMutex;
 use embassy_time::{Duration, Instant, Ticker, Timer};
 use futures::StreamExt;
@@ -39,30 +39,22 @@ use embassy_sync::blocking_mutex::{
 };
 use embassy_sync::mutex::Mutex;
 
+use discobiker::*;
+use discobiker::panic;
+
 use drogue_device::drivers::led::neopixel::{rgb, rgb::NeoPixelRgb};
 
 #[cfg(feature = "defmt")]
-use defmt::Debug2Format;
-#[cfg(feature = "defmt")]
 use defmt_rtt as _;
-#[allow(non_snake_case)]
-#[cfg(not(feature = "defmt"))]
-fn Debug2Format<'a, T: fmt::Debug>(item: &'a T) -> &'a T {
-    item
-}
 
 use nrf_softdevice::ble::{gatt_server, peripheral};
 use nrf_softdevice::{ble::Connection, raw, Softdevice};
 use panic_probe as _;
 
 use num_enum::TryFromPrimitive;
-use paste::paste;
 
 use ector::{spawn_actor, ActorContext};
 
-mod actors;
-mod atomic_counter;
-mod drivers;
 use atomic_counter::Counter;
 
 use ssd1306::size::DisplaySize128x64;
@@ -71,8 +63,7 @@ use serde::{Deserialize, Serialize, Serializer};
 
 use num_traits::float::Float;
 
-#[macro_use]
-extern crate dimensioned as dim;
+use dimensioned as dim;
 use dim::si::{f32consts::V, Ampere, Kelvin, Lux, MeterPerSecond2, Pascal, Volt};
 use dim::Dimensionless;
 
@@ -95,72 +86,6 @@ cfg_if::cfg_if! {
     }
 }
 
-const CELSIUS_ZERO: f32 = 273.15;
-
-macro_rules! define_pin {
-    ($name:ident, $pin:ident) => {
-        paste! {
-                type [<Pin $name>] = peripherals::$pin;
-            macro_rules! [<use_pin_ $name:snake>] {
-                ($pstruct:ident) => {
-                    $pstruct.$pin
-                }
-            }
-        }
-    };
-}
-
-// Pins
-// * = exposed on header
-// 2* / P0.10
-// 3 / P1.11 - Gyro + Accel IRQ
-// 4 / P1.10 - Blue LED ("Conn")
-//define_pin!(ConnLed, P1_10);
-#[cfg(not(feature = "mdbt50q"))]
-define_pin!(Led, P1_10);
-// 5* / P1.08 - NeoPixel Connector (Propmaker)
-define_pin!(Underlight, P1_08);
-// 6* / P0.07 - IRQ (Propmaker)
-// 7 / P1.02 - Button
-// 8 / P0.16 - NeoPixel
-define_pin!(NeoPixel, P0_16);
-// 9* / P0.26 - Button (Propmaker)
-// 10* / P0.27 - Power Enable (Propmaker)
-define_pin!(PowerEnable, P0_27);
-// 11* / P0.06 - Red LED (Propmaker)
-define_pin!(TailC, P0_06);
-// 12* / P0.08 - Green LED (Propmaker)
-define_pin!(TailL, P0_08);
-// 13* / P1.09 - Blue LED (Propmaker)
-// 13* / P1.09 - Red LED
-define_pin!(TailR, P1_09);
-// 34 / P0.00 - PDM microphone data
-define_pin!(PdmData, P0_00);
-// 35 / P0.01 - PDM microphone clock
-define_pin!(PdmClock, P0_01);
-// 36 / P1.00 - APDS9960 Light Gesture Proximity IRQ
-// 14 / A0* / P0.04 - Audio Amp Input (Propmaker)
-// 15 / A1* / P0.05
-define_pin!(Rst, P0_05);
-// 16 / A2* / P0.30
-// 17 / A3* / P0.28
-// 18 / A4* / P0.02
-// 19 / A5* / P0.03 - Headlight dim
-define_pin!(HeadlightDim, P0_03);
-// 20 / A6 / P0.29 - VOLTAGE_MONITOR (100K+100K voltage divider)
-define_pin!(Vbat, P0_29);
-// 21 / A7 / ???
-// 22 / SDA* / P0.12 - I2C data
-define_pin!(Sda, P0_12);
-// 23 / SCL* / P0.11 - I2C clock
-define_pin!(Scl, P0_11);
-// 24 / MI* / P0.15
-// 25 / MO* / P0.13
-#[cfg(feature = "mdbt50q")]
-define_pin!(Led, P0_13);
-// 26 / SCK* / P0.14
-// 0 / TX* / P0.25
-// 1 / RX* / P0.24
 // I2C devices
 // 0x18 - LIS3DH Accelerometer (on propmaker)
 // 0x1C - LIS3MDL Magnetometer
@@ -218,89 +143,6 @@ async fn softdevice_task(sd: &'static Softdevice) {
 static SERVER: ThreadModeMutex<RefCell<Option<&Server>>> = ThreadModeMutex::new(RefCell::new(None));
 static SERVER_FOREVER: StaticCell<Server> = StaticCell::new();
 
-#[derive(Copy, Clone)]
-pub struct EventTimer {
-    last: Instant,
-}
-impl EventTimer {
-    pub const fn new() -> Self {
-        EventTimer { last: Instant::MIN }
-    }
-    pub fn update(&mut self) {
-        self.last = Instant::now();
-    }
-    pub fn elapsed(&self) -> Duration {
-        self.last.elapsed()
-    }
-}
-
-impl Serialize for EventTimer {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.serialize_f32(self.last.elapsed().as_micros() as f32 / 1e6)
-    }
-}
-
-impl fmt::Display for EventTimer {
-    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        if self.last == Instant::MIN {
-            core::write!(formatter, "NEVER")
-        } else {
-            core::write!(formatter, "{}s", (Instant::now() - self.last).as_secs())
-        }
-    }
-}
-
-#[repr(u8)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize, TryFromPrimitive)]
-enum HeadlightMode {
-    Off = 0,
-    Auto = 1,
-    Day = 2,
-    Night = 3,
-    Blink = 4,
-}
-
-#[repr(u8)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize, TryFromPrimitive)]
-enum UnderlightMode {
-    Off = 0,
-    Auto = 1,
-    On = 2,
-    ForceOn = 3,
-}
-
-#[repr(u8)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize, TryFromPrimitive)]
-enum Effect {
-    Solid = 0,
-    ColorWipe,
-    TheaterChase,
-    Rainbow,
-    TheaterChaseRainbow,
-    CylonBounce,
-    Fire,
-    VuMeter,
-    RgbVuMeter,
-    Pulse,
-    Traffic,
-}
-
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[derive(Copy, Clone)]
-pub struct DesiredState {
-    headlight_mode: HeadlightMode,
-    underlight_mode: UnderlightMode,
-    underlight_effect: Effect,
-    underlight_speed: i16,
-    underlight_color: Rgbw8,
-}
-
 pub static DESIRED_STATE: BlockingMutex<CriticalSectionRawMutex, Cell<DesiredState>> =
     BlockingMutex::new(Cell::new(DesiredState {
         headlight_mode: HeadlightMode::Auto,
@@ -309,30 +151,6 @@ pub static DESIRED_STATE: BlockingMutex<CriticalSectionRawMutex, Cell<DesiredSta
         underlight_speed: 256,
         underlight_color: RED,
     }));
-
-#[derive(Copy, Clone, Serialize)]
-pub struct ActualState {
-    headlight_mode: HeadlightMode,
-    headlight_brightness: f32,
-    taillight_brightness: f32,
-    underlight_brightness: u8,
-    display_on: bool,
-    vbus_detected: bool,
-
-    vbus_timer: EventTimer,
-    move_timer: EventTimer,
-    vext_present_timer: EventTimer,
-    vext_poll_timer: EventTimer,
-
-    vbat: Option<Volt<f32>>,
-    vext: Option<Volt<f32>>,
-    current: Option<Ampere<f32>>,
-    accel_mag: Option<MeterPerSecond2<f32>>,
-    accel_temperature: Option<Kelvin<f32>>,
-    lux: Option<Lux<f32>>,
-    pressure: Option<Pascal<f32>>,
-    temperature: Option<Kelvin<f32>>,
-}
 
 pub static STATE: BlockingMutex<CriticalSectionRawMutex, Cell<ActualState>> =
     BlockingMutex::new(Cell::new(ActualState {
@@ -696,35 +514,35 @@ async fn main(spawner: Spawner) {
         spawner,
         POWER,
         actors::power::Power<I2cDevice>,
-        actors::power::Power::new(I2cBusDevice::new(i2c_bus))
+        actors::power::Power::new(&STATE, I2cBusDevice::new(i2c_bus))
     );
 
     let light = spawn_actor!(
         spawner,
         LIGHT,
         actors::light::Light<I2cDevice>,
-        actors::light::Light::new(I2cBusDevice::new(i2c_bus))
+        actors::light::Light::new(&STATE, I2cBusDevice::new(i2c_bus))
             .await
             .unwrap()
     );
 
     let display = spawn_actor!(
         spawner, DISPLAY, actors::display::Display<I2cDevice, DisplaySize128x64>,
-        actors::display::Display::new(I2cBusDevice::new(i2c_bus), DisplaySize128x64)
+        actors::display::Display::new(&STATE, &DESIRED_STATE, I2cBusDevice::new(i2c_bus), DisplaySize128x64)
     );
 
     let imu = spawn_actor!(
         spawner,
         IMU,
         actors::imu::Imu<I2cDevice>,
-        actors::imu::Imu::new(I2cBusDevice::new(i2c_bus))
+        actors::imu::Imu::new(&STATE, I2cBusDevice::new(i2c_bus), LSM6DS33_ADDR)
     );
 
     let barometer = spawn_actor!(
         spawner,
         BAROMETER,
         actors::barometer::Barometer<I2cDevice>,
-        actors::barometer::Barometer::new(I2cBusDevice::new(i2c_bus))
+        actors::barometer::Barometer::new(&STATE, I2cBusDevice::new(i2c_bus))
     );
 
     if BLUETOOTH {
@@ -748,6 +566,8 @@ async fn main(spawner: Spawner) {
     OUTPUT.mount(
         spawner,
         actors::output::Output::new(
+            &STATE,
+            &DESIRED_STATE,
             wdt_handle,
             power,
             p.PWM1,

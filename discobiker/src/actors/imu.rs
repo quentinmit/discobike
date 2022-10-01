@@ -1,4 +1,4 @@
-use crate::{Debug2Format, CELSIUS_ZERO, LSM6DS33_ADDR, STATE};
+use crate::{Debug2Format, CELSIUS_ZERO, Global, ActualState};
 use core::fmt::{self, Debug};
 use dim::si::{
     f32consts::{K, MPS2},
@@ -20,8 +20,10 @@ use lsm6ds33::{self, *};
 derived!(ucum, UCUM: RadianPerSecond = Radian / Second);
 //const RADPS: RadianPerSecond<f32> = RAD / S;
 
-pub struct Imu<I2C> {
+pub struct Imu<'d, I2C> {
     i2c: Option<I2C>,
+    lsm6ds33_addr: u8,
+    state: &'d Global<ActualState>,
 }
 
 pub enum ImuMessage {}
@@ -61,13 +63,13 @@ where
     }
 }
 
-impl<I2C, E> Imu<I2C>
+impl<'a, I2C, E> Imu<'a, I2C>
 where
     I2C: i2c::I2c<Error = E>,
     E: fmt::Debug,
 {
-    pub fn new(i2c: I2C) -> Self {
-        Self { i2c: Some(i2c) }
+    pub fn new(state: &'a Global<ActualState>, i2c: I2C, lsm6ds33_addr: u8) -> Self {
+        Self { i2c: Some(i2c), state, lsm6ds33_addr }
     }
     async fn run_imu<M>(
         &mut self,
@@ -115,7 +117,7 @@ where
                 (temp / K).value() - CELSIUS_ZERO,
             );
 
-            STATE.lock(|c| {
+            self.state.lock(|c| {
                 c.update(|s| {
                     let mut s = s;
                     s.accel_mag = Some(accel_mag);
@@ -132,7 +134,7 @@ where
 }
 
 #[actor]
-impl<I2C, E> Actor for Imu<I2C>
+impl<I2C, E> Actor for Imu<'_, I2C>
 where
     I2C: i2c::I2c<Error = E>,
     E: fmt::Debug,
@@ -147,7 +149,7 @@ where
             info!("run_imu");
             let i2c = self.i2c.take().unwrap();
             info!("initializing imu");
-            let lsm6ds33 = Lsm6ds33Async::new(i2c, LSM6DS33_ADDR).await;
+            let lsm6ds33 = Lsm6ds33Async::new(i2c, self.lsm6ds33_addr).await;
             match lsm6ds33 {
                 Ok(mut lsm6ds33) => {
                     let res = self.run_imu(&mut lsm6ds33, &mut inbox).await;

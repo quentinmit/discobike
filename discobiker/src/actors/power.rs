@@ -1,5 +1,5 @@
 use crate::drivers::ina219::{ADCMode, INA219Async, INA219_ADDR};
-use crate::{Debug2Format, STATE};
+use crate::{Debug2Format, Global, ActualState};
 use core::fmt;
 use dim::si::f32consts::{A, OHM, V};
 use dim::traits::Dimensionless;
@@ -8,8 +8,9 @@ use embassy_time::{Duration, Timer};
 use embedded_hal_async::i2c;
 use futures::{select_biased, FutureExt};
 
-pub struct Power<I2C> {
+pub struct Power<'a, I2C> {
     ina219: INA219Async<I2C>,
+    state: &'a Global<ActualState>,
 }
 
 pub enum PowerMessage {
@@ -30,13 +31,13 @@ impl From<bool> for PowerMessage {
 const POLL_HIGH_EVERY: Duration = Duration::from_millis(1000 / 30);
 const POLL_LOW_EVERY: Duration = Duration::from_millis(1000);
 
-impl<I2C, E> Power<I2C>
+impl<'a, I2C, E> Power<'a, I2C>
 where
     I2C: i2c::I2c<Error = E>,
 {
-    pub fn new(i2c: I2C) -> Self {
+    pub fn new(state: &'a Global<ActualState>, i2c: I2C) -> Self {
         let ina219 = INA219Async::new(i2c, INA219_ADDR);
-        Power { ina219 }
+        Power { ina219, state }
     }
 
     async fn run_high_power<M>(&mut self, inbox: &mut M) -> Result<(), E>
@@ -47,7 +48,7 @@ where
         loop {
             let vext = self.ina219.get_bus_voltage().await?;
             let current = self.ina219.get_current().await?;
-            STATE.lock(|c| {
+            self.state.lock(|c| {
                 c.update(|s| {
                     let mut s = s;
                     s.vext = Some(vext);
@@ -80,7 +81,7 @@ where
             self.ina219.trigger_sample(true, false).await?;
             let vext = self.ina219.get_bus_voltage().await?;
             self.ina219.power_down().await?;
-            STATE.lock(|c| {
+            self.state.lock(|c| {
                 c.update(|s| {
                     let mut s = s;
                     s.vext = Some(vext);
@@ -117,7 +118,7 @@ where
 }
 
 #[actor]
-impl<I2C, E> Actor for Power<I2C>
+impl<'a, I2C, E> Actor for Power<'a, I2C>
 where
     I2C: i2c::I2c<Error = E>,
     E: fmt::Debug,
