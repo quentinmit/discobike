@@ -89,6 +89,7 @@ pub enum HeadlightMode {
     Day = 2,
     Night = 3,
     Blink = 4,
+    AutoDim = 5,
 }
 
 #[repr(u8)]

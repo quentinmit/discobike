@@ -260,6 +260,13 @@ impl<'a> Output<'a> {
                                 1.0
                             }
                         },
+                        AutoDim => {
+                            if s.move_timer.elapsed() > HEADLIGHT_TIMEOUT_OFF {
+                                0.0
+                            } else {
+                                0.1
+                            }
+                        },
                         Blink => if self.underlight_frame % 15 < 2 { 1.0 } else { 0.0 },
                         Night => 1.0,
                         Day => 0.5,
