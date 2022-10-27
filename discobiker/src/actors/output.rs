@@ -43,7 +43,8 @@ impl StepTowards for f32 {
 }
 
 const TAIL_PERIOD: Duration = Duration::from_secs(2);
-const LAST_MOVE_TIMEOUT: Duration = Duration::from_secs(20);
+const HEADLIGHT_TIMEOUT_DIM: Duration = Duration::from_secs(10);
+const HEADLIGHT_TIMEOUT_OFF: Duration = Duration::from_secs(30);
 const LAST_MOVE_TAIL_TIMEOUT: Duration = Duration::from_secs(60);
 const LAST_MOVE_UNDER_TIMEOUT: Duration = Duration::from_secs(60);
 const DISPLAY_TIMEOUT: Duration = Duration::from_secs(60);
@@ -241,33 +242,33 @@ impl<'a> Output<'a> {
                     use crate::HeadlightMode::*;
                     s.display_on = s.move_timer.elapsed() < DISPLAY_TIMEOUT
                         || s.vbus_timer.elapsed() < DISPLAY_TIMEOUT;
-                    if s.vext.map_or(true, |v| v < 11.2 * V) || !s.vbus_detected {
+                    let vext_present = s.vext.map_or(true, |v| v < 12.5 * V) || !s.vbus_detected;
+                    if !vext_present {
                         s.headlight_brightness = 0.0;
                         s.taillight_brightness = 0.0;
-                        s.headlight_mode = Off;
-                    } else {
-                        s.vext_present_timer.update();
-                        taillight_on = s.move_timer.elapsed() < LAST_MOVE_TAIL_TIMEOUT;
-                        s.headlight_mode = match desired_state.headlight_mode {
-                            Auto => {
-                                if s.move_timer.elapsed() > LAST_MOVE_TIMEOUT {
-                                    Off
-                                } else if s.lux.map_or(true, |l| l > 10.0 * LX) {
-                                    Day
-                                } else {
-                                    Night
-                                }
-                            }
-                            _ => desired_state.headlight_mode,
-                        };
+                        return s;
                     }
-                    let target_brightness = match state.headlight_mode {
+                    s.vext_present_timer.update();
+                    taillight_on = s.move_timer.elapsed() < LAST_MOVE_TAIL_TIMEOUT;
+                    let target_brightness = match desired_state.headlight_mode {
+                        Auto => {
+                            if s.move_timer.elapsed() > HEADLIGHT_TIMEOUT_OFF {
+                                0.0
+                            } else if s.move_timer.elapsed() > HEADLIGHT_TIMEOUT_DIM || s.lux.map_or(true, |l| l > 10.0 * LX) {
+                                0.1
+                            } else {
+                                1.0
+                            }
+                        },
+                        Blink => if self.underlight_frame % 15 < 2 { 1.0 } else { 0.0 },
                         Night => 1.0,
-                        Day => 0.5, // TODO: Blink
-                        _ => 0.0,
+                        Day => 0.5,
+                        Off => 0.0,
                     };
-                    s.headlight_brightness =
-                        s.headlight_brightness.step_towards(target_brightness, 0.01);
+                    s.headlight_brightness = match desired_state.headlight_mode {
+                        Blink => target_brightness,
+                        _ => s.headlight_brightness.step_towards(target_brightness, 0.01),
+                    };
                     let target_taillight_brightness = if taillight_on { 1.0 } else { 0.0 };
                     s.taillight_brightness = s
                         .taillight_brightness

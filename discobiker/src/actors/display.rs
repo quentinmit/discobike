@@ -326,11 +326,10 @@ where
             buf.clear();
             // Line 5: Mode: Day XXX% XXs
             // headlight mode, headlight brightness, seconds until off
-            buf.push_str_truncating("Mode: ");
+            buf.push_str_truncating("Headlight: ");
             core::write!(
                 &mut buf,
-                "{:?} {:3.0} {}",
-                state.headlight_mode,
+                "{:3.0}% {}",
                 state.headlight_brightness * 100.0,
                 state.move_timer,
             )

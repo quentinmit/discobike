@@ -130,7 +130,6 @@ pub struct DesiredState {
 
 #[derive(Copy, Clone, Serialize)]
 pub struct ActualState {
-    pub headlight_mode: HeadlightMode,
     pub headlight_brightness: f32,
     pub taillight_brightness: f32,
     pub underlight_brightness: u8,

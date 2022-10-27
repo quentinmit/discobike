@@ -154,7 +154,6 @@ pub static DESIRED_STATE: BlockingMutex<CriticalSectionRawMutex, Cell<DesiredSta
 
 pub static STATE: BlockingMutex<CriticalSectionRawMutex, Cell<ActualState>> =
     BlockingMutex::new(Cell::new(ActualState {
-        headlight_mode: HeadlightMode::Off,
         headlight_brightness: 0.0,
         taillight_brightness: 0.0,
         underlight_brightness: 0,
