@@ -4,6 +4,7 @@ edition = "2018"
 name = "discobiker"
 version = "0.1.0"
 resolver = "2"
+default-run = "discobiker"
 
 [features]
 default = ["async"]
