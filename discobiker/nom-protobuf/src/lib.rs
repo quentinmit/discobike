@@ -5,7 +5,6 @@ use nom::bytes::complete::take;
 use nom::error::{ErrorKind, ParseError};
 //use nom::Err::*;
 use nom::Needed::Unknown;
-use nom_varint::take_varint;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 #[cfg(feature = "defmt")]
 use defmt;
@@ -35,11 +34,13 @@ pub fn take_tag<'a, E>(i: &'a [u8]) -> nom::IResult<&'a [u8], Tag, E>
 where
     E: ParseError<&'a [u8]>,
 {
-    let (remainder, tl) = take_varint(i)?;
+    let (remainder, tl) = take_varint::<usize, E>(i)?;
     let wire_type: WireType = (tl.bitand(0x07) as u8).try_into().map_err(|_| nom::Err::Error(E::from_error_kind(i, ErrorKind::TooLarge)))?;
     let field_number = tl.wrapping_shr(3);
     Ok((remainder, Tag{wire_type, field_number}))
 }
+
+pub use varint::{take_varint, take_signed_varint};
 
 #[cfg(test)]
 mod tests {

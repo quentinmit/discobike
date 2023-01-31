@@ -15,7 +15,7 @@ use log::trace;
 /// # Examples
 ///
 /// ```
-/// assert_eq!(nom_varint::take_varint::<()>(&[0x0b]), Ok((&[] as &[u8], 0x0b)));
+/// assert_eq!(nom_protobuf::take_varint::<usize, ()>(&[0x0b]), Ok((&[] as &[u8], 0x0b)));
 /// ```
 pub fn take_varint<'a, N, E>(i: &'a [u8]) -> nom::IResult<&'a [u8], N, E>
 where
