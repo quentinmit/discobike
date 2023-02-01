@@ -196,6 +196,127 @@ pub mod scalar {
                 (4, uint64, 104),
                 (5, sint32, 105),
                 (6, sint64, 106),
+                (7, fixed32, 107u32),
+                (8, fixed64, 108u64),
+                (9, sfixed32, 109i32),
+                (10, sfixed64, 110i64),
+                (11, float, 111.0f32), // 0x42de0000i32
+                (12, double, 112.0f64), // 0x405c000000000000i64
+                (13, bool, true),
+                (14, string, "115"),
+                (15, bytes, b"116"),
+                //(16: !{        # optionalgroup
+                //                 (17: int32, 117) // a
+                //}
+                //(18, nested_message, {),
+                // 1: 118  # bb
+                //}
+                //(19, foreign_message, {),
+                // 1: 119  # c
+                //}
+                //(20, int32, {1: 120}),
+                (21, int32, 3), // enum
+                (22, int32, 6), // enum
+                (23, int32, 9), // no type?
+                (24, string, "124"), // string_piece
+                (25, string, "125"), // cord
+                //(26, int32, {1: 126}),
+                //(27, lazy_message, {),
+                // 1: 127      # bb
+                //}
+                //(28, int32, {1: 128}),
+                (31, int32, 201),
+                (31, int32, 301),
+                (32, int64, 202),
+                (32, int64, 302),
+                (33, uint32, 203),
+                (33, uint32, 303),
+                (34, uint64, 204),
+                (34, uint64, 304),
+                (35, sint32, 205),
+                (35, sint32, 305),
+                (36, sint64, 206),
+                (36, sint64, 306),
+                (37, fixed32, 207u32),
+                (37, fixed32, 307u32),
+                (38, fixed64, 208u64),
+                (38, fixed64, 308u64),
+                (39, sfixed32, 209i32),
+                (39, sfixed32, 309i32),
+                (40, sfixed64, 210i64),
+                (40, sfixed64, 310i64),
+                (41, float, 211.0f32), // 0x43530000i32
+                (41, float, 311.0f32), // 0x439b8000i32
+                (42, double, 212.0f64), // 0x406a800000000000i64
+                (42, double, 312.0f64), // 0x4073800000000000i64
+                (43, bool, true),
+                (43, bool, false),
+                (44, string, "215"),
+                (44, string, "315"),
+                (45, bytes, b"216"),
+                (45, bytes, b"316"),
+                // 46: !{        # repeatedgroup
+//                                 47: 217     # a
+//                 }
+//                 46: !{      # repeatedgroup
+//                               47: 317   # a
+//                 }
+//                 (48, nested_message, {),
+//                  1: 218  # bb
+//                 }
+//                 (48, nested_message, {),
+//   1: 318  # bb
+// }
+// (49, foreign_message, {),
+//   1: 219  # c
+// }
+// (49, foreign_message, {),
+//   1: 319  # c
+// }
+// (50, int32, {1: 220}),
+// (50, int32, {1: 320}),
+// (51, nested_enum, 2),
+// (51, nested_enum, 3),
+// (52, foreign_enum, 5),
+// (52, foreign_enum, 6),
+// 53: 8
+// 53: 9
+// (54, string_piece, {"224"}),
+// (54, string_piece, {"324"}),
+// (55, cord, {"225"}),
+// (55, cord, {"325"}),
+// (57, lazy_message, {),
+//   1: 227      # bb
+// }
+// (57, lazy_message, {),
+//   1: 327  # bb
+// }
+                (61, int32, 401),
+                (62, int64, 402),
+                (63, uint32, 403),
+                (64, uint64, 404),
+                (65, sint32, 405),
+                (66, sint64, 406),
+                (67, fixed32, 407u32),
+                (68, fixed64, 408u64),
+                (69, sfixed32, 409i32),
+                (70, sfixed64, 410i64),
+                (71, float, 411.0f32), // 0x43cd8000i32
+                (72, double, 412.0f64), // 0x4079c00000000000i64
+                (73, bool, false),
+                (74, string, "415"),
+                (75, bytes, b"416"),
+                //(81, nested_enum, 1),
+                //(82, foreign_enum, 4),
+                (83, int32, 7), // no type?
+                (84, string, "424"), // string_piece
+                (85, string, "425"), // cord
+                (111, uint32, 601),
+                //(112, nested_message, {),
+                // 1: 602      # bb
+                //}
+                (113, string, "603"),
+                (114, bytes, b"604"),
             });
             // let (remainder, tag) = crate::take_tag::<()>(message_pb).unwrap();
             // assert_eq!(tag.field_number, 1);
