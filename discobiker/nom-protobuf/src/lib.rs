@@ -59,7 +59,10 @@ where
 
 pub mod scalar {
     use crate::WireType;
+    use nom::bytes::complete::take;
     use nom::error::{ErrorKind, ParseError};
+    use nom::ParseTo;
+    use nom::Parser;
     use paste::paste;
 
     macro_rules! impl_type {
@@ -135,6 +138,19 @@ pub mod scalar {
         take_uint32(wire_type, i).map(|(remainder, x)| (remainder, x != 0))
     });
     // string
+    impl_type!(string, (wire_type, i) -> (&str) {
+        match wire_type {
+            WireType::LEN => {
+                    let (remainder, len) = crate::varint::take_varint::<usize, E>(i)?;
+                    let (remainder, x) = take::<usize, &[u8], E>(len)(remainder)?;
+                    match core::str::from_utf8(x) {
+                        Ok(x) => Ok((remainder, x)),
+                        Err(_) => Err(nom::Err::Error(E::from_error_kind(i, ErrorKind::MapOpt))),
+                    }
+                },
+            _ => Err(nom::Err::Error(E::from_error_kind(i, ErrorKind::MapOpt))),
+        }
+    });
     // bytes
 }
 
