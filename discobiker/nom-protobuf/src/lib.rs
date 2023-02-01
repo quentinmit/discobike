@@ -4,10 +4,10 @@ use core::ops::BitAnd;
 use nom::bytes::complete::take;
 use nom::error::{ErrorKind, ParseError};
 //use nom::Err::*;
-use nom::Needed::Unknown;
-use num_enum::{IntoPrimitive, TryFromPrimitive};
 #[cfg(feature = "defmt")]
 use defmt;
+use nom::Needed::Unknown;
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 mod varint;
 
@@ -35,12 +35,20 @@ where
     E: ParseError<&'a [u8]>,
 {
     let (remainder, tl) = take_varint::<usize, E>(i)?;
-    let wire_type: WireType = (tl.bitand(0x07) as u8).try_into().map_err(|_| nom::Err::Error(E::from_error_kind(i, ErrorKind::TooLarge)))?;
+    let wire_type: WireType = (tl.bitand(0x07) as u8)
+        .try_into()
+        .map_err(|_| nom::Err::Error(E::from_error_kind(i, ErrorKind::TooLarge)))?;
     let field_number = tl.wrapping_shr(3);
-    Ok((remainder, Tag{wire_type, field_number}))
+    Ok((
+        remainder,
+        Tag {
+            wire_type,
+            field_number,
+        },
+    ))
 }
 
-pub use varint::{take_varint, take_signed_varint};
+pub use varint::{take_signed_varint, take_varint};
 
 pub fn take_i32<'a, E>(i: &'a [u8]) -> nom::IResult<&'a [u8], i32, E>
 where
@@ -50,18 +58,18 @@ where
 }
 
 pub mod scalar {
-    use paste::paste;
     use crate::WireType;
-    use nom::error::{ParseError, ErrorKind};
+    use nom::error::{ErrorKind, ParseError};
+    use paste::paste;
 
     macro_rules! impl_type {
-        ($proto_type:ident -> ($rust_type:ty) $body:expr) => {
+        ($proto_type:ident, ($wire_type:ident, $i:ident) -> ($rust_type:ty) $body:block) => {
             paste! {
-                pub fn [<take_ $proto_type>]<'a, E>(wire_type: WireType, i: &'a [u8]) -> nom::IResult<&'a [u8], $rust_type, E>
+                pub fn [<take_ $proto_type>]<'a, E>($wire_type: WireType, $i: &'a [u8]) -> nom::IResult<&'a [u8], $rust_type, E>
                 where
                     E: ParseError<&'a [u8]>
                 {
-                    ($body)(wire_type, i)
+                    $body
                 }
             }
         };
@@ -75,7 +83,7 @@ pub mod scalar {
             impl_int!($proto_type, $intermediate_rust_type, $rust_type, take_varint::<$intermediate_rust_type>);
         };
         ($proto_type:ident, $intermediate_rust_type:ty, $rust_type:ty, $take_varint_function:ident::<$( $take_generics:ty ),*>) => {
-            impl_type!($proto_type -> ($rust_type) |wire_type, i| {
+            impl_type!($proto_type, (wire_type, i) -> ($rust_type) {
                     match wire_type {
                         WireType::VARINT => crate::$take_varint_function::<$($take_generics),*, E>(i).map(|(remainder, x)| (remainder, x as $rust_type)),
                         WireType::I64 => nom::number::complete::le_u64(i)
@@ -98,8 +106,20 @@ pub mod scalar {
         };
     }
 
-    // double
-    // float
+    impl_type!(double, (wire_type, i) -> (f64) {
+        match wire_type {
+            WireType::I64 => nom::number::complete::le_f64(i),
+            WireType::I32 => nom::number::complete::le_f32(i).map(|(remainder, x)| (remainder, x as f64)),
+            _ => Err(nom::Err::Error(E::from_error_kind(i, ErrorKind::MapOpt))),
+        }
+    });
+    impl_type!(float, (wire_type, i) -> (f32) {
+        match wire_type {
+                WireType::I64 => nom::number::complete::le_f64(i).map(|(remainder, x)| (remainder, x as f32)),
+            WireType::I32 => nom::number::complete::le_f32(i),
+            _ => Err(nom::Err::Error(E::from_error_kind(i, ErrorKind::MapOpt))),
+        }
+    });
     impl_int!(int32, u32, i32); // 2's complement
     impl_int!(int64, u64, i64); // 2's complement
     impl_int!(uint32, u32);
@@ -108,9 +128,12 @@ pub mod scalar {
     impl_int!(sint64, i64, i64, take_signed_varint::<i64, u64>); // ZigZag
     impl_int!(fixed32, u32);
     impl_int!(fixed64, u64);
-    impl_int!(sfixed32, u32, i32);
-    impl_int!(sfixed64, u64, i64);
+    impl_int!(sfixed32, u32, i32); // 2's complement
+    impl_int!(sfixed64, u64, i64); // 2's complement
     // bool
+    impl_type!(bool, (wire_type, i) -> (bool) {
+        take_uint32(wire_type, i).map(|(remainder, x)| (remainder, x != 0))
+    });
     // string
     // bytes
 }
@@ -122,6 +145,15 @@ mod tests {
     #[test]
     fn test_take_tag() {
         let result = take_tag::<()>(&[0x12]);
-        assert_eq!(result, Ok((b"" as &[u8], Tag{wire_type: WireType::LEN, field_number: 2})));
+        assert_eq!(
+            result,
+            Ok((
+                b"" as &[u8],
+                Tag {
+                    wire_type: WireType::LEN,
+                    field_number: 2
+                }
+            ))
+        );
     }
 }
