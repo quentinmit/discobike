@@ -153,6 +153,20 @@ pub mod scalar {
         let (remainder, len) = crate::varint::take_varint::<usize, E>(i)?;
         take::<usize, &[u8], E>(len)(remainder)
     });
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn test_golden_message() {
+            let message_pb = include_bytes!("../testdata/message.pb");
+            let (remainder, tag) = crate::take_tag::<()>(message_pb).unwrap();
+            assert_eq!(tag.field_number, 1);
+            let (remainder, x) = take_int32::<()>(tag.wire_type, remainder).unwrap();
+            assert_eq!(x, 101);
+        }
+    }
 }
 
 #[cfg(test)]
