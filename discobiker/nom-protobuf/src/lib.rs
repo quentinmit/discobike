@@ -158,13 +158,49 @@ pub mod scalar {
     mod tests {
         use super::*;
 
+        use test_log::test;
+        use log::{info,trace};
+
+        macro_rules! test_field {
+            ($i:ident, $field_number:expr, $proto_type:ty, $value:expr) => {
+                paste! {
+                    {
+                        let ($i, tag) = crate::take_tag::<()>($i).unwrap();
+                        info!("Read tag: {:?}", tag);
+                        assert_eq!(tag.field_number, $field_number);
+                        let ($i, x) = [< take_ $proto_type >]::<()>(tag.wire_type, $i).unwrap();
+                        trace!("Read value: {:?}", x);
+                        assert_eq!(x, $value);
+                        $i
+                    }
+                }
+            };
+        }
+
+        macro_rules! test_fields {
+            ($i:ident, { $( ($field_number:expr, $proto_type:ty, $value:expr) ),* $(,)? }) => {
+                $(
+                    let $i = test_field!($i, $field_number, $proto_type, $value);
+                )*
+                    assert_eq!($i.len(), 0);
+            }
+        }
+
         #[test]
         fn test_golden_message() {
             let message_pb = include_bytes!("../testdata/message.pb");
-            let (remainder, tag) = crate::take_tag::<()>(message_pb).unwrap();
-            assert_eq!(tag.field_number, 1);
-            let (remainder, x) = take_int32::<()>(tag.wire_type, remainder).unwrap();
-            assert_eq!(x, 101);
+            test_fields!(message_pb,{
+                (1, int32, 101),
+                (2, int64, 102),
+                (3, uint32, 103),
+                (4, uint64, 104),
+                (5, sint32, 105),
+                (6, sint64, 106),
+            });
+            // let (remainder, tag) = crate::take_tag::<()>(message_pb).unwrap();
+            // assert_eq!(tag.field_number, 1);
+            // let (remainder, x) = take_int32::<()>(tag.wire_type, remainder).unwrap();
+            // assert_eq!(x, 101);
         }
     }
 }
