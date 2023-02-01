@@ -133,11 +133,9 @@ pub mod scalar {
     impl_int!(fixed64, u64);
     impl_int!(sfixed32, u32, i32); // 2's complement
     impl_int!(sfixed64, u64, i64); // 2's complement
-    // bool
     impl_type!(bool, (wire_type, i) -> (bool) {
         take_uint32(wire_type, i).map(|(remainder, x)| (remainder, x != 0))
     });
-    // string
     impl_type!(string, (wire_type, i) -> (&str) {
         match wire_type {
             WireType::LEN => {
@@ -151,7 +149,10 @@ pub mod scalar {
             _ => Err(nom::Err::Error(E::from_error_kind(i, ErrorKind::MapOpt))),
         }
     });
-    // bytes
+    impl_type!(bytes, (wire_type, i) -> (&[u8]) {
+        let (remainder, len) = crate::varint::take_varint::<usize, E>(i)?;
+        take::<usize, &[u8], E>(len)(remainder)
+    });
 }
 
 #[cfg(test)]
