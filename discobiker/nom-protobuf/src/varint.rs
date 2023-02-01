@@ -8,8 +8,6 @@ use core::ops::{AddAssign, BitAnd};
 use num_traits::{Signed, Unsigned, Zero, CheckedAdd, CheckedShl, CheckedShr, FromPrimitive};
 use zigzag::ZigZagDecode;
 
-use log::trace;
-
 /// Parses a varint.
 ///
 /// # Examples
@@ -30,7 +28,6 @@ where
             Ok((rest, bytes)) => Ok((rest, bytes[0])),
             Err(_) => Err(Incomplete(Unknown)),
         }?;
-        trace!("res = {:?}, byte = {:?}, count = {:?}", res, byte, count);
         let shift = (count * 7).try_into().unwrap_or(u32::MAX);
         res = N::from_u8(byte & 127)
             .and_then(|x| {
