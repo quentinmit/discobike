@@ -66,9 +66,9 @@ pub mod scalar {
     use paste::paste;
 
     macro_rules! impl_type {
-        ($proto_type:ident, ($wire_type:ident, $i:ident) -> ($rust_type:ty) $body:block) => {
+        ($proto_type:ident $(< $generic_name:ty : $generic:ty >)?, ($wire_type:ident, $i:ident) -> ($rust_type:ty) $body:block) => {
             paste! {
-                pub fn [<take_ $proto_type>]<'a, E>($wire_type: WireType, $i: &'a [u8]) -> nom::IResult<&'a [u8], $rust_type, E>
+                pub fn [<take_ $proto_type>]<'a, $( $generic_name : $generic , )? E>($wire_type: WireType, $i: &'a [u8]) -> nom::IResult<&'a [u8], $rust_type, E>
                 where
                     E: ParseError<&'a [u8]>
                 {
@@ -154,12 +154,23 @@ pub mod scalar {
         take::<usize, &[u8], E>(len)(remainder)
     });
 
+    impl_type!(enum<V: TryFrom<i32>>, (wire_type, i) -> (V) {
+        match wire_type {
+            WireType::VARINT => {
+                    let (remainder, x) = crate::varint::take_varint::<u32, E>(i)?;
+                    Ok((remainder, (x as i32).try_into().map_err(
+                        |_| nom::Err::Error(E::from_error_kind(i, ErrorKind::TooLarge)))?))
+                },
+            _ => Err(nom::Err::Error(E::from_error_kind(i, ErrorKind::MapOpt))),
+        }
+    });
     #[cfg(test)]
     mod tests {
         use super::*;
 
         use test_log::test;
         use log::{info,trace};
+        use num_enum::TryFromPrimitive;
 
         macro_rules! test_fields {
             (@tag $i:ident, $field_number:expr, $wire_type:expr) => {
@@ -203,27 +214,44 @@ pub mod scalar {
                     $i
                 }
             };
-            (@field $i:ident ($field_number:expr, $proto_type:ty, $value:expr)) => {
+            (@field $i:ident ($field_number:expr, $proto_type:ident $(< $generic_type:ty >)?, $value:expr)) => {
                 paste! {
                     {
                         let ($i, tag) = crate::take_tag::<()>($i).unwrap();
                         info!("Read tag: {:?}", tag);
                         assert_eq!(tag.field_number, $field_number);
-                        let ($i, x) = [< take_ $proto_type >]::<()>(tag.wire_type, $i).unwrap();
+                        let ($i, x) = [< take_ $proto_type >]::<$($generic_type,)? ()>(tag.wire_type, $i).unwrap();
                         trace!("Read {} value: {:?}", stringify!($proto_type), x);
                         assert_eq!(x, $value);
                         $i
                     }
                 }
             };
-            ($i:ident, { $( ($field_number:expr, $proto_type:tt, $( $value:tt )*) ),* $(,)? }) => {
+            ($i:ident, { $( ($field_number:expr, $proto_type:tt $(< $generic_type:ty >)?, $( $value:tt )*) ),* $(,)? }) => {
                 {
                     $(
-                        let $i = test_fields!(@field $i ($field_number, $proto_type, $( $value )*));
+                        let $i = test_fields!(@field $i ($field_number, $proto_type $(< $generic_type >)?, $( $value )*));
                     )*
                     assert_eq!($i.len(), 0);
                 }
             }
+        }
+
+        #[derive(Clone, Copy, Debug, PartialEq, TryFromPrimitive)]
+        #[repr(i32)]
+        enum NestedEnum {
+            FOO = 1,
+            BAR = 2,
+            BAZ = 3,
+            NEG = -1,  // Intentionally negative.
+        }
+
+        #[derive(Clone, Copy, Debug, PartialEq, TryFromPrimitive)]
+        #[repr(i32)]
+        enum ForeignEnum {
+            FOREIGN_FOO = 4,
+            FOREIGN_BAR = 5,
+            FOREIGN_BAZ = 6,
         }
 
         #[test]
@@ -257,8 +285,8 @@ pub mod scalar {
                 (20, message, (
                     (1, int32, 120),
                 )),
-                (21, int32, 3), // enum
-                (22, int32, 6), // enum
+                (21, enum<NestedEnum>, NestedEnum::BAZ),
+                (22, enum<ForeignEnum>, ForeignEnum::FOREIGN_BAZ), // enum
                 (23, int32, 9), // no type?
                 (24, string, "124"), // string_piece
                 (25, string, "125"), // cord
@@ -325,10 +353,10 @@ pub mod scalar {
                 (50, message, (
                     (1, int32, 320),
                 )),
-                (51, int32, 2), // enum
-                (51, int32, 3), // enum
-                (52, int32, 5), // enum
-                (52, int32, 6), // enum
+                (51, enum<NestedEnum>, NestedEnum::BAR),
+                (51, enum<NestedEnum>, NestedEnum::BAZ),
+                (52, enum<ForeignEnum>, ForeignEnum::FOREIGN_BAR),
+                (52, enum<ForeignEnum>, ForeignEnum::FOREIGN_BAZ),
                 (53, int32, 8),
                 (53, int32, 9),
                 (54, string, "224"), // string_piece
@@ -356,8 +384,8 @@ pub mod scalar {
                 (73, bool, false),
                 (74, string, "415"),
                 (75, bytes, b"416"),
-                (81, int32, 1), // enum
-                (82, int32, 4), // enum
+                (81, enum<NestedEnum>, NestedEnum::FOO),
+                (82, enum<ForeignEnum>, ForeignEnum::FOREIGN_FOO),
                 (83, int32, 7), // no type?
                 (84, string, "424"), // string_piece
                 (85, string, "425"), // cord
