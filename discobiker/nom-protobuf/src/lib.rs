@@ -179,7 +179,7 @@ pub mod scalar {
                 )
             )) => {
                 {
-                    let ($i, tag) = test_fields!(@tag $i, $field_number, crate::WireType::LEN);
+                    let ($i, _) = test_fields!(@tag $i, $field_number, crate::WireType::LEN);
                     let ($i, len) = crate::take_varint::<usize, ()>($i).unwrap();
                     let ($i, body) = take::<usize, &[u8], ()>(len)($i).unwrap();
                     test_fields!(body, {
@@ -256,17 +256,23 @@ pub mod scalar {
                 (19, message, (
                     (1, int32, 119), // c
                 )),
-                //(20, int32, {1: 120}),
+                (20, message, (
+                    (1, int32, 120),
+                )),
                 (21, int32, 3), // enum
                 (22, int32, 6), // enum
                 (23, int32, 9), // no type?
                 (24, string, "124"), // string_piece
                 (25, string, "125"), // cord
-                //(26, int32, {1: 126}),
-                //(27, lazy_message, {),
-                // 1: 127      # bb
-                //}
-                //(28, int32, {1: 128}),
+                (26, message, (
+                    (1, int32, 126),
+                )),
+                (27, message, (
+                    (1, int32, 127), // bb
+                )),
+                (28, message, (
+                    (1, int32, 128),
+                )),
                 (31, int32, 201),
                 (31, int32, 301),
                 (32, int64, 202),
@@ -303,36 +309,40 @@ pub mod scalar {
                 (46, group, (
                     (47, int32, 317), // a
                 )),
-//                 (48, nested_message, {),
-//                  1: 218  # bb
-//                 }
-//                 (48, nested_message, {),
-//   1: 318  # bb
-// }
-// (49, foreign_message, {),
-//   1: 219  # c
-// }
-// (49, foreign_message, {),
-//   1: 319  # c
-// }
-// (50, int32, {1: 220}),
-// (50, int32, {1: 320}),
-// (51, nested_enum, 2),
-// (51, nested_enum, 3),
-// (52, foreign_enum, 5),
-// (52, foreign_enum, 6),
-// 53: 8
-// 53: 9
-// (54, string_piece, {"224"}),
-// (54, string_piece, {"324"}),
-// (55, cord, {"225"}),
-// (55, cord, {"325"}),
-// (57, lazy_message, {),
-//   1: 227      # bb
-// }
-// (57, lazy_message, {),
-//   1: 327  # bb
-// }
+                (48, message, (
+                    (1, int32, 218), // bb
+                )),
+                (48, message, (
+                    (1, int32, 318), // bb
+                )),
+                (49, message, (
+                    (1, int32, 219), // c
+                )),
+                (49, message, (
+                    (1, int32, 319), // c
+                )),
+                (50, message, (
+                    (1, int32, 220),
+                )),
+                (50, message, (
+                    (1, int32, 320),
+                )),
+                (51, int32, 2), // enum
+                (51, int32, 3), // enum
+                (52, int32, 5), // enum
+                (52, int32, 6), // enum
+                (53, int32, 8),
+                (53, int32, 9),
+                (54, string, "224"), // string_piece
+                (54, string, "324"), // string_piece
+                (55, string, "225"), // cord
+                (55, string, "325"), // cord
+                (57, message, (
+                    (1, int32, 227), // bb
+                )),
+                (57, message, (
+                    (1, int32, 327), // bb
+                )),
                 (61, int32, 401),
                 (62, int64, 402),
                 (63, uint32, 403),
@@ -348,15 +358,15 @@ pub mod scalar {
                 (73, bool, false),
                 (74, string, "415"),
                 (75, bytes, b"416"),
-                //(81, nested_enum, 1),
-                //(82, foreign_enum, 4),
+                (81, int32, 1), // enum
+                (82, int32, 4), // enum
                 (83, int32, 7), // no type?
                 (84, string, "424"), // string_piece
                 (85, string, "425"), // cord
                 (111, uint32, 601),
-                //(112, nested_message, {),
-                // 1: 602      # bb
-                //}
+                (112, message, (
+                    (1, int32, 602), // bb
+                )),
                 (113, string, "603"),
                 (114, bytes, b"604"),
             });
