@@ -136,6 +136,7 @@ pub struct ActualState {
     pub underlight_brightness: u8,
     pub display_on: bool,
     pub vbus_detected: bool,
+    pub vext_low: bool,
 
     pub vbus_timer: EventTimer,
     pub move_timer: EventTimer,

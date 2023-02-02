@@ -242,19 +242,21 @@ impl<'a> Output<'a> {
                     use crate::HeadlightMode::*;
                     s.display_on = s.move_timer.elapsed() < DISPLAY_TIMEOUT
                         || s.vbus_timer.elapsed() < DISPLAY_TIMEOUT;
-                    let vext_present = s.vext.map_or(true, |v| v < 12.5 * V) || !s.vbus_detected;
-                    if !vext_present {
+                    let vext_missing = s.vext.map_or(true, |v| v < 11.2 * V) || !s.vbus_detected;
+                    if vext_missing {
                         s.headlight_brightness = 0.0;
                         s.taillight_brightness = 0.0;
+                        s.vext_low = false;
                         return s;
                     }
                     s.vext_present_timer.update();
+                    s.vext_low = s.vext_low || s.vext.map_or(true, |v| v < 12.5 * V);
                     taillight_on = s.move_timer.elapsed() < LAST_MOVE_TAIL_TIMEOUT;
                     let target_brightness = match desired_state.headlight_mode {
                         Auto => {
                             if s.move_timer.elapsed() > HEADLIGHT_TIMEOUT_OFF {
                                 0.0
-                            } else if s.move_timer.elapsed() > HEADLIGHT_TIMEOUT_DIM || s.lux.map_or(true, |l| l > 10.0 * LX) {
+                            } else if s.move_timer.elapsed() > HEADLIGHT_TIMEOUT_DIM || s.lux.map_or(true, |l| l > 10.0 * LX) || s.vext_low {
                                 0.1
                             } else {
                                 1.0

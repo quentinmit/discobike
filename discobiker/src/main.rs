@@ -159,6 +159,7 @@ pub static STATE: BlockingMutex<CriticalSectionRawMutex, Cell<ActualState>> =
         underlight_brightness: 0,
         display_on: false,
         vbus_detected: false,
+        vext_low: false,
 
         vbus_timer: EventTimer::new(),
         move_timer: EventTimer::new(),
