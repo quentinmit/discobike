@@ -210,7 +210,7 @@ pub mod scalar {
                         info!("Read tag: {:?}", tag);
                         assert_eq!(tag.field_number, $field_number);
                         let ($i, x) = [< take_ $proto_type >]::<()>(tag.wire_type, $i).unwrap();
-                        trace!("Read value: {:?}", x);
+                        trace!("Read {} value: {:?}", stringify!($proto_type), x);
                         assert_eq!(x, $value);
                         $i
                     }
