@@ -1,3 +1,4 @@
+#![feature(trace_macros)]
 #![no_std]
 
 use core::ops::BitAnd;
@@ -161,8 +162,32 @@ pub mod scalar {
         use test_log::test;
         use log::{info,trace};
 
-        macro_rules! test_field {
-            ($i:ident, $field_number:expr, $proto_type:ty, $value:expr) => {
+        macro_rules! test_fields {
+            (@tag $i:ident, $field_number:expr, $wire_type:expr) => {
+                {
+                    let ($i, tag) = crate::take_tag::<()>($i).unwrap();
+                    info!("Read tag: {:?}", tag);
+                    assert_eq!(tag, crate::Tag{wire_type: $wire_type, field_number: $field_number});
+                    ($i, tag)
+                }
+            };
+            (@field $i:ident (
+                $field_number:expr,
+                group, //$( $value:tt )*
+                (
+                    $( ($($value:tt)*) ),* $(,)?
+                )
+            )) => {
+                {
+                    let ($i, tag) = test_fields!(@tag $i, $field_number, crate::WireType::SGROUP);
+                    $(
+                        let $i = test_fields!(@field $i ( $( $value )* ));
+                    )*
+                    let ($i, _) = test_fields!(@tag $i, $field_number, crate::WireType::EGROUP);
+                    $i
+                }
+            };
+            (@field $i:ident ($field_number:expr, $proto_type:ty, $value:expr)) => {
                 paste! {
                     {
                         let ($i, tag) = crate::take_tag::<()>($i).unwrap();
@@ -175,12 +200,9 @@ pub mod scalar {
                     }
                 }
             };
-        }
-
-        macro_rules! test_fields {
-            ($i:ident, { $( ($field_number:expr, $proto_type:ty, $value:expr) ),* $(,)? }) => {
+            ($i:ident, { $( ($field_number:expr, $proto_type:tt, $( $value:tt )*) ),* $(,)? }) => {
                 $(
-                    let $i = test_field!($i, $field_number, $proto_type, $value);
+                    let $i = test_fields!(@field $i ($field_number, $proto_type, $( $value )*));
                 )*
                     assert_eq!($i.len(), 0);
             }
@@ -189,6 +211,7 @@ pub mod scalar {
         #[test]
         fn test_golden_message() {
             let message_pb = include_bytes!("../testdata/message.pb");
+            trace_macros!(true);
             test_fields!(message_pb,{
                 (1, int32, 101),
                 (2, int64, 102),
@@ -205,9 +228,9 @@ pub mod scalar {
                 (13, bool, true),
                 (14, string, "115"),
                 (15, bytes, b"116"),
-                //(16: !{        # optionalgroup
-                //                 (17: int32, 117) // a
-                //}
+                (16, group, (
+                    (17, int32, 117), // a
+                )),
                 //(18, nested_message, {),
                 // 1: 118  # bb
                 //}
@@ -255,12 +278,12 @@ pub mod scalar {
                 (44, string, "315"),
                 (45, bytes, b"216"),
                 (45, bytes, b"316"),
-                // 46: !{        # repeatedgroup
-//                                 47: 217     # a
-//                 }
-//                 46: !{      # repeatedgroup
-//                               47: 317   # a
-//                 }
+                (46, group, (
+                    (47, int32, 217), // a
+                )),
+                (46, group, (
+                    (47, int32, 317), // a
+                )),
 //                 (48, nested_message, {),
 //                  1: 218  # bb
 //                 }
@@ -322,6 +345,7 @@ pub mod scalar {
             // assert_eq!(tag.field_number, 1);
             // let (remainder, x) = take_int32::<()>(tag.wire_type, remainder).unwrap();
             // assert_eq!(x, 101);
+            trace_macros!(false);
         }
     }
 }
