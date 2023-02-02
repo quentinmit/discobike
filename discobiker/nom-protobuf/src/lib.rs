@@ -1,4 +1,3 @@
-#![feature(trace_macros)]
 #![no_std]
 
 use core::ops::BitAnd;
@@ -230,7 +229,6 @@ pub mod scalar {
         #[test]
         fn test_golden_message() {
             let message_pb = include_bytes!("../testdata/message.pb");
-            //trace_macros!(true);
             test_fields!(message_pb,{
                 (1, int32, 101),
                 (2, int64, 102),
@@ -370,11 +368,6 @@ pub mod scalar {
                 (113, string, "603"),
                 (114, bytes, b"604"),
             });
-            // let (remainder, tag) = crate::take_tag::<()>(message_pb).unwrap();
-            // assert_eq!(tag.field_number, 1);
-            // let (remainder, x) = take_int32::<()>(tag.wire_type, remainder).unwrap();
-            // assert_eq!(x, 101);
-            trace_macros!(false);
         }
     }
 }
