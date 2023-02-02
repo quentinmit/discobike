@@ -150,8 +150,13 @@ pub mod scalar {
         }
     });
     impl_type!(bytes, (wire_type, i) -> (&[u8]) {
-        let (remainder, len) = crate::varint::take_varint::<usize, E>(i)?;
-        take::<usize, &[u8], E>(len)(remainder)
+        match wire_type {
+            WireType::LEN => {
+                    let (remainder, len) = crate::varint::take_varint::<usize, E>(i)?;
+                    take::<usize, &[u8], E>(len)(remainder)
+                },
+            _ => Err(nom::Err::Error(E::from_error_kind(i, ErrorKind::MapOpt))),
+        }
     });
 
     impl_type!(enum<V: TryFrom<i32>>, (wire_type, i) -> (V) {
@@ -206,7 +211,7 @@ pub mod scalar {
                 )
             )) => {
                 {
-                    let ($i, tag) = test_fields!(@tag $i, $field_number, crate::WireType::SGROUP);
+                    let ($i, _) = test_fields!(@tag $i, $field_number, crate::WireType::SGROUP);
                     $(
                         let $i = test_fields!(@field $i ( $( $value )* ));
                     )*
@@ -238,6 +243,7 @@ pub mod scalar {
         }
 
         #[derive(Clone, Copy, Debug, PartialEq, TryFromPrimitive)]
+        #[allow(non_camel_case_types)]
         #[repr(i32)]
         enum NestedEnum {
             FOO = 1,
@@ -247,11 +253,21 @@ pub mod scalar {
         }
 
         #[derive(Clone, Copy, Debug, PartialEq, TryFromPrimitive)]
+        #[allow(non_camel_case_types)]
         #[repr(i32)]
         enum ForeignEnum {
             FOREIGN_FOO = 4,
             FOREIGN_BAR = 5,
             FOREIGN_BAZ = 6,
+        }
+
+        #[derive(Clone, Copy, Debug, PartialEq, TryFromPrimitive)]
+        #[allow(non_camel_case_types)]
+        #[repr(i32)]
+        enum ImportEnum {
+              IMPORT_FOO = 7,
+              IMPORT_BAR = 8,
+              IMPORT_BAZ = 9,
         }
 
         #[test]
@@ -286,8 +302,8 @@ pub mod scalar {
                     (1, int32, 120),
                 )),
                 (21, enum<NestedEnum>, NestedEnum::BAZ),
-                (22, enum<ForeignEnum>, ForeignEnum::FOREIGN_BAZ), // enum
-                (23, int32, 9), // no type?
+                (22, enum<ForeignEnum>, ForeignEnum::FOREIGN_BAZ),
+                (23, enum<ImportEnum>, ImportEnum::IMPORT_BAZ),
                 (24, string, "124"), // string_piece
                 (25, string, "125"), // cord
                 (26, message, (
@@ -357,8 +373,8 @@ pub mod scalar {
                 (51, enum<NestedEnum>, NestedEnum::BAZ),
                 (52, enum<ForeignEnum>, ForeignEnum::FOREIGN_BAR),
                 (52, enum<ForeignEnum>, ForeignEnum::FOREIGN_BAZ),
-                (53, int32, 8),
-                (53, int32, 9),
+                (53, enum<ImportEnum>, ImportEnum::IMPORT_BAR),
+                (53, enum<ImportEnum>, ImportEnum::IMPORT_BAZ),
                 (54, string, "224"), // string_piece
                 (54, string, "324"), // string_piece
                 (55, string, "225"), // cord
@@ -386,7 +402,7 @@ pub mod scalar {
                 (75, bytes, b"416"),
                 (81, enum<NestedEnum>, NestedEnum::FOO),
                 (82, enum<ForeignEnum>, ForeignEnum::FOREIGN_FOO),
-                (83, int32, 7), // no type?
+                (83, enum<ImportEnum>, ImportEnum::IMPORT_FOO),
                 (84, string, "424"), // string_piece
                 (85, string, "425"), // cord
                 (111, uint32, 601),
