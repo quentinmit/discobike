@@ -173,6 +173,23 @@ pub mod scalar {
             };
             (@field $i:ident (
                 $field_number:expr,
+                message, //$( $value:tt )*
+                (
+                    $( ($($value:tt)*) ),* $(,)?
+                )
+            )) => {
+                {
+                    let ($i, tag) = test_fields!(@tag $i, $field_number, crate::WireType::LEN);
+                    let ($i, len) = crate::take_varint::<usize, ()>($i).unwrap();
+                    let ($i, body) = take::<usize, &[u8], ()>(len)($i).unwrap();
+                    test_fields!(body, {
+                        $( ( $( $value )* ) ),*
+                    });
+                    $i
+                }
+            };
+            (@field $i:ident (
+                $field_number:expr,
                 group, //$( $value:tt )*
                 (
                     $( ($($value:tt)*) ),* $(,)?
@@ -201,17 +218,19 @@ pub mod scalar {
                 }
             };
             ($i:ident, { $( ($field_number:expr, $proto_type:tt, $( $value:tt )*) ),* $(,)? }) => {
-                $(
-                    let $i = test_fields!(@field $i ($field_number, $proto_type, $( $value )*));
-                )*
+                {
+                    $(
+                        let $i = test_fields!(@field $i ($field_number, $proto_type, $( $value )*));
+                    )*
                     assert_eq!($i.len(), 0);
+                }
             }
         }
 
         #[test]
         fn test_golden_message() {
             let message_pb = include_bytes!("../testdata/message.pb");
-            trace_macros!(true);
+            //trace_macros!(true);
             test_fields!(message_pb,{
                 (1, int32, 101),
                 (2, int64, 102),
@@ -231,12 +250,12 @@ pub mod scalar {
                 (16, group, (
                     (17, int32, 117), // a
                 )),
-                //(18, nested_message, {),
-                // 1: 118  # bb
-                //}
-                //(19, foreign_message, {),
-                // 1: 119  # c
-                //}
+                (18, message, (
+                    (1, int32, 118), // bb
+                )),
+                (19, message, (
+                    (1, int32, 119), // c
+                )),
                 //(20, int32, {1: 120}),
                 (21, int32, 3), // enum
                 (22, int32, 6), // enum
