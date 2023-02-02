@@ -117,6 +117,7 @@ pub enum Effect {
     RgbVuMeter,
     Pulse,
     Traffic,
+    Halloween,
 }
 
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]

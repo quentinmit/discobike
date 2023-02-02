@@ -200,6 +200,22 @@ pub fn cylon_bounce<const N: usize>(frame: u32, speed: i16, color: Rgbw8) -> [Rg
     out
 }
 
+const PURPLE: Rgbw8 = Rgbw8::new(128, 0, 255, 0);
+const ORANGE: Rgbw8 = Rgbw8::new(255, 128, 0, 0);
+
+pub fn halloween<const N: usize>(frame: u32, speed: i16) -> [Rgbw8; N] {
+    let anim = pareen::ease_in_out::<pareen::easer::functions::Cubic, f32>(
+        0.0,
+        1.0,
+        1.0
+    );
+    let anim = bounce(anim, 1.0);
+
+    let frames = 30 * speed / 256;
+    let t = (frame % (frames.unsigned_abs() as u32)) as f32 / frames as f32;
+    [Rgbw8::new(128, 0, 255, 0); N]
+}
+
 #[derive(Debug)]
 pub struct Fire<const N: usize> {
     heat: [u8; N],
@@ -532,9 +548,10 @@ effects! {
     RgbVuMeter,
     Pulse(Pulse<N>),
     Traffic(Traffic<N>),
+    Halloween,
 }
 
-trace_macros!(true);
+//trace_macros!(true);
 
 macro_rules! palettes {
     (@color $i:ident, ( $r:expr, $g:expr, $b:expr, $w:expr ) ) => {
@@ -626,4 +643,4 @@ palettes! {
     },
 }
 
-trace_macros!(false);
+//trace_macros!(false);

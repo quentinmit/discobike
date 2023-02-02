@@ -399,6 +399,7 @@ impl<'a> Output<'a> {
             RgbVuMeter => effects::rgb_vu_meter(&self.sound_data, self.peak_amplitudes.max()),
             Pulse(ref mut pulse) => pulse.run(&self.volume_tracker),
             Traffic(ref mut traffic) => traffic.run(&self.volume_tracker),
+            Halloween => effects::halloween(self.underlight_frame, desired_state.underlight_speed),
             x => {
                 error!("unsupported effect {:?}", x);
                 [RED; UNDERLIGHT_PIXELS]
