@@ -60,6 +60,7 @@ where
 pub mod scalar {
     use crate::WireType;
     use nom::bytes::complete::take;
+    use nom::combinator::{map_opt, map_res};
     use nom::error::{ErrorKind, ParseError};
     use nom::ParseTo;
     use nom::Parser;
@@ -78,6 +79,20 @@ pub mod scalar {
         };
     }
 
+    fn take_u64<'a, O: TryFrom<u64>, E: ParseError<&'a [u8]>> (i: &'a [u8]) -> nom::IResult<&'a [u8], O, E> {
+        map_opt(
+            nom::number::complete::le_u64,
+            |x| x.try_into().ok()
+        )(i)
+    }
+
+    fn take_u32<'a, O: TryFrom<u32>, E: ParseError<&'a [u8]>> (i: &'a [u8]) -> nom::IResult<&'a [u8], O, E> {
+        map_opt(
+            nom::number::complete::le_u32,
+            |x| x.try_into().ok()
+        )(i)
+    }
+
     macro_rules! impl_int {
         ($proto_type:ident, $rust_type:ty) => {
             impl_int!($proto_type, $rust_type, $rust_type);
@@ -88,23 +103,12 @@ pub mod scalar {
         ($proto_type:ident, $intermediate_rust_type:ty, $rust_type:ty, $take_varint_function:ident::<$( $take_generics:ty ),*>) => {
             impl_type!($proto_type, (wire_type, i) -> ($rust_type) {
                     match wire_type {
-                        WireType::VARINT => crate::$take_varint_function::<$($take_generics),*, E>(i).map(|(remainder, x)| (remainder, x as $rust_type)),
-                        WireType::I64 => nom::number::complete::le_u64(i)
-                            .and_then(|(remainder, x)|
-                                 Ok((remainder,
-                                     x.try_into().map_err(
-                                         |_| nom::Err::Error(E::from_error_kind(i, ErrorKind::TooLarge)))?
-                                 ))
-                            ),
-                        WireType::I32 => nom::number::complete::le_u32(i)
-                            .and_then(|(remainder, x)|
-                                 Ok((remainder,
-                                     x.try_into().map_err(
-                                         |_| nom::Err::Error(E::from_error_kind(i, ErrorKind::TooLarge)))?
-                                 ))
-                            ),
+                        // TODO: Handle packed (LEN) integers by taking the last value.
+                        WireType::VARINT => crate::$take_varint_function::<$($take_generics),*, E>(i),
+                        WireType::I64 => take_u64(i),
+                        WireType::I32 => take_u32(i),
                         _ => Err(nom::Err::Error(E::from_error_kind(i, ErrorKind::MapOpt))),
-                    }
+                    }.map(|(remainder, x)| (remainder, x as $rust_type))
                 });
         };
     }
@@ -118,7 +122,7 @@ pub mod scalar {
     });
     impl_type!(float, (wire_type, i) -> (f32) {
         match wire_type {
-                WireType::I64 => nom::number::complete::le_f64(i).map(|(remainder, x)| (remainder, x as f32)),
+            WireType::I64 => nom::number::complete::le_f64(i).map(|(remainder, x)| (remainder, x as f32)),
             WireType::I32 => nom::number::complete::le_f32(i),
             _ => Err(nom::Err::Error(E::from_error_kind(i, ErrorKind::MapOpt))),
         }
@@ -273,7 +277,7 @@ pub mod scalar {
         #[test]
         fn test_golden_message() {
             let message_pb = include_bytes!("../testdata/message.pb");
-            test_fields!(message_pb,{
+            test_fields!(message_pb, {
                 (1, int32, 101),
                 (2, int64, 102),
                 (3, uint32, 103),
