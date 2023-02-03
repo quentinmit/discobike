@@ -236,14 +236,40 @@ pub mod scalar {
                     }
                 }
             };
-            ($i:ident, { $( ($field_number:expr, $proto_type:tt $(< $generic_type:ty >)?, $( $value:tt )*) ),* $(,)? }) => {
+            ($i:expr, { $( ($field_number:expr, $proto_type:tt $(< $generic_type:ty >)?, $( $value:tt )*) ),* $(,)? }) => {
                 {
+                    let i = $i;
                     $(
-                        let $i = test_fields!(@field $i ($field_number, $proto_type $(< $generic_type >)?, $( $value )*));
+                        let i = test_fields!(@field i ($field_number, $proto_type $(< $generic_type >)?, $( $value )*));
                     )*
-                    assert_eq!($i.len(), 0);
+                    assert_eq!(i.len(), 0);
                 }
             }
+        }
+
+        #[test]
+        fn test_negative_integers() {
+            test_fields!(&[0, 1], {
+                (0, int32, 1),
+            });
+            test_fields!(&[0, 1], {
+                (0, sint32, -1),
+            });
+            test_fields!(&[0, 0xFF, 0xFF, 0xFF, 0xFF, 0x0F], {
+                (0, int32, -1),
+            });
+            test_fields!(&[0, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x01], {
+                (0, int64, -1),
+            });
+            test_fields!(&[0x05, 0xFF, 0xFF, 0xFF, 0xFF], {
+                (0, int32, -1),
+            });
+            test_fields!(&[0x05, 0xFF, 0xFF, 0xFF, 0xFF], {
+                (0, sfixed32, -1),
+            });
+            test_fields!(&[0x05, 0xFF, 0xFF, 0xFF, 0xFF], {
+                (0, fixed32, 0xFFFFFFFF),
+            });
         }
 
         #[derive(Clone, Copy, Debug, PartialEq, TryFromPrimitive)]
