@@ -59,11 +59,12 @@ where
 
 pub mod scalar {
     use crate::WireType;
+    use crate::WireType::*;
     use nom::bytes::complete::take;
-    use nom::combinator::{map_opt, map_res};
+    use nom::combinator::{map_opt, map_res, map_parser};
+    use nom::multi::length_data;
     use nom::error::{ErrorKind, ParseError};
-    use nom::ParseTo;
-    use nom::Parser;
+    use nom::{Parser, InputLength, ParseTo};
     use paste::paste;
 
     macro_rules! impl_type {
@@ -93,23 +94,56 @@ pub mod scalar {
         )(i)
     }
 
-    macro_rules! impl_int {
-        ($proto_type:ident, $rust_type:ty) => {
-            impl_int!($proto_type, $rust_type, $rust_type);
-        };
-        ($proto_type:ident, $intermediate_rust_type:ty, $rust_type:ty) => {
-            impl_int!($proto_type, $intermediate_rust_type, $rust_type, take_varint::<$intermediate_rust_type>);
-        };
-        ($proto_type:ident, $intermediate_rust_type:ty, $rust_type:ty, $take_varint_function:ident::<$( $take_generics:ty ),*>) => {
-            impl_type!($proto_type, (wire_type, i) -> ($rust_type) {
+    macro_rules! impl_packed {
+        ($proto_type:ident, $normal_wire_type:expr, $rust_type:ty) => {
+            paste! {
+                impl_type!($proto_type, (wire_type, i) -> ($rust_type) {
                     match wire_type {
-                        // TODO: Handle packed (LEN) integers by taking the last value.
+                        // Packed repeated integers are represented by LEN followed by repeated 
+                        WireType::LEN =>
+                            map_parser(
+                                |i| take_bytes(wire_type, i),
+                                |mut i| {
+                                    loop {
+                                        match [< take_one_ $proto_type >]($normal_wire_type, i) {
+                                            Err(e) => return Err(e),
+                                            Ok((rem, o)) => {
+                                                if rem.input_len() == 0 {
+                                                    return Ok((rem, o))
+                                                }
+                                                i = rem;
+                                            },
+                                        }
+                                    }
+                                }
+                            )(i),
+                        _ => [< take_one_ $proto_type >](wire_type, i)
+                    }
+                });
+            }
+        };
+    }
+
+
+    macro_rules! impl_int {
+        ($proto_type:ident, $normal_wire_type:expr, $rust_type:ty) => {
+            impl_int!($proto_type, $normal_wire_type, $rust_type, $rust_type);
+        };
+        ($proto_type:ident, $normal_wire_type:expr, $intermediate_rust_type:ty, $rust_type:ty) => {
+            impl_int!($proto_type, $normal_wire_type, $intermediate_rust_type, $rust_type, take_varint::<$intermediate_rust_type>);
+        };
+        ($proto_type:ident, $normal_wire_type:expr, $intermediate_rust_type:ty, $rust_type:ty, $take_varint_function:ident::<$( $take_generics:ty ),*>) => {
+            impl_packed!($proto_type, $normal_wire_type, $rust_type);
+            paste! {
+                impl_type!([< one_ $proto_type >], (wire_type, i) -> ($rust_type) {
+                    match wire_type {
                         WireType::VARINT => crate::$take_varint_function::<$($take_generics),*, E>(i),
                         WireType::I64 => take_u64(i),
                         WireType::I32 => take_u32(i),
                         _ => Err(nom::Err::Error(E::from_error_kind(i, ErrorKind::MapOpt))),
                     }.map(|(remainder, x)| (remainder, x as $rust_type))
                 });
+            }
         };
     }
 
@@ -127,16 +161,16 @@ pub mod scalar {
             _ => Err(nom::Err::Error(E::from_error_kind(i, ErrorKind::MapOpt))),
         }
     });
-    impl_int!(int32, u32, i32); // 2's complement
-    impl_int!(int64, u64, i64); // 2's complement
-    impl_int!(uint32, u32);
-    impl_int!(uint64, u64);
-    impl_int!(sint32, i32, i32, take_signed_varint::<i32, u32>); // ZigZag
-    impl_int!(sint64, i64, i64, take_signed_varint::<i64, u64>); // ZigZag
-    impl_int!(fixed32, u32);
-    impl_int!(fixed64, u64);
-    impl_int!(sfixed32, u32, i32); // 2's complement
-    impl_int!(sfixed64, u64, i64); // 2's complement
+    impl_int!(int32, VARINT, u32, i32); // 2's complement
+    impl_int!(int64, VARINT, u64, i64); // 2's complement
+    impl_int!(uint32, VARINT, u32);
+    impl_int!(uint64, VARINT, u64);
+    impl_int!(sint32, VARINT, i32, i32, take_signed_varint::<i32, u32>); // ZigZag
+    impl_int!(sint64, VARINT, i64, i64, take_signed_varint::<i64, u64>); // ZigZag
+    impl_int!(fixed32, I32, u32);
+    impl_int!(fixed64, I64, u64);
+    impl_int!(sfixed32, I32, u32, i32); // 2's complement
+    impl_int!(sfixed64, I64, u64, i64); // 2's complement
     impl_type!(bool, (wire_type, i) -> (bool) {
         take_uint32(wire_type, i).map(|(remainder, x)| (remainder, x != 0))
     });
@@ -155,10 +189,8 @@ pub mod scalar {
     });
     impl_type!(bytes, (wire_type, i) -> (&[u8]) {
         match wire_type {
-            WireType::LEN => {
-                    let (remainder, len) = crate::varint::take_varint::<usize, E>(i)?;
-                    take::<usize, &[u8], E>(len)(remainder)
-                },
+            WireType::LEN =>
+                length_data(crate::varint::take_varint::<usize, E>)(i),
             _ => Err(nom::Err::Error(E::from_error_kind(i, ErrorKind::MapOpt))),
         }
     });
@@ -269,6 +301,14 @@ pub mod scalar {
             });
             test_fields!(&[0x05, 0xFF, 0xFF, 0xFF, 0xFF], {
                 (0, fixed32, 0xFFFFFFFF),
+            });
+        }
+
+        #[test]
+        fn test_packed_integers() {
+            test_fields!(&[2, 2, 3, 4, 8, 5], {
+                (0, int32, 4),
+                (1, int32, 5),
             });
         }
 
