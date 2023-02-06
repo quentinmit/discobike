@@ -19,10 +19,18 @@ use embassy_sync::blocking_mutex::{
 
 use core::cell::{Cell, RefCell};
 use core::fmt;
+use core::convert::{TryFrom, TryInto};
+use core::num::TryFromIntError;
 use serde::{Deserialize, Serialize, Serializer};
 use dim::si::{f32consts::V, Ampere, Kelvin, Lux, MeterPerSecond2, Pascal, Volt};
 use num_enum::TryFromPrimitive;
 use drogue_device::drivers::led::neopixel::rgbw::Rgbw8;
+
+use nom;
+use nom::combinator::map_res;
+use nom::error::ParseError;
+use nom::Parser;
+use nom_protobuf;
 
 #[cfg(feature = "defmt")]
 pub use defmt::Debug2Format;
@@ -92,6 +100,14 @@ pub enum HeadlightMode {
     AutoDim = 5,
 }
 
+impl TryFrom<i32> for HeadlightMode {
+    type Error = <Self as TryFrom<u8>>::Error;
+
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        (value as u8).try_into()
+    }
+}
+
 #[repr(u8)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize, TryFromPrimitive)]
@@ -100,6 +116,14 @@ pub enum UnderlightMode {
     Auto = 1,
     On = 2,
     ForceOn = 3,
+}
+
+impl TryFrom<i32> for UnderlightMode {
+    type Error = <Self as TryFrom<u8>>::Error;
+
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        (value as u8).try_into()
+    }
 }
 
 #[repr(u8)]
@@ -120,6 +144,14 @@ pub enum Effect {
     Halloween,
 }
 
+impl TryFrom<i32> for Effect {
+    type Error = <Self as TryFrom<u8>>::Error;
+
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        (value as u8).try_into()
+    }
+}
+
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[derive(Copy, Clone)]
 pub struct DesiredState {
@@ -128,6 +160,26 @@ pub struct DesiredState {
     pub underlight_effect: Effect,
     pub underlight_speed: i16,
     pub underlight_color: Rgbw8,
+}
+
+impl DesiredState {
+    pub fn parse_from<'a, E>(&mut self, input: &'a [u8]) -> Result<(), nom::Err<E>>
+    where E: ParseError<&'a [u8]> + nom::error::FromExternalError<&'a [u8], num_enum::TryFromPrimitiveError<HeadlightMode>> + nom::error::FromExternalError<&'a [u8], num_enum::TryFromPrimitiveError<UnderlightMode>> + nom::error::FromExternalError<&'a [u8], num_enum::TryFromPrimitiveError<Effect>> + nom::error::FromExternalError<&'a [u8], TryFromIntError>
+    {
+        let mut i = input;
+        while i.len() > 0 {
+            let (remainder, tag) = nom_protobuf::take_tag(i)?;
+            i = match tag.field_number {
+                0 => {let (r, v) = nom_protobuf::scalar::take_enum(tag.wire_type).parse(i)?; self.headlight_mode = v; r},
+                1 => {let (r, v) = nom_protobuf::scalar::take_enum(tag.wire_type).parse(i)?; self.underlight_mode = v; r},
+                2 => {let (r, v) = nom_protobuf::scalar::take_enum(tag.wire_type).parse(i)?; self.underlight_effect = v; r},
+                3 => {let (r, v) = map_res(nom_protobuf::scalar::take_sint32(tag.wire_type), |v| v.try_into()).parse(i)?; self.underlight_speed = v; r},
+                4 => {let (r, v) = nom_protobuf::scalar::take_uint32(tag.wire_type).parse(i)?; let v = v.to_be_bytes(); self.underlight_color = Rgbw8::new(v[0], v[1], v[2], v[3]); r},
+                _ => nom::combinator::fail::<_, (), _>(i)?.0,
+            };
+        }
+        Ok(())
+    }
 }
 
 #[derive(Copy, Clone, Serialize)]

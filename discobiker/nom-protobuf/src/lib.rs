@@ -26,8 +26,8 @@ pub enum WireType {
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Tag {
-    wire_type: WireType,
-    field_number: usize,
+    pub wire_type: WireType,
+    pub field_number: usize,
 }
 
 pub fn take_tag<'a, E>(i: &'a [u8]) -> nom::IResult<&'a [u8], Tag, E>

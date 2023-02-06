@@ -157,6 +157,8 @@ nanorand = { version = "0.7.0", default-features = false, features = ["wyrand"] 
 tween = { version = "1.0.1", default-features = false, features = ["libm"] }
 pareen = { version = "0.3.0-alpha1", default-features = false, features = ["easer"] }
 atomic-traits = "0.3.0"
+nom = { version = "7.1.3", default-features = false }
+nom-protobuf = { path = "nom-protobuf/" }
 
 [patch.crates-io]
 #embassy-executor = { git = "https://github.com/embassy-rs/embassy" }
@@ -200,3 +202,4 @@ nrf-softdevice-s140 = { path = "/Users/quentin/Software/nrf-softdevice/nrf-softd
 pareen = { path = "/Users/quentin/Software/pareen" }
 easer = { path = "/Users/quentin/Software/rust-easing" }
 atomic-traits = { git = "https://github.com/flier/rust-atomic-traits", rev = "45f4b13d5f4880797cdf3d578ff8821e8bd7ce89" }
+residua-zigzag = { git = "https://github.com/quentinmit/zigzag", branch = "no_std" }
