@@ -145,7 +145,7 @@ static SERVER_FOREVER: StaticCell<Server> = StaticCell::new();
 
 pub static DESIRED_STATE: BlockingMutex<CriticalSectionRawMutex, Cell<DesiredState>> =
     BlockingMutex::new(Cell::new(DesiredState {
-        headlight_mode: HeadlightMode::Auto,
+        headlight_mode: HeadlightMode::AutoDim,
         underlight_mode: UnderlightMode::Auto,
         underlight_effect: Effect::Rainbow,
         underlight_speed: 256,
