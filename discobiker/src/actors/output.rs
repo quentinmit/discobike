@@ -1,6 +1,6 @@
 use crate::{Global, ActualState, Debug2Format, DesiredState, UnderlightMode};
-use drogue_device::drivers::led::neopixel::filter::*;
-use drogue_device::drivers::led::neopixel::rgbw::{NeoPixelRgbw, RED};
+use crate::drivers::neopixel::filter::*;
+use crate::drivers::neopixel::rgbw::{NeoPixelRgbw, RED};
 use ector::{actor, Actor, Address, Inbox};
 use embassy_nrf::gpio::{Level, Output as GpioOutput, OutputDrive};
 use embassy_nrf::pac;
