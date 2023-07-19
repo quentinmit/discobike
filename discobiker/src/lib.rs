@@ -177,7 +177,6 @@ impl DesiredState {
                 4 => {let (r, v) = nom_protobuf::scalar::take_uint32(tag.wire_type).parse(i)?; let v = v.to_be_bytes(); self.underlight_color = Rgbw8::new(v[0], v[1], v[2], v[3]); r},
                 _ => nom::combinator::fail::<_, (), _>(i)?.0,
             };
-            i = remainder;
         }
         Ok(())
     }

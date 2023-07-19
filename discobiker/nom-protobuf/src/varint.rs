@@ -4,8 +4,8 @@ use nom::bytes::complete::take;
 use nom::error::{ErrorKind, ParseError};
 use nom::Err::*;
 use nom::Needed::Unknown;
-use core::ops::{AddAssign, BitAnd};
-use num_traits::{Signed, Unsigned, Zero, CheckedAdd, CheckedShl, CheckedShr, FromPrimitive};
+use core::ops::AddAssign;
+use num_traits::{Unsigned, Zero, CheckedAdd, CheckedShl, CheckedShr, FromPrimitive};
 use zigzag::ZigZagDecode;
 
 /// Parses a varint.
