@@ -512,37 +512,39 @@ async fn main(spawner: Spawner) {
 
     static OUTPUT: ActorContext<actors::output::Output<CriticalSectionRawMutex>, CriticalSectionRawMutex> = ActorContext::new();
 
-    let power_actor = actor!(
+    let power_addr = actor!(
         spawner,
-        POWER,
+        power,
         actors::power::Power<'static, I2cDevice>,
         actors::power::Power::new(&STATE, I2cBusDevice::new(i2c_bus))
     );
 
-    let light = actor!(
+    let light_addr = actor!(
         spawner,
-        LIGHT,
+        light,
         actors::light::Light<'static, I2cDevice>,
         actors::light::Light::new(&STATE, I2cBusDevice::new(i2c_bus))
             .await
             .unwrap()
     );
 
-    let display = actor!(
-        spawner, DISPLAY, actors::display::Display<'static, I2cDevice, DisplaySize128x64>,
+    let display_addr = actor!(
+        spawner,
+        display,
+        actors::display::Display<'static, I2cDevice, DisplaySize128x64>,
         actors::display::Display::new(&STATE, &DESIRED_STATE, I2cBusDevice::new(i2c_bus), DisplaySize128x64)
     );
 
-    let imu = actor!(
+    let imu_addr = actor!(
         spawner,
-        IMU,
+        imu,
         actors::imu::Imu<'static, I2cDevice>,
         actors::imu::Imu::new(&STATE, I2cBusDevice::new(i2c_bus), LSM6DS33_ADDR)
     );
 
-    let barometer = actor!(
+    let barometer_addr = actor!(
         spawner,
-        BAROMETER,
+        barometer,
         actors::barometer::Barometer<'static, I2cDevice>,
         actors::barometer::Barometer::new(&STATE, I2cBusDevice::new(i2c_bus))
     );
@@ -553,9 +555,9 @@ async fn main(spawner: Spawner) {
         unwrap!(spawner.spawn(bluetooth_task(spawner, sd)));
     }
 
-    let sound = actor!(
+    let sound_addr = actor!(
         spawner,
-        SOUND,
+        sound,
         actors::sound::Sound<'static, CriticalSectionRawMutex>,
         actors::sound::Sound::new(
             p.PDM,
@@ -581,7 +583,7 @@ async fn main(spawner: Spawner) {
             use_pin_tail_c!(p),
             use_pin_tail_r!(p),
             use_pin_underlight!(p),
-            sound,
+            sound_addr,
         ),
         CriticalSectionRawMutex
     );
@@ -594,10 +596,10 @@ async fn main(spawner: Spawner) {
         let display_on = STATE.lock(|c| c.get().display_on);
         if display_on != last_display_on {
             futures::join!(
-                power_actor.notify(display_on.into()),
-                barometer.notify(display_on.into()),
-                display.notify(display_on.into()),
-                light.notify(display_on.into()),
+                power_addr.notify(display_on.into()),
+                barometer_addr.notify(display_on.into()),
+                display_addr.notify(display_on.into()),
+                light_addr.notify(display_on.into()),
             );
             last_display_on = display_on;
         }
