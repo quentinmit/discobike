@@ -7,7 +7,7 @@ use dim::si::{Ampere, Ohm, Volt};
 use dim::Dimensionless;
 use maybe_async_cfg;
 
-use embedded_hal::i2c::blocking as i2c_mod;
+use embedded_hal::i2c as i2c_mod;
 #[cfg(feature = "async")]
 use embedded_hal_async::i2c as i2c_mod_async;
 

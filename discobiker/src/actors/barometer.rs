@@ -6,7 +6,7 @@ use core::fmt;
 use dim::f32prefixes::HECTO;
 use dim::si::f32consts::{K, PA};
 use dim::traits::Dimensionless;
-use ector::{actor, Actor, Address, Inbox};
+use ector::{actor, Actor, DynamicAddress, Inbox};
 use embassy_time::{Delay, Duration, Timer};
 use embedded_hal_async::i2c;
 use futures::select_biased;
@@ -105,15 +105,14 @@ where
     }
 }
 
-#[actor]
 impl<I2C, E> Actor for Barometer<'_, I2C>
 where
     I2C: i2c::I2c<Error = E>,
     E: fmt::Debug,
 {
-    type Message<'m> = BarometerMessage;
+    type Message = BarometerMessage;
 
-    async fn on_mount<M>(&mut self, _: Address<BarometerMessage>, mut inbox: M)
+    async fn on_mount<M>(&mut self, _: DynamicAddress<BarometerMessage>, mut inbox: M) -> !
     where
         M: Inbox<BarometerMessage>,
     {

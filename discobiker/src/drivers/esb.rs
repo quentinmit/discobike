@@ -4,7 +4,6 @@ use byteorder::{BigEndian, ByteOrder, LittleEndian};
 use embassy_hal_common::{into_ref, PeripheralRef};
 use embassy_nrf::pac::FICR;
 use embassy_nrf::pac::radio::rxaddresses;
-use staticvec::StaticVec;
 use crate::{pac, peripherals};
 use pac::{radio, RADIO};
 
@@ -109,7 +108,7 @@ impl Default for Config {
             mode: Mode::PTX,
             bitrate: Bitrate::Mbps2,
             crc: CRC::Bit16,
-            tx_output_power: TxPower::_0DBM,
+            tx_output_power: TxPower::_0D_BM,
             retransmit_delay: 250,
             retransmit_count: 3,
             tx_mode: TxMode::Auto,

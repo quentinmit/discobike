@@ -2,7 +2,7 @@ use crate::{Debug2Format, Global, ActualState};
 use apds9960::{Apds9960Async, Error, LightData};
 use core::fmt::{self, Debug};
 use dim::si::{f32consts::LX, Lux};
-use ector::{actor, Actor, Address, Inbox};
+use ector::{actor, Actor, DynamicAddress, Inbox};
 use embassy_time::{Duration, Timer};
 use embedded_hal_async::i2c;
 use futures::select_biased;
@@ -123,15 +123,14 @@ where
     }
 }
 
-#[actor]
 impl<I2C, E> Actor for Light<'_, I2C>
 where
     I2C: i2c::I2c<Error = E>,
     E: fmt::Debug,
 {
-    type Message<'m> = LightMessage;
+    type Message = LightMessage;
 
-    async fn on_mount<M>(&mut self, _: Address<LightMessage>, mut inbox: M)
+    async fn on_mount<M>(&mut self, _: DynamicAddress<LightMessage>, mut inbox: M) -> !
     where
         M: Inbox<LightMessage>,
     {

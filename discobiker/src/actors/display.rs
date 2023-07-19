@@ -11,7 +11,7 @@ use embedded_graphics::{
 };
 use futures::select_biased;
 use futures::{FutureExt, StreamExt};
-use staticvec::{StaticString, StaticVec};
+use arrayvec::{ArrayString, ArrayVec};
 
 use embedded_hal_async::i2c;
 
@@ -30,7 +30,7 @@ use dim::traits::{Dimensioned, Dimensionless, Map};
 use num_traits::Float;
 use physical_constants::STANDARD_ACCELERATION_OF_GRAVITY;
 
-use ector::{actor, Actor, Address, Inbox};
+use ector::{actor, Actor, DynamicAddress, Inbox};
 
 const R: Kelvin<f32> = Kelvin::new(5.0 / 9.0);
 const FAHRENHEIT_ZERO: f32 = CELSIUS_ZERO * 9.0 / 5.0 - 32.0;
@@ -123,6 +123,18 @@ where
     }
 }
 
+trait PushStrTruncating {
+    fn push_str_truncating(&mut self, s: &str);
+}
+
+impl<const CAP: usize> PushStrTruncating for ArrayString<CAP> {
+    fn push_str_truncating(&mut self, s: &str) {
+        let max_length = self.capacity() - self.len();
+        let closest = s.floor_char_boundary(max_length);
+        self.push_str(&s[..closest]);
+    }
+}
+
 #[cfg(debug_assertions)]
 const DISPLAY_PERIOD: Duration = Duration::from_millis(1000 / 2);
 #[cfg(not(debug_assertions))]
@@ -176,11 +188,12 @@ where
         loop {
             let state = self.state.lock(|c| c.get());
             self.display.clear();
-            let mut buf = StaticString::<COLS>::new();
+            let mut buf = ArrayString::<COLS>::new();
             let desired_state = self.desired_state.lock(|c| c.get());
 
             if false {
-                let mut x = StaticVec::<u8, 128>::filled_with(|| 0);
+                let mut x = ArrayVec::<u8, 128>::new();
+                x.fill(0);
                 match bincode::serde::encode_into_slice(
                     &state,
                     x.as_mut_slice(),
@@ -368,16 +381,15 @@ where
     }
 }
 
-#[actor]
 impl<I2C, E, SIZE> Actor for Display<'_, I2C, SIZE>
 where
     I2C: i2c::I2c<Error = E>,
     SIZE: DisplaySize,
     E: fmt::Debug,
 {
-    type Message<'m> = DisplayMessage;
+    type Message = DisplayMessage;
 
-    async fn on_mount<M>(&mut self, _: Address<DisplayMessage>, mut inbox: M)
+    async fn on_mount<M>(&mut self, _: DynamicAddress<DisplayMessage>, mut inbox: M) -> !
     where
         M: Inbox<DisplayMessage>,
     {

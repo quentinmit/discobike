@@ -3,7 +3,7 @@ use crate::{Debug2Format, Global, ActualState};
 use core::fmt;
 use dim::si::f32consts::{A, OHM, V};
 use dim::traits::Dimensionless;
-use ector::{actor, Actor, Address, Inbox};
+use ector::{actor, Actor, DynamicAddress, Inbox};
 use embassy_time::{Duration, Timer};
 use embedded_hal_async::i2c;
 use futures::{select_biased, FutureExt};
@@ -117,15 +117,14 @@ where
     }
 }
 
-#[actor]
 impl<'a, I2C, E> Actor for Power<'a, I2C>
 where
     I2C: i2c::I2c<Error = E>,
     E: fmt::Debug,
 {
-    type Message<'m> = PowerMessage;
+    type Message = PowerMessage;
 
-    async fn on_mount<M>(&mut self, _: Address<PowerMessage>, mut inbox: M)
+    async fn on_mount<M>(&mut self, _: DynamicAddress<PowerMessage>, mut inbox: M) -> !
     where
         M: Inbox<PowerMessage>,
     {

@@ -1,9 +1,10 @@
 use super::output::OutputMessage;
 use crate::Debug2Format;
 use core::sync::atomic::{AtomicBool, Ordering};
-use ector::{actor, Actor, Address, Inbox};
-use embassy_nrf::interrupt;
-use embassy_nrf::pdm::{Channels, Config, Frequency, Pdm, Ratio, SamplerState};
+use ector::mutex::RawMutex;
+use ector::{actor, Actor, Address, DynamicAddress, Inbox, ActorAddress};
+use embassy_nrf::bind_interrupts;
+use embassy_nrf::pdm::{self, OperationMode, Config, Frequency, Pdm, Ratio, SamplerState};
 use embassy_nrf::peripherals;
 use embassy_time::{Duration, Timer};
 use fixed::types::I7F1;
@@ -13,9 +14,13 @@ use num_integer::Roots;
 
 pub(super) type PdmBuffer = [i16; 512];
 
-pub struct Sound<'a> {
-    pdm: Pdm<'a>,
-    output: Address<OutputMessage>,
+bind_interrupts!(struct Irqs {
+    PDM => pdm::InterruptHandler<peripherals::PDM>;
+});
+
+pub struct Sound<'a, MUT: RawMutex + 'static> {
+    pdm: Pdm<'a, peripherals::PDM>,
+    output: Address<OutputMessage, MUT>,
 }
 
 pub enum SoundMessage {
@@ -29,19 +34,20 @@ pub struct SoundData {
     pub bands: [u16; 8],
 }
 
-impl Sound<'_> {
+impl<MUT: RawMutex + 'static> Sound<'_, MUT>
+{
     pub fn new(
         p: peripherals::PDM,
         pin_data: crate::PinPdmData,
         pin_clock: crate::PinPdmClock,
-        output: Address<super::output::OutputMessage>,
+        output: Address<super::output::OutputMessage, MUT>,
     ) -> Self {
         let mut config = Config::default();
         config.frequency = Frequency::_1280K; // 16 kHz sample rate
         config.ratio = Ratio::RATIO80;
-        config.channels = Channels::Mono;
+        config.operation_mode = OperationMode::Mono;
         config.gain_left = I7F1::from_bits(40); // 20 dB gain
-        let pdm = Pdm::new(p, interrupt::take!(PDM), pin_data, pin_clock, config);
+        let pdm = Pdm::new(p, Irqs, pin_data, pin_clock, config);
         Sound { pdm, output }
     }
 
@@ -134,11 +140,10 @@ impl Sound<'_> {
     }
 }
 
-#[actor]
-impl Actor for Sound<'_> {
-    type Message<'m> = SoundMessage;
+impl<MUT: RawMutex + 'static> Actor for Sound<'_, MUT> {
+    type Message = SoundMessage;
 
-    async fn on_mount<M>(&mut self, _: Address<SoundMessage>, mut inbox: M)
+    async fn on_mount<M>(&mut self, _: DynamicAddress<SoundMessage>, mut inbox: M) -> !
     where
         M: Inbox<SoundMessage>,
     {

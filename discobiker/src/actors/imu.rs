@@ -12,7 +12,7 @@ use dim::ucum::{
 };
 use dim::{derived, Dimensionless};
 use dim::{typenum::Pow, Sqrt};
-use ector::{actor, Actor, Address, Inbox};
+use ector::{actor, Actor, DynamicAddress, Inbox};
 use embassy_time::{Duration, Timer};
 use embedded_hal_async::i2c;
 use lsm6ds33::{self, *};
@@ -133,15 +133,14 @@ where
     }
 }
 
-#[actor]
 impl<I2C, E> Actor for Imu<'_, I2C>
 where
     I2C: i2c::I2c<Error = E>,
     E: fmt::Debug,
 {
-    type Message<'m> = ImuMessage;
+    type Message = ImuMessage;
 
-    async fn on_mount<M>(&mut self, _: Address<ImuMessage>, mut inbox: M)
+    async fn on_mount<M>(&mut self, _: DynamicAddress<ImuMessage>, mut inbox: M) -> !
     where
         M: Inbox<ImuMessage>,
     {

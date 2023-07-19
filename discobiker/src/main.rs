@@ -15,12 +15,13 @@ use core::convert::TryInto;
 use core::fmt;
 use core::mem;
 use core::sync::atomic::{AtomicU8, Ordering};
-use drogue_device::drivers::led::neopixel::rgbw::{Rgbw8, RED};
+use crate::drivers::neopixel::rgbw::{Rgbw8, RED};
 use embassy_executor::Spawner;
-use embassy_nrf as _;
-use embassy_nrf::executor::InterruptExecutor;
+use embassy_nrf::{self as _, bind_interrupts};
+use embassy_executor::{self, InterruptExecutor};
 use embassy_nrf::gpio::{Level, Output, OutputDrive};
-use embassy_nrf::interrupt::{self, InterruptExt, Priority};
+use embassy_nrf::interrupt;
+use embassy_nrf::interrupt::{InterruptExt, Priority};
 use embassy_nrf::peripherals::{SAADC, TWISPI0};
 use embassy_nrf::twim::{self, Twim};
 use embassy_nrf::wdt;
@@ -42,7 +43,7 @@ use embassy_sync::mutex::Mutex;
 use discobiker::*;
 use discobiker::panic;
 
-use drogue_device::drivers::led::neopixel::{rgb, rgb::NeoPixelRgb};
+use crate::drivers::neopixel::{rgb, rgb::NeoPixelRgb};
 
 #[cfg(feature = "defmt")]
 use defmt_rtt as _;
@@ -53,7 +54,7 @@ use panic_probe as _;
 
 use num_enum::TryFromPrimitive;
 
-use ector::{spawn_actor, ActorContext};
+use ector::{actor, spawn_context, ActorContext, ActorAddress};
 
 use atomic_counter::Counter;
 
@@ -96,6 +97,11 @@ cfg_if::cfg_if! {
 // 0x6A - LSM6DS33 Gyro + Accel
 const LSM6DS33_ADDR: u8 = 0x6A;
 // 0x77 - BMP280 Temperature + Pressure
+
+bind_interrupts!(struct Irqs {
+    SAADC => saadc::InterruptHandler;
+    SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0 => twim::InterruptHandler<TWISPI0>;
+});
 
 #[nrf_softdevice::gatt_service(uuid = "180f")]
 pub struct BatteryService {
@@ -287,9 +293,7 @@ pub async fn gatt_server_task(sd: &'static Softdevice, conn: Connection, server:
     })
     .await;
 
-    if let Err(e) = res {
-        info!("gatt_server run exited with error: {:?}", e);
-    }
+    info!("gatt_server run exited");
 }
 
 fn calculate_adc_one_bit(
@@ -332,7 +336,7 @@ async fn adc_task(psaadc: SAADC, pin_vbat: PinVbat, interval: Duration) {
     // P0.29 / AIN5 is connected to Vbat through a 100K/100K resistor divider.
     let channel_config = saadc::ChannelConfig::single_ended(pin_vbat);
     let adc_one_bit = calculate_adc_one_bit(&config, &channel_config);
-    let mut saadc = saadc::Saadc::new(psaadc, interrupt::take!(SAADC), config, [channel_config]);
+    let mut saadc = saadc::Saadc::new(psaadc, Irqs, config, [channel_config]);
 
     loop {
         let mut buf = [0; 1];
@@ -358,7 +362,7 @@ async fn adc_task(psaadc: SAADC, pin_vbat: PinVbat, interval: Duration) {
             vbat_percent
         );
         if let Some(server) = SERVER.borrow().borrow().as_ref() {
-            if let Err(e) = server.bas.battery_level_set(vbat_percent) {
+            if let Err(e) = server.bas.battery_level_set(&vbat_percent) {
                 error!("battery_level_set had error: {:?}", e);
             }
         }
@@ -417,9 +421,13 @@ fn config() -> embassy_nrf::config::Config {
 const BLUETOOTH: bool = true;
 const WDT: bool = false;
 
-static EXECUTOR_HIGH: StaticCell<InterruptExecutor<interrupt::SWI0_EGU0>> = StaticCell::new();
+#[interrupt]
+unsafe fn SWI0_EGU0() {
+    EXECUTOR_HIGH.on_interrupt()
+}
+static EXECUTOR_HIGH: InterruptExecutor = InterruptExecutor::new();
 
-#[embassy_executor::main()]
+#[embassy_executor::main]
 async fn main(spawner: Spawner) {
     let p = embassy_nrf::init(config());
     #[cfg(all(feature = "systemview-target", feature = "log"))]
@@ -429,10 +437,8 @@ async fn main(spawner: Spawner) {
         ::log::set_max_level(::log::LevelFilter::Trace);
     }
 
-    let irq = interrupt::take!(SWI0_EGU0);
-    irq.set_priority(interrupt::Priority::P7);
-    let executor = EXECUTOR_HIGH.init(InterruptExecutor::new(irq));
-    let spawner_high = executor.start();
+    interrupt::SWI0_EGU0.set_priority(interrupt::Priority::P7);
+    let spawner_high = EXECUTOR_HIGH.start(interrupt::SWI0_EGU0);
 
     info!("Booting!");
     let mut neopixel = unwrap!(NeoPixelRgb::<'_, _, 1>::new(p.PWM0, use_pin_neo_pixel!(p)));
@@ -499,8 +505,7 @@ async fn main(spawner: Spawner) {
     twimconfig.frequency = twim::Frequency::K400;
     twimconfig.sda_pullup = true;
     twimconfig.scl_pullup = true;
-    let irq = interrupt::take!(SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0);
-    let i2c = Twim::new(p.TWISPI0, irq, use_pin_sda!(p), use_pin_scl!(p), twimconfig);
+    let i2c = Twim::new(p.TWISPI0, Irqs, use_pin_sda!(p), use_pin_scl!(p), twimconfig);
 
     static I2C_BUS: StaticCell<Mutex<ThreadModeRawMutex, Twim<TWISPI0>>> = StaticCell::new();
     let i2c_bus = Mutex::<ThreadModeRawMutex, _>::new(i2c);
@@ -508,40 +513,40 @@ async fn main(spawner: Spawner) {
 
     info!("Peripherals initialized, starting actors");
 
-    static OUTPUT: ActorContext<actors::output::Output> = ActorContext::new();
+    static OUTPUT: ActorContext<actors::output::Output<CriticalSectionRawMutex>, CriticalSectionRawMutex> = ActorContext::new();
 
-    let power_actor = spawn_actor!(
+    let power_actor = actor!(
         spawner,
         POWER,
-        actors::power::Power<I2cDevice>,
+        actors::power::Power<'static, I2cDevice>,
         actors::power::Power::new(&STATE, I2cBusDevice::new(i2c_bus))
     );
 
-    let light = spawn_actor!(
+    let light = actor!(
         spawner,
         LIGHT,
-        actors::light::Light<I2cDevice>,
+        actors::light::Light<'static, I2cDevice>,
         actors::light::Light::new(&STATE, I2cBusDevice::new(i2c_bus))
             .await
             .unwrap()
     );
 
-    let display = spawn_actor!(
-        spawner, DISPLAY, actors::display::Display<I2cDevice, DisplaySize128x64>,
+    let display = actor!(
+        spawner, DISPLAY, actors::display::Display<'static, I2cDevice, DisplaySize128x64>,
         actors::display::Display::new(&STATE, &DESIRED_STATE, I2cBusDevice::new(i2c_bus), DisplaySize128x64)
     );
 
-    let imu = spawn_actor!(
+    let imu = actor!(
         spawner,
         IMU,
-        actors::imu::Imu<I2cDevice>,
+        actors::imu::Imu<'static, I2cDevice>,
         actors::imu::Imu::new(&STATE, I2cBusDevice::new(i2c_bus), LSM6DS33_ADDR)
     );
 
-    let barometer = spawn_actor!(
+    let barometer = actor!(
         spawner,
         BAROMETER,
-        actors::barometer::Barometer<I2cDevice>,
+        actors::barometer::Barometer<'static, I2cDevice>,
         actors::barometer::Barometer::new(&STATE, I2cBusDevice::new(i2c_bus))
     );
 
@@ -551,20 +556,20 @@ async fn main(spawner: Spawner) {
         unwrap!(spawner.spawn(bluetooth_task(spawner, sd)));
     }
 
-    let sound = spawn_actor!(
+    let sound = actor!(
         spawner,
         SOUND,
-        actors::sound::Sound,
+        actors::sound::Sound<'static, CriticalSectionRawMutex>,
         actors::sound::Sound::new(
             p.PDM,
             use_pin_pdm_data!(p),
             use_pin_pdm_clock!(p),
             OUTPUT.address(),
-        )
+        ),
+        CriticalSectionRawMutex
     );
 
-    OUTPUT.mount(
-        spawner,
+    spawn_context!(OUTPUT, spawner, output, actors::output::Output<'static, CriticalSectionRawMutex>,
         actors::output::Output::new(
             &STATE,
             &DESIRED_STATE,
@@ -581,6 +586,7 @@ async fn main(spawner: Spawner) {
             use_pin_underlight!(p),
             sound,
         ),
+        CriticalSectionRawMutex
     );
     unwrap!(spawner.spawn(adc_task(saadc, pin_vbat, Duration::from_millis(500))));
     //#[cfg(feature = "mdbt50q")]

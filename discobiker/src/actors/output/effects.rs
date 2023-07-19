@@ -2,8 +2,8 @@ use core::cmp::min;
 use core::f32::consts::PI;
 use core::ops::{Add, Range, Sub};
 
-use drogue_device::drivers::led::neopixel::rgbw::{Rgbw8, BLACK};
-use drogue_device::drivers::led::neopixel::Pixel;
+use crate::drivers::neopixel::rgbw::{Rgbw8, BLACK};
+use crate::drivers::neopixel::Pixel;
 use embassy_time::Instant;
 use micromath::F32Ext;
 use nanorand::{Rng, WyRand};
@@ -204,15 +204,28 @@ const PURPLE: Rgbw8 = Rgbw8::new(128, 0, 255, 0);
 const ORANGE: Rgbw8 = Rgbw8::new(255, 128, 0, 0);
 
 pub fn halloween<const N: usize>(frame: u32, speed: i16) -> [Rgbw8; N] {
-    let anim = pareen::ease_in_out::<pareen::easer::functions::Cubic, f32>(
+    let center_anim = pareen::ease_out::<pareen::easer::functions::Quart, f32>(
         0.0,
-        1.0,
+        (N as f32)/2.0,
         1.0
     );
-    let anim = bounce(anim, 1.0);
+    let center_anim = center_anim.repeat(1.0);
 
-    let frames = 30 * speed / 256;
-    let t = (frame % (frames.unsigned_abs() as u32)) as f32 / frames as f32;
+    let frames = 60 * (speed as i32) / 256;
+    let t = (frame % frames.unsigned_abs()) as f32 / frames as f32;
+
+    let center = center_anim.eval(frame as f32 / 30.0);
+
+    let brightness = pareen::constant(1.0)
+    .seq_ease_in(
+        2.0,
+        pareen::easer::functions::Quad,
+        1.0,
+        pareen::constant(0.0),
+    )
+    .map_time(|t: f32| t.abs())
+    .shift_time(center);
+
     [Rgbw8::new(128, 0, 255, 0); N]
 }
 

@@ -203,7 +203,6 @@ checksum = "70858629a458fdfd39f9675c4dc309411f2a3f83bede76988d81bf1a0ecee9e0"
 dependencies = [
  "bare-metal 0.2.5",
  "bitfield",
- "critical-section 1.1.0",
  "embedded-hal 0.2.7",
  "volatile-register",
 ]
@@ -398,7 +397,7 @@ dependencies = [
  "display-interface",
  "ector",
  "embassy-embedded-hal",
- "embassy-executor 0.1.1",
+ "embassy-executor",
  "embassy-futures",
  "embassy-hal-common",
  "embassy-nrf",
@@ -469,7 +468,7 @@ version = "0.4.0"
 dependencies = [
  "atomic-polyfill 1.0.1",
  "ector-macros",
- "embassy-executor 0.2.0",
+ "embassy-executor",
  "embassy-sync",
  "futures",
  "static_cell",
@@ -502,29 +501,16 @@ dependencies = [
 
 [[package]]
 name = "embassy-executor"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b4f2f7687ed60a799909eca1bf68b41e9f2ad03d740f0956a945ddabccc6aedb"
-dependencies = [
- "atomic-polyfill 1.0.1",
- "cfg-if",
- "critical-section 1.1.0",
- "defmt",
- "embassy-macros 0.1.0",
- "embassy-time",
- "futures-util",
- "rtos-trace",
- "static_cell",
-]
-
-[[package]]
-name = "embassy-executor"
 version = "0.2.0"
 dependencies = [
  "atomic-polyfill 1.0.1",
+ "cortex-m",
  "critical-section 1.1.0",
- "embassy-macros 0.2.0",
+ "defmt",
+ "embassy-macros",
+ "embassy-time",
  "futures-util",
+ "rtos-trace",
  "static_cell",
 ]
 
@@ -540,18 +526,6 @@ dependencies = [
  "critical-section 1.1.0",
  "defmt",
  "num-traits",
-]
-
-[[package]]
-name = "embassy-macros"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c8f57fb96af50e126bb4ae0826604ac5b9f9ac1d32fb3576d552f7285bf68e67"
-dependencies = [
- "darling 0.13.4",
- "proc-macro2",
- "quote",
- "syn 1.0.99",
 ]
 
 [[package]]

@@ -21,7 +21,7 @@ pub const GREEN: Rgb8 = Rgb8::new(0x00, 0xFF, 0x00);
 pub const BLUE: Rgb8 = Rgb8::new(0x00, 0x00, 0xFF);
 
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Rgb8 {
     r: u8,
     g: u8,

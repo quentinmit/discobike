@@ -1,14 +1,15 @@
 use crate::{Global, ActualState, Debug2Format, DesiredState, UnderlightMode};
 use crate::drivers::neopixel::filter::*;
 use crate::drivers::neopixel::rgbw::{NeoPixelRgbw, RED};
-use ector::{actor, Actor, Address, Inbox};
+use ector::mutex::RawMutex;
+use ector::{actor, Actor, Address, DynamicAddress, Inbox, ActorAddress};
 use embassy_nrf::gpio::{Level, Output as GpioOutput, OutputDrive};
 use embassy_nrf::pac;
 use embassy_nrf::peripherals::{PWM1, PWM2, PWM3};
 use embassy_nrf::pwm::{self, Prescaler, SimplePwm};
 use embassy_nrf::wdt::WatchdogHandle;
 use embassy_time::{Duration, Instant, Ticker, Timer};
-use embedded_hal::digital::blocking::OutputPin;
+use embedded_hal::digital::OutputPin;
 use futures::{pin_mut, select_biased, FutureExt, StreamExt};
 use num_traits::Float;
 extern crate dimensioned as dim;
@@ -82,7 +83,7 @@ where
     }
 }
 
-pub struct Output<'a> {
+pub struct Output<'a, MUT: RawMutex + 'static> {
     state: &'a Global<ActualState>,
     desired_state: &'a Global<DesiredState>,
     wdt_handle: Option<WatchdogHandle>,
@@ -91,7 +92,7 @@ pub struct Output<'a> {
     headlight_pwm: SimplePwm<'a, PWM3>,
     taillight_pwm: SimplePwm<'a, PWM2>,
     underlight: NeoPixelRgbw<'a, PWM1, UNDERLIGHT_PIXELS>,
-    sound: Address<SoundMessage>,
+    sound: Address<SoundMessage, MUT>,
 
     underlight_frame: u32,
     need_sound: bool,
@@ -109,7 +110,7 @@ pub enum OutputMessage {
 
 const FPS: u64 = 30;
 
-impl<'a> Output<'a> {
+impl<'a, MUT: RawMutex + 'static> Output<'a, MUT> {
     pub fn new(
         state: &'a Global<ActualState>,
         desired_state: &'a Global<DesiredState>,
@@ -124,7 +125,7 @@ impl<'a> Output<'a> {
         pin_tail_c: crate::PinTailC,
         pin_tail_r: crate::PinTailR,
         pin_underlight: crate::PinUnderlight,
-        sound: Address<SoundMessage>,
+        sound: Address<SoundMessage, MUT>,
     ) -> Self {
         let power_enable = GpioOutput::new(pin_power_enable, Level::Low, OutputDrive::Standard);
         let mut headlight_pwm = SimplePwm::new_1ch(pwm3, pin_headlight_dim);
@@ -417,11 +418,10 @@ impl<'a> Output<'a> {
     }
 }
 
-#[actor]
-impl Actor for Output<'_> {
-    type Message<'m> = OutputMessage;
+impl<MUT: RawMutex + 'static> Actor for Output<'_, MUT> {
+    type Message = OutputMessage;
 
-    async fn on_mount<M>(&mut self, _: Address<OutputMessage>, mut inbox: M)
+    async fn on_mount<M>(&mut self, _: DynamicAddress<OutputMessage>, mut inbox: M) -> !
     where
         M: Inbox<OutputMessage>,
     {

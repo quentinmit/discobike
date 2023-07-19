@@ -1,5 +1,6 @@
 #![no_std]
 
+#![feature(async_fn_in_trait)]
 #![feature(type_alias_impl_trait)]
 #![feature(impl_trait_in_assoc_type)]
 #![feature(generic_associated_types)]
@@ -9,6 +10,7 @@
 #![feature(trace_macros)]
 #![feature(generic_arg_infer)]
 #![feature(mixed_integer_ops)]
+#![feature(round_char_boundary)]
 
 use embassy_nrf::pac;
 use embassy_nrf::peripherals;
@@ -25,7 +27,7 @@ use core::num::TryFromIntError;
 use serde::{Deserialize, Serialize, Serializer};
 use dim::si::{f32consts::V, Ampere, Kelvin, Lux, MeterPerSecond2, Pascal, Volt};
 use num_enum::TryFromPrimitive;
-use drogue_device::drivers::led::neopixel::rgbw::Rgbw8;
+use crate::drivers::neopixel::rgbw::Rgbw8;
 
 use nom;
 use nom::combinator::map_res;
