@@ -8,6 +8,8 @@ use wasm_bindgen_futures::JsFuture;
 pub enum BluetoothError {
     #[error("WebBluetooth is not supported on this browser")]
     Unsupported,
+    #[error("Device was not found")]
+    NotFound(String),
     #[error("failed to request device: {0:?}")]
     RequestDevice(String),
 }
@@ -26,6 +28,19 @@ async fn list_devices() -> Result<web_sys::BluetoothDevice> {
         .map_err(|e| BluetoothError::RequestDevice(format!("{:?}", e)))?
         .into();
     Ok(device)
+}
+
+#[component]
+fn Device(
+    cx: Scope,
+    #[prop(into)]
+    device: MaybeSignal<web_sys::BluetoothDevice>
+) -> impl IntoView {
+    view!{ cx,
+        <ul>
+            <li>"Name: " {move || device.get().name()}</li>
+        </ul>
+    }
 }
 
 #[component]
@@ -49,16 +64,13 @@ fn App(cx: Scope) -> impl IntoView {
     };
 
     let connect = create_action(cx, |_| list_devices());
-    //let devices = connect.value(); //create_local_resource(cx, move || (), |_| list_devices());
     view! { cx,
         <p>"Bluetooth!"</p>
         <button
             on:click=move |_| connect.dispatch(())
         >Connect</button>
         <ErrorBoundary fallback>
-            <ul>
-                <li>"Name: " {move || connect.value().get().map(|dev| dev.map(|dev| dev.name()))}</li>
-            </ul>
+            {move || connect.value().get().map(|dev| dev.map(|dev| view! { cx, <Device device=dev />}))}
         </ErrorBoundary>
     }
 }
