@@ -569,7 +569,7 @@ async fn main(spawner: Spawner) {
         CriticalSectionRawMutex
     );
 
-    spawn_context!(OUTPUT, spawner, output, actors::output::Output<'static, CriticalSectionRawMutex>,
+    spawn_context!(OUTPUT, spawner_high, output, actors::output::Output<'static, CriticalSectionRawMutex>,
         actors::output::Output::new(
             &STATE,
             &DESIRED_STATE,
