@@ -12,7 +12,7 @@ pub enum BluetoothError {
     RequestDevice(String),
 }
 
-async fn list_devices() -> Result<Vec<String>> {
+async fn list_devices() -> Result<web_sys::BluetoothDevice> {
     let nav = window().navigator();
     let bluetooth = nav.bluetooth().ok_or(BluetoothError::Unsupported)?;
     let mut options = web_sys::RequestDeviceOptions::new();
@@ -25,7 +25,7 @@ async fn list_devices() -> Result<Vec<String>> {
         .await
         .map_err(|e| BluetoothError::RequestDevice(format!("{:?}", e)))?
         .into();
-    Ok(vec![device.name().unwrap_or_default()])
+    Ok(device)
 }
 
 #[component]
@@ -57,15 +57,7 @@ fn App(cx: Scope) -> impl IntoView {
         >Connect</button>
         <ErrorBoundary fallback>
             <ul>
-            {move ||
-                connect.value().get()
-                .map(|devices| devices
-                    .map(|devices| devices
-                        .iter().map(|name| view! { cx, <li> {name} </li> })
-                        .collect_view(cx)
-                    )
-                )
-            }
+                <li>"Name: " {move || connect.value().get().map(|dev| dev.map(|dev| dev.name()))}</li>
             </ul>
         </ErrorBoundary>
     }
