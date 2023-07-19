@@ -1,0 +1,16 @@
+{
+    "rust.all_targets": false,
+    "rust-analyzer.checkOnSave.allTargets": false,
+    "rust-analyzer.checkOnSave.target": "wasm32-unknown-unknown",
+    "rust-analyzer.cargo.target": "wasm32-unknown-unknown",
+    "rust-analyzer.procMacro.enable": true,
+    "rust.target": "wasm32-unknown-unknown",
+    "rust-analyzer.imports.granularity.enforce": true,
+    "rust-analyzer.imports.granularity.group": "module",
+    "rust-analyzer.cargo.buildScripts.enable": true,
+    "rust-analyzer.procMacro.attributes.enable": false,
+    "rust-analyzer.cargo.features": [],
+    "rust-analyzer.cargo.extraEnv": {
+        "RUSTFLAGS": "--cfg=web_sys_unstable_apis"
+    }
+}
