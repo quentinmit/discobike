@@ -48,11 +48,24 @@ fn App(cx: Scope) -> impl IntoView {
         }
     };
 
-    let devices = create_local_resource(cx, move || (), |_| list_devices());
+    let connect = create_action(cx, |_| list_devices());
+    //let devices = connect.value(); //create_local_resource(cx, move || (), |_| list_devices());
     view! { cx,
         <p>"Bluetooth!"</p>
+        <button
+            on:click=move |_| connect.dispatch(())
+        >Connect</button>
         <ErrorBoundary fallback>
-            <ul>{move || devices.read(cx).map(|devices| devices.map(|devices| devices.iter().map(|name| view! { cx, <li> {name} </li> }).collect_view(cx)))}
+            <ul>
+            {move ||
+                connect.value().get()
+                .map(|devices| devices
+                    .map(|devices| devices
+                        .iter().map(|name| view! { cx, <li> {name} </li> })
+                        .collect_view(cx)
+                    )
+                )
+            }
             </ul>
         </ErrorBoundary>
     }
