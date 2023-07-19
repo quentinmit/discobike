@@ -3,24 +3,21 @@
 #![feature(async_fn_in_trait)]
 #![feature(type_alias_impl_trait)]
 #![feature(impl_trait_in_assoc_type)]
-#![feature(generic_associated_types)]
 #![feature(cell_update)]
 #![feature(result_option_inspect)]
-#![feature(int_log)]
 #![feature(trace_macros)]
 #![feature(generic_arg_infer)]
-#![feature(mixed_integer_ops)]
 #![feature(round_char_boundary)]
 
 use embassy_nrf::pac;
 use embassy_nrf::peripherals;
-use embassy_time::{Duration, Instant, Ticker, Timer};
+use embassy_time::{Duration, Instant};
 use embassy_sync::blocking_mutex::{
     raw::{CriticalSectionRawMutex, ThreadModeRawMutex},
     Mutex as BlockingMutex,
 };
 
-use core::cell::{Cell, RefCell};
+use core::cell::Cell;
 use core::fmt;
 use core::convert::{TryFrom, TryInto};
 use core::num::TryFromIntError;
@@ -180,6 +177,7 @@ impl DesiredState {
                 4 => {let (r, v) = nom_protobuf::scalar::take_uint32(tag.wire_type).parse(i)?; let v = v.to_be_bytes(); self.underlight_color = Rgbw8::new(v[0], v[1], v[2], v[3]); r},
                 _ => nom::combinator::fail::<_, (), _>(i)?.0,
             };
+            i = remainder;
         }
         Ok(())
     }

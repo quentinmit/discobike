@@ -2,7 +2,7 @@ use super::output::OutputMessage;
 use crate::Debug2Format;
 use core::sync::atomic::{AtomicBool, Ordering};
 use ector::mutex::RawMutex;
-use ector::{actor, Actor, Address, DynamicAddress, Inbox, ActorAddress};
+use ector::{Actor, Address, DynamicAddress, Inbox, ActorAddress};
 use embassy_nrf::bind_interrupts;
 use embassy_nrf::pdm::{self, OperationMode, Config, Frequency, Pdm, Ratio, SamplerState};
 use embassy_nrf::peripherals;

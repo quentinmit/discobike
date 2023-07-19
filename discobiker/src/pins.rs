@@ -1,4 +1,4 @@
-use crate::{peripherals};
+use crate::peripherals;
 use paste::paste;
 
 macro_rules! define_pin {

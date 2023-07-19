@@ -10,7 +10,7 @@ use embedded_graphics::{
     text::{Baseline, Text},
 };
 use futures::select_biased;
-use futures::{FutureExt, StreamExt};
+use futures::FutureExt;
 use arrayvec::{ArrayString, ArrayVec};
 
 use embedded_hal_async::i2c;
@@ -30,7 +30,7 @@ use dim::traits::{Dimensioned, Dimensionless, Map};
 use num_traits::Float;
 use physical_constants::STANDARD_ACCELERATION_OF_GRAVITY;
 
-use ector::{actor, Actor, DynamicAddress, Inbox};
+use ector::{Actor, DynamicAddress, Inbox};
 
 const R: Kelvin<f32> = Kelvin::new(5.0 / 9.0);
 const FAHRENHEIT_ZERO: f32 = CELSIUS_ZERO * 9.0 / 5.0 - 32.0;

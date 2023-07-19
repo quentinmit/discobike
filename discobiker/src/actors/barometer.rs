@@ -6,7 +6,7 @@ use core::fmt;
 use dim::f32prefixes::HECTO;
 use dim::si::f32consts::{K, PA};
 use dim::traits::Dimensionless;
-use ector::{actor, Actor, DynamicAddress, Inbox};
+use ector::{Actor, DynamicAddress, Inbox};
 use embassy_time::{Delay, Duration, Timer};
 use embedded_hal_async::i2c;
 use futures::select_biased;

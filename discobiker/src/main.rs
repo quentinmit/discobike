@@ -2,13 +2,10 @@
 #![no_main]
 
 #![feature(type_alias_impl_trait)]
-#![feature(generic_associated_types)]
 #![feature(cell_update)]
 #![feature(result_option_inspect)]
-#![feature(int_log)]
 #![feature(trace_macros)]
 #![feature(generic_arg_infer)]
-#![feature(mixed_integer_ops)]
 
 use core::cell::{Cell, RefCell};
 use core::convert::TryInto;
