@@ -395,6 +395,7 @@ dependencies = [
  "leptos",
  "log",
  "thiserror",
+ "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
 ]

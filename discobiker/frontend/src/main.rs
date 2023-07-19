@@ -1,17 +1,36 @@
 use leptos::{error::Result, *};
 use thiserror::Error;
+use wasm_bindgen::{JsValue, JsCast};
 use web_sys;
 use js_sys::Array;
 use wasm_bindgen_futures::JsFuture;
+use log::{debug, info, warn};
 
 #[derive(Error, Clone, Debug)]
 pub enum BluetoothError {
     #[error("WebBluetooth is not supported on this browser")]
     Unsupported,
-    #[error("Device was not found")]
+    #[error("Device was not found: {0:?}")]
     NotFound(String),
     #[error("failed to request device: {0:?}")]
     RequestDevice(String),
+    #[error("Unknown: {0:?}")]
+    Unknown(String),
+}
+
+impl From<JsValue> for BluetoothError {
+    fn from(value: JsValue) -> Self {
+        debug!("converting error {:?} ", value);
+        value.dyn_into::<web_sys::DomException>().map(|exception| {
+            debug!("name {:?} message {:?} code {:?} result {:?}", exception.name(), exception.message(), exception.code(), exception.result());
+            match exception.code() {
+                web_sys::DomException::NOT_FOUND_ERR => BluetoothError::NotFound(exception.message()),
+                web_sys::DomException::SECURITY_ERR => BluetoothError::RequestDevice(exception.message()),
+                _ => BluetoothError::Unknown(format!("{:?}", exception.message()))
+            }
+        })
+        .unwrap_or_else(|e| BluetoothError::Unknown(format!("{:?}", e)))
+    }
 }
 
 async fn list_devices() -> Result<web_sys::BluetoothDevice> {
@@ -25,7 +44,7 @@ async fn list_devices() -> Result<web_sys::BluetoothDevice> {
     options.filters(&filters.into());
     let device: web_sys::BluetoothDevice = JsFuture::from(bluetooth.request_device(&options))
         .await
-        .map_err(|e| BluetoothError::RequestDevice(format!("{:?}", e)))?
+        .map_err(|e| BluetoothError::from(e))?
         .into();
     Ok(device)
 }
