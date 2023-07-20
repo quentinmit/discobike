@@ -14,4 +14,4 @@ log = "0.4.19"
 thiserror = "1.0.43"
 wasm-bindgen = "0.2.87"
 wasm-bindgen-futures = "0.4.37"
-web-sys = { version = "0.3.64", features = ["console", "Navigator", "DomException", "Bluetooth", "BluetoothDevice", "RequestDeviceOptions", "BluetoothLeScanFilterInit"]}
+web-sys = { version = "0.3.64", features = ["console", "Navigator", "DomException", "Bluetooth", "BluetoothDevice", "RequestDeviceOptions", "BluetoothLeScanFilterInit", "BluetoothRemoteGattServer", "BluetoothRemoteGattService"]}

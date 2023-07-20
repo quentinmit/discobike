@@ -16,6 +16,8 @@ pub enum BluetoothError {
     RequestDevice(String),
     #[error("Unknown: {0:?}")]
     Unknown(String),
+    #[error("Device does not support GATT")]
+    MissingGatt,
 }
 
 impl From<JsValue> for BluetoothError {
@@ -26,7 +28,7 @@ impl From<JsValue> for BluetoothError {
             match exception.code() {
                 web_sys::DomException::NOT_FOUND_ERR => BluetoothError::NotFound(exception.message()),
                 web_sys::DomException::SECURITY_ERR => BluetoothError::RequestDevice(exception.message()),
-                _ => BluetoothError::Unknown(format!("{:?}", exception.message()))
+                _ => BluetoothError::Unknown(format!("{:?}", exception))
             }
         })
         .unwrap_or_else(|e| BluetoothError::Unknown(format!("{:?}", e)))
@@ -38,10 +40,16 @@ async fn list_devices() -> Result<web_sys::BluetoothDevice> {
     let bluetooth = nav.bluetooth().ok_or(BluetoothError::Unsupported)?;
     let mut options = web_sys::RequestDeviceOptions::new();
     let mut filter = web_sys::BluetoothLeScanFilterInit::new();
+    let services = Array::from_iter(
+        &["00000000-1fbd-c985-0843-2e5f29538d87", "00000100-1fbd-c985-0843-2e5f29538d87"]
+        .map(|s| JsValue::from_str(s))
+    );
+    //filter.services(&services.into());
     filter.name("DiscobikeR");
     let filters = Array::new();
     filters.push(&filter.into());
     options.filters(&filters.into());
+    options.optional_services(&services.into());
     let device: web_sys::BluetoothDevice = JsFuture::from(bluetooth.request_device(&options))
         .await
         .map_err(|e| BluetoothError::from(e))?
@@ -55,9 +63,32 @@ fn Device(
     #[prop(into)]
     device: MaybeSignal<web_sys::BluetoothDevice>
 ) -> impl IntoView {
+    let services = create_local_resource(
+        cx,
+        device.clone(),
+        move |device| async move {
+        let mut gatt = device.gatt().ok_or(BluetoothError::MissingGatt)?;
+        debug!("got gatt");
+        if !gatt.connected() {
+            debug!("need to connect");
+            gatt = JsFuture::from(gatt.connect()).await?.into();
+            debug!("connected");
+        }
+        debug!("requesting services");
+        let services_jsvalue = JsFuture::from(gatt.get_primary_services()).await?;
+        debug!("converting to array");
+        let services = Array::from(&services_jsvalue);
+        debug!("got services: {:?}", services);
+        Ok::<Vec<web_sys::BluetoothRemoteGattService>, BluetoothError>(services.iter().map(|s| web_sys::BluetoothRemoteGattService::from(s)).collect::<Vec<_>>())
+    });
     view!{ cx,
         <ul>
             <li>"Name: " {move || device.get().name()}</li>
+            <li>Services
+                <ul>
+                    {move || services.read(cx).map(|services| services.map(|services| services.iter().map(|service| view!{ cx, <li>{service.uuid()}</li> }).collect_view(cx)))}
+                </ul>
+            </li>
         </ul>
     }
 }
