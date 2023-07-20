@@ -100,43 +100,8 @@ bind_interrupts!(struct Irqs {
     SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0 => twim::InterruptHandler<TWISPI0>;
 });
 
-#[nrf_softdevice::gatt_service(uuid = "180f")]
-pub struct BatteryService {
-    #[characteristic(uuid = "2a19", read, notify)]
-    battery_level: u8,
-}
-
-#[nrf_softdevice::gatt_service(uuid = "2b18")]
-pub struct ExternalBatteryService {
-    #[characteristic(uuid = "2b18", read, notify)]
-    battery_volts: u8,
-}
-
-#[nrf_softdevice::gatt_service(uuid = "00000000-1fbd-c985-0843-2e5f29538d87")]
-pub struct HeadlightService {
-    #[characteristic(uuid = "00000001-1fbd-c985-0843-2e5f29538d87", read, write)]
-    headlight_mode: u8,
-}
-
-#[nrf_softdevice::gatt_service(uuid = "00000100-1fbd-c985-0843-2e5f29538d87")]
-pub struct UnderlightService {
-    #[characteristic(uuid = "00000101-1fbd-c985-0843-2e5f29538d87", read, write)]
-    underlight_mode: u8,
-    #[characteristic(uuid = "00000102-1fbd-c985-0843-2e5f29538d87", read, write)]
-    underlight_effect: u8,
-    #[characteristic(uuid = "00000103-1fbd-c985-0843-2e5f29538d87", read, write)]
-    underlight_color: [u8; 4],
-    #[characteristic(uuid = "00000104-1fbd-c985-0843-2e5f29538d87", read, write)]
-    underlight_speed: i16,
-}
-
-#[nrf_softdevice::gatt_server]
-pub struct Server {
-    bas: BatteryService,
-    external_battery: ExternalBatteryService,
-    headlight: HeadlightService,
-    underlight: UnderlightService,
-}
+mod ble;
+use ble::*;
 
 #[embassy_executor::task]
 async fn softdevice_task(sd: &'static Softdevice) {
@@ -182,8 +147,8 @@ pub static STATE: BlockingMutex<CriticalSectionRawMutex, Cell<ActualState>> =
 fn bluetooth_start_server(sd: &mut Softdevice) -> Result<(), gatt_server::RegisterError> {
     let server: &Server = SERVER_FOREVER.init(Server::new(sd)?);
 
-    let v = unwrap!(server.bas.battery_level_get());
-    info!("Initial battery level: {}", v);
+    //let v = unwrap!(server.bas.battery_level_get());
+    //info!("Initial battery level: {}", v);
 
     SERVER.borrow().replace(Some(server));
     Ok(())
@@ -229,8 +194,20 @@ pub async fn gatt_server_task(sd: &'static Softdevice, conn: Connection, server:
     let _counter = CONNECTION_COUNT.count_raii();
     // Run the GATT server on the connection. This returns when the connection gets disconnected.
     let res = gatt_server::run(&conn, server, |e| match e {
-        ServerEvent::Bas(_) => {}
-        ServerEvent::ExternalBattery(_) => {}
+        ServerEvent::ExternalBattery(e) => match e {
+            ExternalBatteryServiceEvent::BatteryVoltsCccdWrite { notifications } => {
+                // TODO: Enable notifications
+            }
+            ExternalBatteryServiceEvent::BatteryVoltsRead { offset, reply } => {
+                let vext = STATE.lock(|c| c.get().vext);
+                let value = vext.map(|vext|
+                    (((vext / V).value() * 100.0) as u16).to_le_bytes()
+                );
+                if let Err(e) = reply.reply(Ok(value.as_ref().map(|value| value.as_slice()))) {
+                    warn!("replying: {:?}", e);
+                }
+            }
+        }
         ServerEvent::Headlight(e) => match e {
             HeadlightServiceEvent::HeadlightModeWrite(val) => {
                 DESIRED_STATE.lock(|c| {
@@ -358,11 +335,11 @@ async fn adc_task(psaadc: SAADC, pin_vbat: PinVbat, interval: Duration) {
             (vbat / V).value(),
             vbat_percent
         );
-        if let Some(server) = SERVER.borrow().borrow().as_ref() {
+        /* FIXME if let Some(server) = SERVER.borrow().borrow().as_ref() {
             if let Err(e) = server.bas.battery_level_set(&vbat_percent) {
                 error!("battery_level_set had error: {:?}", e);
             }
-        }
+        } */
         Timer::after(interval).await;
     }
 }
