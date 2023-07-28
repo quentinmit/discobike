@@ -7,9 +7,10 @@
 #![feature(trace_macros)]
 #![feature(generic_arg_infer)]
 
-use core::cell::{Cell, RefCell};
+use core::cell::{Cell, RefCell, OnceCell};
 use core::convert::TryInto;
 use core::fmt;
+use core::fmt::Write;
 use core::mem;
 use core::sync::atomic::{AtomicU8, Ordering};
 use crate::drivers::neopixel::rgbw::{Rgbw8, RED};
@@ -396,6 +397,7 @@ fn config() -> embassy_nrf::config::Config {
 const BLUETOOTH: bool = true;
 const WDT: bool = false;
 
+#[allow(non_snake_case)]
 #[interrupt]
 unsafe fn SWI0_EGU0() {
     EXECUTOR_HIGH.on_interrupt()
@@ -428,6 +430,19 @@ async fn main(spawner: Spawner) {
     };
     info!("WDT started");
 
+    // Requires embassy-nrf/unstable-pac
+    // TODO: Replace with safe API when one exists.
+    let ficr = unsafe { &*pac::FICR::ptr() };
+    let deviceid = (ficr.deviceid[0].read().deviceid().bits() as u64) | (ficr.deviceid[1].read().deviceid().bits() as u64) << 32;
+    info!("FICR.DEVICEID = {:X}", deviceid);
+
+    static DEVICE_NAME: ThreadModeMutex<OnceCell<heapless::String<32>>> = ThreadModeMutex::new(OnceCell::new());
+    let device_name = DEVICE_NAME.borrow().get_or_init(|| {
+        let mut out: heapless::String<_> = "DiscobikeR".into();
+        let _ = write!(&mut out, " {:X}", deviceid);
+        out
+    });
+
     let sdconfig = nrf_softdevice::Config {
         clock: Some(raw::nrf_clock_lf_cfg_t {
             source: raw::NRF_CLOCK_LF_SRC_RC as u8,
@@ -451,12 +466,12 @@ async fn main(spawner: Spawner) {
             _bitfield_1: raw::ble_gap_cfg_role_count_t::new_bitfield_1(0),
         }),
         gap_device_name: Some(raw::ble_gap_cfg_device_name_t {
-            p_value: b"DiscobikeR" as *const u8 as _,
-            current_len: 9,
-            max_len: 9,
-            write_perm: unsafe { mem::zeroed() },
+            p_value: device_name.as_ptr() as _,//b"DiscobikeR" as *const u8 as _,
+            current_len: device_name.len() as u16,
+            max_len: device_name.len() as u16,
+            write_perm: nrf_softdevice::ble::SecurityMode::NoAccess.into_raw(),
             _bitfield_1: raw::ble_gap_cfg_device_name_t::new_bitfield_1(
-                raw::BLE_GATTS_VLOC_STACK as u8,
+                raw::BLE_GATTS_VLOC_USER as u8,
             ),
         }),
         ..Default::default()
