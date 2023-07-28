@@ -3,7 +3,8 @@ use crate::Debug2Format;
 use core::sync::atomic::{AtomicBool, Ordering};
 use ector::mutex::RawMutex;
 use ector::{Actor, Address, DynamicAddress, Inbox, ActorAddress};
-use embassy_nrf::bind_interrupts;
+use embassy_hal_common::interrupt::InterruptExt;
+use embassy_nrf::{bind_interrupts, interrupt};
 use embassy_nrf::pdm::{self, OperationMode, Config, Frequency, Pdm, Ratio, SamplerState};
 use embassy_nrf::peripherals;
 use embassy_time::{Duration, Timer};
@@ -47,6 +48,7 @@ impl<MUT: RawMutex + 'static> Sound<'_, MUT>
         config.ratio = Ratio::RATIO80;
         config.operation_mode = OperationMode::Mono;
         config.gain_left = I7F1::from_bits(40); // 20 dB gain
+        interrupt::PDM.set_priority(interrupt::Priority::P6);
         let pdm = Pdm::new(p, Irqs, pin_data, pin_clock, config);
         Sound { pdm, output }
     }

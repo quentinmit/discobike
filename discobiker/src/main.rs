@@ -310,6 +310,7 @@ async fn adc_task(psaadc: SAADC, pin_vbat: PinVbat, interval: Duration) {
     // P0.29 / AIN5 is connected to Vbat through a 100K/100K resistor divider.
     let channel_config = saadc::ChannelConfig::single_ended(pin_vbat);
     let adc_one_bit = calculate_adc_one_bit(&config, &channel_config);
+    interrupt::SAADC.set_priority(interrupt::Priority::P6);
     let mut saadc = saadc::Saadc::new(psaadc, Irqs, config, [channel_config]);
 
     loop {
@@ -479,6 +480,7 @@ async fn main(spawner: Spawner) {
     twimconfig.frequency = twim::Frequency::K400;
     twimconfig.sda_pullup = true;
     twimconfig.scl_pullup = true;
+    interrupt::SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0.set_priority(interrupt::Priority::P6);
     let i2c = Twim::new(p.TWISPI0, Irqs, use_pin_sda!(p), use_pin_scl!(p), twimconfig);
 
     static I2C_BUS: StaticCell<Mutex<ThreadModeRawMutex, Twim<TWISPI0>>> = StaticCell::new();
