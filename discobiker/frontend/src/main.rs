@@ -41,8 +41,11 @@ async fn list_devices() -> Result<web_sys::BluetoothDevice> {
     let mut options = web_sys::RequestDeviceOptions::new();
     let mut filter = web_sys::BluetoothLeScanFilterInit::new();
     let services = Array::from_iter(
-        &["00000000-1fbd-c985-0843-2e5f29538d87", "00000100-1fbd-c985-0843-2e5f29538d87"]
-        .map(|s| JsValue::from_str(s))
+        &[
+            "battery_service",
+            "00000000-1fbd-c985-0843-2e5f29538d87",
+            "00000100-1fbd-c985-0843-2e5f29538d87",
+        ].map(|s| JsValue::from_str(s))
     );
     //filter.services(&services.into());
     filter.name("DiscobikeR");
