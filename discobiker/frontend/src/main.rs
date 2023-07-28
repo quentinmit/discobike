@@ -43,12 +43,13 @@ async fn list_devices() -> Result<web_sys::BluetoothDevice> {
     let services = Array::from_iter(
         &[
             "battery_service",
+            "cycling_speed_and_cadence",
             "00000000-1fbd-c985-0843-2e5f29538d87",
             "00000100-1fbd-c985-0843-2e5f29538d87",
         ].map(|s| JsValue::from_str(s))
     );
     //filter.services(&services.into());
-    filter.name("DiscobikeR");
+    filter.name_prefix("Discobike");
     let filters = Array::new();
     filters.push(&filter.into());
     options.filters(&filters.into());
