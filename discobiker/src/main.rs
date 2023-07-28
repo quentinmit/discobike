@@ -104,14 +104,6 @@ bind_interrupts!(struct Irqs {
 mod ble;
 use ble::*;
 
-#[embassy_executor::task]
-async fn softdevice_task(sd: &'static Softdevice) {
-    sd.run().await;
-}
-
-static SERVER: ThreadModeMutex<RefCell<Option<&Server>>> = ThreadModeMutex::new(RefCell::new(None));
-static SERVER_FOREVER: StaticCell<Server> = StaticCell::new();
-
 pub static DESIRED_STATE: BlockingMutex<CriticalSectionRawMutex, Cell<DesiredState>> =
     BlockingMutex::new(Cell::new(DesiredState {
         headlight_mode: HeadlightMode::AutoDim,
@@ -145,131 +137,6 @@ pub static STATE: BlockingMutex<CriticalSectionRawMutex, Cell<ActualState>> =
         temperature: None,
     }));
 
-fn bluetooth_start_server(sd: &mut Softdevice) -> Result<(), gatt_server::RegisterError> {
-    let server: &Server = SERVER_FOREVER.init(Server::new(sd)?);
-
-    //let v = unwrap!(server.bas.battery_level_get());
-    //info!("Initial battery level: {}", v);
-
-    SERVER.borrow().replace(Some(server));
-    Ok(())
-}
-
-#[embassy_executor::task]
-async fn bluetooth_task(spawner: Spawner, sd: &'static Softdevice) {
-    #[rustfmt::skip]
-    let adv_data = &[
-        // 0x01 = flags
-        0x02, 0x01, raw::BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE as u8,
-        // 0x03 = service class UUIDs
-        0x03, 0x03, 0x09, 0x18,
-        // 0x09 = complete local name
-        0x0b, 0x09, b'D', b'i', b's', b'c', b'o', b'b', b'i', b'k', b'e', b'R',
-    ];
-    #[rustfmt::skip]
-    let scan_data = &[
-        0x03, 0x03, 0x09, 0x18,
-    ];
-
-    let server = SERVER.borrow().borrow().unwrap();
-
-    loop {
-        let config = peripheral::Config::default();
-        let adv = peripheral::ConnectableAdvertisement::ScannableUndirected {
-            adv_data,
-            scan_data,
-        };
-        let conn = unwrap!(peripheral::advertise_connectable(sd, adv, &config).await);
-
-        debug!("connection established");
-        if let Err(e) = spawner.spawn(gatt_server_task(sd, conn, server)) {
-            warn!("Error spawning gatt task: {:?}", e);
-        }
-    }
-}
-
-static CONNECTION_COUNT: AtomicU8 = AtomicU8::new(0);
-
-#[embassy_executor::task(pool_size = "4")]
-pub async fn gatt_server_task(sd: &'static Softdevice, conn: Connection, server: &'static Server) {
-    let _counter = CONNECTION_COUNT.count_raii();
-    // Run the GATT server on the connection. This returns when the connection gets disconnected.
-    let res = gatt_server::run(&conn, server, |e| match e {
-        ServerEvent::ExternalBattery(e) => match e {
-            ExternalBatteryServiceEvent::BatteryVoltsCccdWrite { notifications } => {
-                // TODO: Enable notifications
-            }
-            ExternalBatteryServiceEvent::BatteryVoltsRead { offset, reply } => {
-                let vext = STATE.lock(|c| c.get().vext);
-                let value = vext.map(|vext|
-                    (((vext / V).value() * 100.0) as u16).to_le_bytes()
-                );
-                if let Err(e) = reply.reply(Ok(value.as_ref().map(|value| value.as_slice()))) {
-                    warn!("replying: {:?}", e);
-                }
-            }
-        }
-        ServerEvent::Headlight(e) => match e {
-            HeadlightServiceEvent::HeadlightModeWrite(val) => {
-                DESIRED_STATE.lock(|c| {
-                    c.update(|s| {
-                        let mut s = s;
-                        if let Ok(val) = val.try_into() {
-                            s.headlight_mode = val;
-                        }
-                        s
-                    })
-                });
-            }
-        },
-        ServerEvent::Underlight(e) => match e {
-            UnderlightServiceEvent::UnderlightModeWrite(val) => {
-                DESIRED_STATE.lock(|c| {
-                    c.update(|s| {
-                        let mut s = s;
-                        if let Ok(val) = val.try_into() {
-                            s.underlight_mode = val;
-                        }
-                        s
-                    })
-                });
-            }
-            UnderlightServiceEvent::UnderlightEffectWrite(val) => {
-                if let Ok(val) = val.try_into() {
-                    DESIRED_STATE.lock(|c| {
-                        c.update(|s| {
-                            let mut s = s;
-                            s.underlight_effect = val;
-                            s
-                        })
-                    });
-                }
-            }
-            UnderlightServiceEvent::UnderlightColorWrite(val) => {
-                let color = Rgbw8::new(val[0], val[1], val[2], val[3]);
-                DESIRED_STATE.lock(|c| {
-                    c.update(|s| {
-                        let mut s = s;
-                        s.underlight_color = color;
-                        s
-                    })
-                });
-            }
-            UnderlightServiceEvent::UnderlightSpeedWrite(val) => {
-                DESIRED_STATE.lock(|c| {
-                    c.update(|s| {
-                        let mut s = s;
-                        s.underlight_speed = val;
-                        s
-                    })
-                });
-            }
-        },
-    })
-    .await;
-
-    info!("gatt_server run exited");
-}
 
 fn calculate_adc_one_bit(
     config: &saadc::Config,
@@ -394,7 +261,6 @@ fn config() -> embassy_nrf::config::Config {
     config
 }
 
-const BLUETOOTH: bool = true;
 const WDT: bool = false;
 
 #[allow(non_snake_case)]
@@ -430,56 +296,7 @@ async fn main(spawner: Spawner) {
     };
     info!("WDT started");
 
-    // Requires embassy-nrf/unstable-pac
-    // TODO: Replace with safe API when one exists.
-    let ficr = unsafe { &*pac::FICR::ptr() };
-    let deviceid = (ficr.deviceid[0].read().deviceid().bits() as u64) | (ficr.deviceid[1].read().deviceid().bits() as u64) << 32;
-    info!("FICR.DEVICEID = {:X}", deviceid);
-
-    static DEVICE_NAME: ThreadModeMutex<OnceCell<heapless::String<32>>> = ThreadModeMutex::new(OnceCell::new());
-    let device_name = DEVICE_NAME.borrow().get_or_init(|| {
-        let mut out: heapless::String<_> = "DiscobikeR".into();
-        let _ = write!(&mut out, " {:X}", deviceid);
-        out
-    });
-
-    let sdconfig = nrf_softdevice::Config {
-        clock: Some(raw::nrf_clock_lf_cfg_t {
-            source: raw::NRF_CLOCK_LF_SRC_RC as u8,
-            rc_ctiv: 4,
-            rc_temp_ctiv: 2,
-            accuracy: raw::NRF_CLOCK_LF_ACCURACY_20_PPM as u8,
-        }),
-        conn_gap: Some(raw::ble_gap_conn_cfg_t {
-            conn_count: 6,
-            event_length: 24,
-        }),
-        conn_gatt: Some(raw::ble_gatt_conn_cfg_t { att_mtu: 256 }),
-        gatts_attr_tab_size: Some(raw::ble_gatts_cfg_attr_tab_size_t {
-            attr_tab_size: 32768,
-        }),
-        gap_role_count: Some(raw::ble_gap_cfg_role_count_t {
-            adv_set_count: 1,
-            periph_role_count: 3,
-            central_role_count: 3,
-            central_sec_count: 0,
-            _bitfield_1: raw::ble_gap_cfg_role_count_t::new_bitfield_1(0),
-        }),
-        gap_device_name: Some(raw::ble_gap_cfg_device_name_t {
-            p_value: device_name.as_ptr() as _,//b"DiscobikeR" as *const u8 as _,
-            current_len: device_name.len() as u16,
-            max_len: device_name.len() as u16,
-            write_perm: nrf_softdevice::ble::SecurityMode::NoAccess.into_raw(),
-            _bitfield_1: raw::ble_gap_cfg_device_name_t::new_bitfield_1(
-                raw::BLE_GATTS_VLOC_USER as u8,
-            ),
-        }),
-        ..Default::default()
-    };
-
-    let sd = Softdevice::enable(&sdconfig);
-
-    info!("Softdevice enabled");
+    unwrap!(ble::init(spawner));
 
     //#[cfg(feature = "mdbt50q")]
     let led = Output::new(use_pin_led!(p), Level::Low, OutputDrive::Standard);
@@ -542,12 +359,6 @@ async fn main(spawner: Spawner) {
         actors::barometer::Barometer<'static, I2cDevice>,
         actors::barometer::Barometer::new(&STATE, I2cBusDevice::new(i2c_bus))
     );
-
-    if BLUETOOTH {
-        unwrap!(bluetooth_start_server(sd));
-        unwrap!(spawner.spawn(softdevice_task(sd)));
-        unwrap!(spawner.spawn(bluetooth_task(spawner, sd)));
-    }
 
     let sound_addr = actor!(
         spawner,

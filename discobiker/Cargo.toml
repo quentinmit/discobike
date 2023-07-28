@@ -157,6 +157,7 @@ pareen = { version = "0.3.0-alpha1", default-features = false, features = ["ease
 atomic-traits = "0.3.0"
 nom = { version = "7.1.3", default-features = false }
 nom-protobuf = { path = "nom-protobuf/" }
+derive_more = "0.99.17"
 
 [patch.'https://github.com/simmsb/display-interface']
 display-interface = { path = "/Users/quentin/Software/display-interface" }
