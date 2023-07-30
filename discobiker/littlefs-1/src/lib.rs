@@ -2,8 +2,9 @@
 #![feature(generic_const_exprs)]
 #![cfg_attr(
     feature = "async",
-    feature(generic_associated_types),
+    feature(async_fn_in_trait),
     feature(type_alias_impl_trait),
+    feature(impl_trait_in_assoc_type),
 )]
 
 mod block;
@@ -28,7 +29,7 @@ trait Format {}
 #[cfg(feature = "sync")]
 use embedded_storage::nor_flash::{NorFlash, ReadNorFlash};
 #[cfg(feature = "async")]
-use embedded_storage_async::nor_flash::{AsyncNorFlash, AsyncReadNorFlash};
+use embedded_storage_async::nor_flash::{NorFlash as AsyncNorFlash, ReadNorFlash as AsyncReadNorFlash};
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]

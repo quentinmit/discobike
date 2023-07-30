@@ -6,7 +6,7 @@ use embedded_storage::nor_flash::{ErrorType, NorFlashErrorKind};
 #[cfg(feature = "sync")]
 use embedded_storage::nor_flash::{NorFlash, ReadNorFlash};
 #[cfg(feature = "async")]
-use embedded_storage_async::nor_flash::{AsyncNorFlash, AsyncReadNorFlash};
+use embedded_storage_async::nor_flash::{NorFlash as AsyncNorFlash, ReadNorFlash as AsyncReadNorFlash};
 
 pub struct SliceStorage<S: Deref<Target = [u8]>> {
     buf: S,
@@ -96,10 +96,8 @@ impl<S: Deref<Target = [u8]>> ErrorType for SliceStorage<S> {
 impl<S: Deref<Target = [u8]>> AsyncReadNorFlash for SliceStorage<S> {
     const READ_SIZE: usize = 1;
 
-    type ReadFuture<'a> = impl Future<Output = Result<(), NorFlashErrorKind>> + 'a
-            where S: 'a;
-    fn read<'a>(&'a mut self, address: u32, data: &'a mut [u8]) -> Self::ReadFuture<'a> {
-        async move { self.do_read(address, data) }
+    async fn read(&mut self, address: u32, data: &mut [u8]) -> Result<(), NorFlashErrorKind> {
+        self.do_read(address, data)
     }
 
     fn capacity(&self) -> usize {
@@ -125,16 +123,12 @@ impl<S: DerefMut<Target = [u8]>> AsyncNorFlash for SliceStorage<S> {
     const WRITE_SIZE: usize = 1; // TODO: 4 or configurable
     const ERASE_SIZE: usize = 512; // TODO: 4096 or configurable
 
-    type WriteFuture<'a> = impl Future<Output = Result<(), NorFlashErrorKind>> + 'a
-        where S: 'a;
-    fn write<'a>(&'a mut self, offset: u32, data: &'a [u8]) -> Self::WriteFuture<'a> {
-        async move { self.do_write(<Self as AsyncNorFlash>::WRITE_SIZE, offset, data) }
+    async fn write(&mut self, offset: u32, data: &[u8]) -> Result<(), NorFlashErrorKind> {
+        self.do_write(<Self as AsyncNorFlash>::WRITE_SIZE, offset, data)
     }
 
-    type EraseFuture<'a> = impl Future<Output = Result<(), NorFlashErrorKind>> + 'a
-    where S: 'a;
-    fn erase<'a>(&'a mut self, from: u32, to: u32) -> Self::EraseFuture<'a> {
-        async move { self.do_erase(<Self as AsyncNorFlash>::ERASE_SIZE, from, to) }
+    async fn erase(&mut self, from: u32, to: u32) -> Result<(), NorFlashErrorKind> {
+        self.do_erase(<Self as AsyncNorFlash>::ERASE_SIZE, from, to)
     }
 }
 

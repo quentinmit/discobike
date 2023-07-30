@@ -10,7 +10,7 @@ use embedded_storage::nor_flash::{ErrorType, NorFlashError, NorFlashErrorKind};
 #[cfg(feature = "sync")]
 use embedded_storage::nor_flash::{NorFlash, ReadNorFlash};
 #[cfg(feature = "async")]
-use embedded_storage_async::nor_flash::{AsyncNorFlash, AsyncReadNorFlash};
+use embedded_storage_async::nor_flash::{NorFlash as AsyncNorFlash, ReadNorFlash as AsyncReadNorFlash};
 
 struct AddressedBlock<const BLOCK_SIZE: usize> {
     start: u32,
@@ -138,6 +138,7 @@ where
     }
 }
 
+#[cfg(feature = "async")]
 impl<S: AsyncNorFlash> ErrorType for CachingStorage<S>
 where
     S: AsyncNorFlash,
@@ -154,19 +155,15 @@ where
 {
     const READ_SIZE: usize = 1;
 
-    type ReadFuture<'a> = impl Future<Output = Result<(), NorFlashErrorKind>> + 'a
-    where S: 'a;
-    fn read<'a>(&'a mut self, address: u32, data: &'a mut [u8]) -> Self::ReadFuture<'a> {
-        async move {
-            let range = address..address + (data.len() as u32);
-            // TODO: Answer from cache if possible.
-            self.commit().await?;
-            self.storage
-                .read(address, data)
-                .await
-                .map_err(|e| e.kind())?;
-            Ok(())
-        }
+    async fn read(&mut self, address: u32, data: &mut [u8]) -> Result<(), NorFlashErrorKind> {
+        let range = address..address + (data.len() as u32);
+        // TODO: Answer from cache if possible.
+        self.commit().await?;
+        self.storage
+            .read(address, data)
+            .await
+            .map_err(|e| e.kind())?;
+        Ok(())
     }
 
     fn capacity(&self) -> usize {
@@ -221,19 +218,13 @@ where
     const WRITE_SIZE: usize = 1;
     const ERASE_SIZE: usize = 1;
 
-    type WriteFuture<'a> = impl Future<Output = Result<(), NorFlashErrorKind>> + 'a
-    where S: 'a;
-    fn write<'a>(&'a mut self, offset: u32, data: &'a [u8]) -> Self::WriteFuture<'a> {
-        async move {
-            // Split the write into a leading partial write (if any), a full range write (if any), and a trailing partial write (if any)
-            split_op!(write, self, offset..offset + (data.len() as u32), &data)
-        }
+    async fn write(&mut self, offset: u32, data: &[u8]) -> Result<(), NorFlashErrorKind> {
+        // Split the write into a leading partial write (if any), a full range write (if any), and a trailing partial write (if any)
+        split_op!(write, self, offset..offset + (data.len() as u32), &data)
     }
 
-    type EraseFuture<'a> = impl Future<Output = Result<(), NorFlashErrorKind>> + 'a
-    where S: 'a;
-    fn erase<'a>(&'a mut self, from: u32, to: u32) -> Self::EraseFuture<'a> {
-        async move { split_op!(erase, self, from..to) }
+    async fn erase<'a>(&'a mut self, from: u32, to: u32) -> Result<(), NorFlashErrorKind> {
+        split_op!(erase, self, from..to)
     }
 }
 
