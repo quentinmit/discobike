@@ -107,13 +107,13 @@ embassy-embedded-hal = "0.1.0"
 cortex-m = { version = "0.7.6", features = [] }
 cortex-m-rt = "0.7.3"
 defmt = { version = "0.3.2", features = [], optional = true }
-defmt-rtt = { version = "0.3.2", optional = true }
+defmt-rtt = { version = "0.4.0", optional = true }
 panic-probe = { version = "0.3", features= [] }
 nrf-softdevice = { version = "0.1.0", features = ["nrf52840", "s140", "ble-peripheral", "ble-central", "ble-gatt-server", "critical-section-impl"] }
 nrf-softdevice-s140 = { version = "0.1.1" }
 embedded-hal = "1.0.0-alpha.11"
 embedded-storage = "0.3.0"
-embedded-storage-async = "0.3.0"
+embedded-storage-async = "0.4.0"
 futures = { version = "0.3.5", default-features = false, features = ["async-await"] }
 fixed = "1.2.0"
 heapless = "0.7.16"
@@ -132,13 +132,13 @@ ssd1306 = { version = "0.7.0" }
 embedded-graphics = "0.7.1"
 display-interface = "0.4.1"
 arrayvec = { version = "0.7.2", default-features = false }
-physical_constants = "0.4.1"
+physical_constants = "0.5.0"
 #staticvec = { version = "0.11.9", default-features = false, features = [] }
 serde = { version = "1.0.139", default-features = false, features = ["derive"] }
-bincode = { version = "2.0.0-rc.1", default-features = false, features = ["serde"] }
+bincode = { version = "2.0.0-rc.3", default-features = false, features = ["serde"] }
 serde_cbor = { version = "0.11.2", default-features = false }
-num-derive = "0.3.3"
-num_enum = { version = "0.5.7", default-features = false }
+num-derive = "0.4.0"
+num_enum = { version = "0.6.1", default-features = false }
 lsm6ds33 = { version = "0.5.0", default-features = false, features = ["async"] }
 maybe-async-cfg = "0.2.1"
 bme280 = { version = "0.4.4", default-features = false, features = ["async"] }
@@ -164,46 +164,45 @@ display-interface = { path = "/Users/quentin/Software/display-interface" }
 display-interface-i2c = { path = "/Users/quentin/Software/display-interface/i2c" }
 
 [patch.crates-io]
+#apds9960 = { git = "https://github.com/quentinmit/apds9960-rs", branch = "async" }
+#bme280 = { git = "https://github.com/quentinmit/bme280-rs", branch = "async" }
+#display-interface = { git = "https://github.com/simmsb/display-interface" }
+#ector = { git = "https://github.com/drogue-iot/ector.git" }
+#ector = { git = "https://github.com/quentinmit/ector.git", branch = "embassy-split-time" }
+#embassy-embedded-hal = { git = "https://github.com/embassy-rs/embassy" }
 #embassy-executor = { git = "https://github.com/embassy-rs/embassy" }
+#embassy-hal-common = { git = "https://github.com/embassy-rs/embassy" }
+#embassy-macros = { git = "https://github.com/embassy-rs/embassy" }
+#embassy-nrf = { git = "https://github.com/embassy-rs/embassy" }
 #embassy-time = { git = "https://github.com/embassy-rs/embassy" }
 #embassy-util = { git = "https://github.com/embassy-rs/embassy" }
-#embassy-hal-common = { git = "https://github.com/embassy-rs/embassy" }
-#embassy-nrf = { git = "https://github.com/embassy-rs/embassy" }
-#embassy-macros = { git = "https://github.com/embassy-rs/embassy" }
-#embassy-embedded-hal = { git = "https://github.com/embassy-rs/embassy" }
+#lsm6ds33 = { git = "https://github.com/quentinmit/lsm6ds33", branch = "async" }
 #nrf-softdevice = { git = "https://github.com/embassy-rs/nrf-softdevice" }
 #nrf-softdevice-s140 = { git = "https://github.com/embassy-rs/nrf-softdevice" }
-apds9960 = { path = "/Users/quentin/Software/apds9960-rs" }
-#apds9960 = { git = "https://github.com/quentinmit/apds9960-rs", branch = "async" }
-uom = { git = "https://github.com/quentinmit/uom", branch = "photometric" }
-#ector = { git = "https://github.com/drogue-iot/ector.git" }
-ector = { path = "/Users/quentin/Software/ector/ector" }
-#ector = { git = "https://github.com/quentinmit/ector.git", branch = "embassy-split-time" }
+#rtos-trace = { path = "/Users/quentin/Software/rtos-trace/rtos_trace" }
 #ssd1306 = { git = "https://github.com/simmsb/ssd1306" }
-ssd1306 = { path = "/Users/quentin/Software/ssd1306" }
-#display-interface = { git = "https://github.com/simmsb/display-interface" }
+#systemview-target = { path = "/Users/quentin/Software/rtos-trace/systemview_target" }
+apds9960 = { path = "/Users/quentin/Software/apds9960-rs" }
+atomic-traits = { git = "https://github.com/flier/rust-atomic-traits", rev = "45f4b13d5f4880797cdf3d578ff8821e8bd7ce89" }
+bincode = { git = "https://github.com/bincode-org/bincode" }
+bme280 = { path = "/Users/quentin/Software/bme280-rs" }
+dimensioned = { git = "https://github.com/quentinmit/dimensioned", branch = "no_std" }
 display-interface = { path = "/Users/quentin/Software/display-interface" }
 display-interface-i2c = { path = "/Users/quentin/Software/display-interface/i2c" }
-physical_constants = { git = "https://github.com/quentinmit/rust-physical_constants", branch = "no_std" }
-dimensioned = { git = "https://github.com/quentinmit/dimensioned", branch = "no_std" }
-bincode = { git = "https://github.com/bincode-org/bincode" }
-#lsm6ds33 = { git = "https://github.com/quentinmit/lsm6ds33", branch = "async" }
-lsm6ds33 = { path = "/Users/quentin/Software/lsm6ds33" }
-#bme280 = { git = "https://github.com/quentinmit/bme280-rs", branch = "async" }
-bme280 = { path = "/Users/quentin/Software/bme280-rs" }
+easer = { path = "/Users/quentin/Software/rust-easing" }
+ector = { path = "/Users/quentin/Software/ector/ector" }
+embassy-embedded-hal = { path = "/Users/quentin/Software/embassy/embassy-embedded-hal" }
 embassy-executor = { path = "/Users/quentin/Software/embassy/embassy-executor" }
-embassy-time = { path = "/Users/quentin/Software/embassy/embassy-time" }
+embassy-futures = { path = "/Users/quentin/Software/embassy/embassy-futures" }
+embassy-hal-common = { path = "/Users/quentin/Software/embassy/embassy-hal-common" }
 embassy-macros = { path = "/Users/quentin/Software/embassy/embassy-macros" }
 embassy-nrf = { path = "/Users/quentin/Software/embassy/embassy-nrf" }
 embassy-sync = { path = "/Users/quentin/Software/embassy/embassy-sync" }
-embassy-futures = { path = "/Users/quentin/Software/embassy/embassy-futures" }
-embassy-hal-common = { path = "/Users/quentin/Software/embassy/embassy-hal-common" }
-embassy-embedded-hal = { path = "/Users/quentin/Software/embassy/embassy-embedded-hal" }
+embassy-time = { path = "/Users/quentin/Software/embassy/embassy-time" }
+lsm6ds33 = { path = "/Users/quentin/Software/lsm6ds33" }
 nrf-softdevice = { path = "/Users/quentin/Software/nrf-softdevice/nrf-softdevice" }
 nrf-softdevice-s140 = { path = "/Users/quentin/Software/nrf-softdevice/nrf-softdevice-s140" }
-#rtos-trace = { path = "/Users/quentin/Software/rtos-trace/rtos_trace" }
-#systemview-target = { path = "/Users/quentin/Software/rtos-trace/systemview_target" }
 pareen = { path = "/Users/quentin/Software/pareen" }
-easer = { path = "/Users/quentin/Software/rust-easing" }
-atomic-traits = { git = "https://github.com/flier/rust-atomic-traits", rev = "45f4b13d5f4880797cdf3d578ff8821e8bd7ce89" }
 residua-zigzag = { git = "https://github.com/quentinmit/zigzag", branch = "no_std" }
+ssd1306 = { path = "/Users/quentin/Software/ssd1306" }
+uom = { git = "https://github.com/quentinmit/uom", branch = "photometric" }
